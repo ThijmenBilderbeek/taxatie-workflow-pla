@@ -43,23 +43,32 @@ export function formatForFlux(text: string): string {
   return formatted
 }
 
-export function formatDatum(datum: string): string {
-  const d = new Date(datum)
-  const dag = String(d.getDate()).padStart(2, '0')
-  const maand = String(d.getMonth() + 1).padStart(2, '0')
-  const jaar = d.getFullYear()
-  return `${dag}-${maand}-${jaar}`
+export function formatDatum(datum: string | undefined): string {
+  if (!datum) return '-'
+  try {
+    const d = new Date(datum)
+    if (isNaN(d.getTime())) return '-'
+    const dag = String(d.getDate()).padStart(2, '0')
+    const maand = String(d.getMonth() + 1).padStart(2, '0')
+    const jaar = d.getFullYear()
+    return `${dag}-${maand}-${jaar}`
+  } catch {
+    return '-'
+  }
 }
 
-export function formatBedrag(bedrag: number): string {
+export function formatBedrag(bedrag: number | undefined): string {
+  if (bedrag === undefined || bedrag === null || isNaN(bedrag)) return '€ -'
   return `€ ${bedrag.toLocaleString('nl-NL')}`
 }
 
-export function formatOppervlakte(oppervlakte: number): string {
+export function formatOppervlakte(oppervlakte: number | undefined): string {
+  if (oppervlakte === undefined || oppervlakte === null || isNaN(oppervlakte)) return '- m²'
   return `${oppervlakte.toLocaleString('nl-NL')} m²`
 }
 
-export function formatPercentage(percentage: number): string {
+export function formatPercentage(percentage: number | undefined): string {
+  if (percentage === undefined || percentage === null || isNaN(percentage)) return '- %'
   return `${percentage.toFixed(2).replace('.', ',')} %`
 }
 

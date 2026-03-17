@@ -103,6 +103,10 @@ export function calculateSimilarity(
     return null
   }
 
+  if (!huidigDossier.stap2.coordinaten || !historischRapport.coordinaten) {
+    return null
+  }
+
   const afstandKm = calculateDistance(
     huidigDossier.stap2.coordinaten.lat,
     huidigDossier.stap2.coordinaten.lng,

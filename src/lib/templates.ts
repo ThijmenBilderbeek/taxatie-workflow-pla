@@ -263,39 +263,35 @@ Voor zover bekend bij taxateur zijn geen noemenswaardige omstandigheden die de w
 
 Het object wordt geacht conform de huidige bestemming en met de huidige economische functie gebruikt blijft worden.`
 
-  return replacePlaceholders(template, dossier)
 }
+}
+dereTaxaties(dossier: Dossier): string {
 
-export function generateB7_EerdereTaxaties(dossier: Dossier): string {
   return `B.7 EERDERE TAXATIES
 
-Voor zover bekend is dit object niet eerder door ons kantoor getaxeerd.`
-}
 
 export function generateB8_InzageDocumenten(dossier: Dossier): string {
   return `B.8 OVERZICHT INZAGE DOCUMENTEN
-
-Voor deze taxatie zijn de volgende documenten geraadpleegd:
 
 - Kadastrale informatie
 - Energielabel (www.ep-online.nl)
 - Door opdrachtgever verstrekte informatie en documenten`
 }
-
+- Kadastrale informatie
 export function generateB9_Taxatiemethodiek(dossier: Dossier): string {
   const template = `B.9 GEHANTEERDE TAXATIEMETHODIEK
 
 COMPARATIEVE METHODE
 
+  const template = `B.9 GEHANTEERDE TAXATIEMETHODIEK
+- Energielabel (www.ep-online.nl)
+
 Bij deze methode wordt de marktwaarde bepaald door vergelijking met gerealiseerde transacties van vergelijkbare objecten.
 
 BAR/NAR-METHODE
-
+  const template = `B.9 GEHANTEERDE TAXATIEMETHODIEK
 Bij de BAR/NAR-methode wordt de (markt)huurwaarde gekapitaliseerd tegen een marktconform rendement.
 
-DCF-METHODE
-
-Bij de DCF-methode (Discounted Cash Flow) worden toekomstige kasstromen contant gemaakt tegen een disconteringsvoet.
 
 TOELICHTING
 

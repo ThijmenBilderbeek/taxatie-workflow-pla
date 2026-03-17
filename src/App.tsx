@@ -4,6 +4,7 @@ import { Dashboard } from './components/Dashboard'
 import { WizardFlow } from './components/WizardFlow'
 import { RapportView } from './components/RapportView'
 import { Instellingen } from './components/Instellingen'
+import { Kennisbank } from './components/Kennisbank'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Toaster } from './components/ui/sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog'
@@ -12,7 +13,7 @@ import { Label } from './components/ui/label'
 import { Button } from './components/ui/button'
 import type { Dossier, HistorischRapport, SimilarityInstellingen, SimilarityFeedback } from './types'
 
-type View = 'dashboard' | 'wizard' | 'rapport' | 'instellingen'
+type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen'
 
 function App() {
   const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
@@ -153,6 +154,7 @@ function App() {
                 <TabsTrigger value="rapport" disabled={!activeDossier}>
                   Rapport
                 </TabsTrigger>
+                <TabsTrigger value="kennisbank">Kennisbank</TabsTrigger>
                 <TabsTrigger value="instellingen">Instellingen</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -181,6 +183,10 @@ function App() {
 
         {currentView === 'rapport' && activeDossier && (
           <RapportView onAfgerond={() => setCurrentView('dashboard')} />
+        )}
+
+        {currentView === 'kennisbank' && (
+          <Kennisbank historischeRapporten={historischeRapporten || []} />
         )}
 
         {currentView === 'instellingen' && (

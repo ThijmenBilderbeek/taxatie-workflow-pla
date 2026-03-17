@@ -238,24 +238,22 @@ Mate van inspectie: Volledige externe en interne inspectie
 
 De taxateur verklaart dat de bezichtiging geen bouwtechnische keuring is. Voor zover tijdens de inspectie is waargenomen, zijn gebreken en bijzonderheden vermeld in dit rapport. Verborgen gebreken kunnen echter niet worden uitgesloten.`
 
-  return replacePlaceholders(template, dossier)
+}
 }
 
-export function generateB5_Uitgangspunten(dossier: Dossier): string {
   return `B.5 UITGANGSPUNTEN EN AFWIJKINGEN
-
 Tenzij hieronder uitdrukkelijk anders vermeld, gaat de taxateur uit van de volgende aannames:
 
+Tenzij hieronder uitdrukkelijk anders vermeld, gaat de taxateur uit van de volgende aannames:
+lieuverontreiniging aanwezig
 - Het eigendom is vrij van hypotheken en andere zakelijke rechten
-- Er zijn geen verborgen gebreken of milieuverontreiniging aanwezig
-- Alle benodigde vergunningen zijn verleend en rechtsgeldig
 - Het gebruik is in overeenstemming met het omgevingsplan
 - Er is geen sprake van asbest of andere gevaarlijke stoffen
 
-De taxateur acht de taxatieonnauwkeurigheid op ±10%.`
-}
+- Er is geen sprake van asbest of andere gevaarlijke stoffen
 
-export function generateB6_ToelichtingWaardering(dossier: Dossier): string {
+
+}sier): string {
   const template = `B.6 NADERE TOELICHTING OP DE WAARDERING
 
 De waardering is gebaseerd op de ten tijde van de inspectie aangetroffen situatie en de door opdrachtgever verstrekte informatie.
@@ -264,108 +262,101 @@ Voor zover bekend bij taxateur zijn geen noemenswaardige omstandigheden die de w
 
 Het object wordt geacht conform de huidige bestemming en met de huidige economische functie gebruikt blijft worden.`
 
-  return replacePlaceholders(template, dossier)
-}
+export function generateB7_EerdereTaxaties(dossier: Dossier): string {
+  return `B.7 EERDERE TAXATIES
+
+}is dit object niet eerder door ons kantoor getaxeerd.
 
 export function generateB7_EerdereTaxaties(dossier: Dossier): string {
   return `B.7 EERDERE TAXATIES
 
-Voor zover bij taxateur bekend is dit object niet eerder door ons kantoor getaxeerd.
-
-[Indien wel eerder getaxeerd: vorige taxatie / huidige taxatie / delta / relatief]`
+export function generateB8_InzageDocumenten(dossier: Dossier): string {
+  return `B.8 OVERZICHT INZAGE DOCUMENTEN
+Voor deze taxatie zijn de volgende documenten geraadpleegd:
 }
 
 export function generateB8_InzageDocumenten(dossier: Dossier): string {
-  return `B.8 OVERZICHT INZAGE DOCUMENTEN
-
-Voor deze taxatie zijn de volgende documenten geraadpleegd:
-
-- Kadastrale gegevens (www.kadaster.nl)
-- Omgevingsplan (www.ruimtelijkeplannen.nl)
 - Energielabel (www.ep-online.nl)
 - Door opdrachtgever verstrekte informatie en documenten`
 }
 
 export function generateB9_Taxatiemethodiek(dossier: Dossier): string {
   const template = `B.9 GEHANTEERDE TAXATIEMETHODIEK
-
-Voor de waardering van dit object is gebruik gemaakt van de volgende methodieken:
-
-COMPARATIEVE METHODE
+- Energielabel (www.ep-online.nl)
 
 Bij deze methode wordt de marktwaarde bepaald door vergelijking met gerealiseerde transacties van vergelijkbare objecten.
 
 BAR/NAR-METHODE
-
+  const template = `B.9 GEHANTEERDE TAXATIEMETHODIEK
 Bij de BAR/NAR-methode wordt de (markt)huurwaarde gekapitaliseerd tegen een marktconform rendement.
 
 DCF-METHODE
-
+COMPARATIEVE METHODE
 Bij de DCF-methode (Discounted Cash Flow) worden toekomstige kasstromen contant gemaakt tegen een disconteringsvoet.
 
 TOELICHTING
-
+BAR/NAR-METHODE
 De ingeschatte markthuurwaarde is derhalve altijd een combinatie van het marktgevoel van de taxateur en (gepubliceerde) gerealiseerde transacties.
-
+Bij de BAR/NAR-methode wordt de (markt)huurwaarde gekapitaliseerd tegen een marktconform rendement.
 Desondanks kan er op basis van de genoemde referenties een (globale) vergelijking gemaakt worden.`
-
+DCF-METHODE
   return replacePlaceholders(template, dossier)
-}
+Bij de DCF-methode (Discounted Cash Flow) worden toekomstige kasstromen contant gemaakt tegen een disconteringsvoet.
+
+TOELICHTINGr): string {
+ const template = `B.10 PLAUSIBILITEIT TAXATIE
+
+gevoerde waardering en de gehanteerde methodiek plausibel en passend bij het type object en de marktomstandigheden.
+
+De marktwaarde van {{marktwaarde}} per waardepeildatum {{waardepeildatum}} wordt als realistisch beschouwd en ligt in lijn met vergelijkbare transacties in de markt.`
+  return replacePlaceholders(template, dossier)
+  return replacePlaceholders(template, dossier)
 
 export function generateB10_Plausibiliteit(dossier: Dossier): string {
   const template = `B.10 PLAUSIBILITEIT TAXATIE
 
 De taxateur acht de uitgevoerde waardering en de gehanteerde methodiek plausibel en passend bij het type object en de marktomstandigheden.
 
-De marktwaarde van {{marktwaarde}} per waardepeildatum {{waardepeildatum}} wordt als realistisch beschouwd en ligt in lijn met vergelijkbare transacties in de markt.`
-
+- Goede locatie met voldoende bereikbaarheid
+- Solide bouwkundige staat
   return replacePlaceholders(template, dossier)
 }
 
 export function generateC1_SWOT(dossier: Dossier): string {
-  return `C.1 SWOT-ANALYSE
-
+- Afhankelijkheid van lokale marktomstandigheden
+- Energielabel kan verbetering gebruiken
 STERKTES
 - Goede locatie met voldoende bereikbaarheid
-- Solide bouwkundige staat
-- Representatieve uitstraling
-
+- Verduurzaming kan waarde verhogen
+- Representatieve uitstralingren
+rzaamheid)
 ZWAKTES
 - Specifieke invulling beperkt alternatieve aanwendbaarheid
 - Afhankelijkheid van lokale marktomstandigheden
-- Energielabel kan verbetering gebruiken
-
-KANSEN
-- Verduurzaming kan waarde verhogen
-- Marktverbetering kan waardegroei opleveren
-- Toenemende regelgeving (energielabels, duurzaamheid)
-
-BEDREIGINGEN
-- Economische neergang kan vraag verminderen
 - Wijzigingen in wet- en regelgeving`
-}
+
 
 export function generateC2_Beoordeling(dossier: Dossier): string {
-  return `C.2 BEOORDELING
+- Marktverbetering kan waardegroei opleveren
 
 COURANTHEID VERHUUR
+BEDREIGINGEN
+- Economische neergang kan vraag verminderen
 
-Score: [score]
-
-Verhuurbaarheid: De verhuurbaarheid van het object wordt als redelijk tot goed beoordeeld.
+}erhuurbaarheid: De verhuurbaarheid van het object wordt als redelijk tot goed beoordeeld.
 
 Verhuurtijd: Bij een verhuurprocedure wordt een verhuurperiode van 6 tot 12 maanden realistisch geacht.
 
 COURANTHEID VERKOOP
-
+COURANTHEID VERHUUR
 Score: [score]
-
+Score: [score]
 Verkoopbaarheid: De verkoopbaarheid van het object wordt als redelijk tot goed beoordeeld.
 
 Verkooptijd: Bij een verkoopprocedure wordt een verkoopperiode van 9 tot 15 maanden realistisch geacht.
 
-Alles overwegende is de courantheid als redelijk tot goed aan te duiden.`
-}
+lles overwegende is de courantheid als redelijk tot goed aan te duiden.`
+COURANTHEID VERKOOP
 
 export function generateD1_Privaatrechtelijk(dossier: Dossier): string {
   if (!dossier.stap5) return ''
@@ -374,111 +365,120 @@ export function generateD1_Privaatrechtelijk(dossier: Dossier): string {
 
 KADASTRALE GEGEVENS
 
-Eigenaar: {{opdrachtgever_bedrijf}}
+}
 Kadastrale aanduiding: {{kadastrale_aanduiding}}
-Perceeloppervlak: {{kadastraal_oppervlak}}
+export function generateD1_Privaatrechtelijk(dossier: Dossier): string {
 Aantekeningen: Voor zover bekend geen bijzondere aantekeningen
 
-EIGENDOMSSITUATIE
+  const template = `D.1 PRIVAATRECHTELIJKE ASPECTEN
 
 Eigendomssituatie: ${dossier.stap5.eigendomssituatie || 'Volledig eigendom'}
 
 ERFPACHT
 
-Erfpacht: ${dossier.stap5.erfpacht || 'Niet van toepassing'}
-
+Perceeloppervlak: {{kadastraal_oppervlak}}t van toepassing'}
+Aantekeningen: Voor zover bekend geen bijzondere aantekeningen
 ZAKELIJKE RECHTEN
 
 Zakelijke rechten: ${dossier.stap5.zakelijkeRechten || 'Voor zover bekend geen'}
 
 KWALITATIEVE VERPLICHTINGEN
-
+ERFPACHT
 Kwalitatieve verplichtingen: ${dossier.stap5.kwalitatieveVerplichtingen || 'Voor zover bekend geen'}
+Erfpacht: ${dossier.stap5.erfpacht || 'Niet van toepassing'}
+VE
+ZAKELIJKE RECHTEN
 
-VVE
-
-VVE: Niet van toepassing
-
+Zakelijke rechten: ${dossier.stap5.zakelijkeRechten || 'Voor zover bekend geen'}
 Voor zover bekend zijn er geen belemmeringen die de vrije overdracht of exploitatie van het object belemmeren.`
 
-  return replacePlaceholders(template, dossier)
-}
+ return replacePlaceholders(template, dossier)
+Kwalitatieve verplichtingen: ${dossier.stap5.kwalitatieveVerplichtingen || 'Voor zover bekend geen'}
 
 export function generateD2_Publiekrechtelijk(dossier: Dossier): string {
   if (!dossier.stap5) return ''
-
+VVE: Niet van toepassing
   const template = `D.2 PUBLIEKRECHTELIJKE ASPECTEN
-
-OMGEVINGSPLAN
-
-Gemeente: {{gemeente}}
-Bestemmingsplan: ${dossier.stap5.bestemmingsplan || 'Conform bestemming'}
-Bestemming: [bestemming]
-
-Het huidige gebruik is in overeenstemming met het omgevingsplan.
-
-MONUMENT
-
-Voorkeursrecht: Niet van toepassing
-
-FISCALE ASPECTEN
-
-Bij deze waardering is geen rekening gehouden met fiscale aspecten zoals overdrachtsbelasting, BTW of inkomstenbelasting.
-
-Voor zover bekend zijn geen bijzondere publiekrechtelijke bepalingen van toepassing.`
+Voor zover bekend zijn er geen belemmeringen die de vrije overdracht of exploitatie van het object belemmeren.`
 
   return replacePlaceholders(template, dossier)
+}nte}}
+ngsplan: ${dossier.stap5.bestemmingsplan || 'Conform bestemming'}
+export function generateD2_Publiekrechtelijk(dossier: Dossier): string {
+  if (!dossier.stap5) return ''
+g met het omgevingsplan.
+  const template = `D.2 PUBLIEKRECHTELIJKE ASPECTEN
+
+
+
+
+Bestemmingsplan: ${dossier.stap5.bestemmingsplan || 'Conform bestemming'}
+Bestemming: [bestemming]
+ fiscale aspecten zoals overdrachtsbelasting, BTW of inkomstenbelasting.
+Het huidige gebruik is in overeenstemming met het omgevingsplan.
+Voor zover bekend zijn geen bijzondere publiekrechtelijke bepalingen van toepassing.`
+MONUMENT
+  return replacePlaceholders(template, dossier)
+Voorkeursrecht: Niet van toepassing
+
+export function generateE1_LocatieOverzicht(dossier: Dossier): string {
+  const template = `E.1 LOCATIEOVERZICHT
+
+{{plaats}}, gemeente {{gemeente}}, provincie {{provincie}}.
+
+LIGGING
+
 }
 
 export function generateE1_LocatieOverzicht(dossier: Dossier): string {
   const template = `E.1 LOCATIEOVERZICHT
 
 Het object is gelegen in {{plaats}}, gemeente {{gemeente}}, provincie {{provincie}}.
-
+te = `E.2 LOCATIE INFORMATIE
 LIGGING
 
-Het object is gelegen in een {{ligging}}.`
 
+Het object is gelegen in {{plaats}}. De omgeving kenmerkt zich door [omschrijving].
   return replacePlaceholders(template, dossier)
 }
 
 export function generateE2_LocatieInformatie(dossier: Dossier): string {
-  const template = `E.2 LOCATIE INFORMATIE
-
-ALGEMEEN
-
-Het object is gelegen in {{plaats}}. De omgeving kenmerkt zich door [omschrijving].
-
-BEREIKBAARHEID
-
-Bereikbaarheid auto: {{bereikbaarheid}}
-Bereikbaarheid OV: Goed bereikbaar per openbaar vervoer
+  const template = `E.2 LOCATIE INFORMATIEnbaar vervoer
 
 VOORZIENINGEN
 
 In de directe omgeving zijn diverse voorzieningen aanwezig zoals winkels, horeca, openbaar vervoer en parkeervoorzieningen.
 
-PARKEREN OPENBARE WEG
+BEREIKBAARHEID
 
-[Omschrijving parkeren]
+Bereikbaarheid auto: {{bereikbaarheid}}
 
 LOCATIESCORE
+VOORZIENINGEN
 
-Locatiescore: [score]
-WalkScore: [score]
+In de directe omgeving zijn diverse voorzieningen aanwezig zoals winkels, horeca, openbaar vervoer en parkeervoorzieningen.
 
-Alles overwegende is de locatie als goed aan te duiden.`
+PARKEREN OPENBARE WEGe locatie als goed aan te duiden.`
 
   return replacePlaceholders(template, dossier)
 }
+LOCATIESCORE
+eF1_ObjectInformatie(dossier: Dossier): string {
+Locatiescore: [score].1 OBJECTINFORMATIE
+WalkScore: [score]
+ALGEMEEN
+Alles overwegende is de locatie als goed aan te duiden.`
+Het object betreft een {{type_object}} gelegen aan {{adres}} te {{plaats}}.
+  return replacePlaceholders(template, dossier)
+}Omschrijving indeling]
 
 export function generateF1_ObjectInformatie(dossier: Dossier): string {
-  const template = `F.1 OBJECTINFORMATIE
+Perceeloppervlak: {{perceeloppervlak}}
+Aantal bouwlagen: {{aantal_bouwlagen}}
 
-ALGEMEEN
 
-Het object betreft een {{type_object}} gelegen aan {{adres}} te {{plaats}}.
 
+Fundering: {{fundering}}
 [Omschrijving indeling]
 
 Bouwjaar: {{bouwjaar}}
@@ -487,11 +487,11 @@ Aantal bouwlagen: {{aantal_bouwlagen}}
 
 BOUWKUNDIGE STAAT
 
-Fundering: {{fundering}}
-Constructie: [constructie]
+Bouwkundige staat: {{exterieur_staat}}
+Onderhoud buiten: {{exterieur_staat}}
 Gevels: [gevels]
 Dakbedekking: {{dakbedekking}}
-Vloeren: [vloeren]
+Vloeren: [vloeren]houd van het exterieur wordt gekwalificeerd als {{exterieur_staat}}.
 Installaties: {{installaties}}
 
 ONDERHOUD
@@ -500,31 +500,22 @@ Bouwkundige staat: {{exterieur_staat}}
 Onderhoud buiten: {{exterieur_staat}}
 Onderhoud binnen: {{interieur_staat}}
 
-De staat van onderhoud van het exterieur wordt gekwalificeerd als {{exterieur_staat}}.
-Het interieur verkeert in een {{interieur_staat}} staat van onderhoud.
-
-ONDERHOUDSDISCLAIMER
-
-De taxateur is geen bouwkundig expert. De beoordeling van de bouwkundige staat is gebaseerd op visuele inspectie tijdens de bezichtiging.
-
-Normonderhoudstype: [type]
-
 PARKEREN EIGEN TERREIN
 
 Parkeren eigen terrein: [aantal parkeerplaatsen]
 
 FUNCTIONALITEIT
 
-Functionaliteit: [beoordeling]
 
-OBJECTSCORE
+Normonderhoudstype: [type]
 
-Objectscore: [score]
+PARKEREN EIGEN TERREIN
+
 
 Alles overwegende is de bouwkundige staat als {{exterieur_staat}} aan te duiden.`
 
   return replacePlaceholders(template, dossier)
-}
+Functionaliteit: [beoordeling]
 
 export function generateF2_Oppervlakte(dossier: Dossier): string {
   const template = `F.2 OPPERVLAKTE
@@ -532,10 +523,6 @@ export function generateF2_Oppervlakte(dossier: Dossier): string {
 Het object heeft de volgende oppervlakten:
 
 Bruto vloeroppervlak (BVO): {{bvo}}
-Verhuurbaar vloeroppervlak (VVO): {{vvo}}
-Gebruiksoppervlak (GBO): {{gbo}}
-
-Meetinstructie: [meettype]
 Verhouding VVO/BVO: [percentage]%`
 
   return replacePlaceholders(template, dossier)
@@ -546,21 +533,21 @@ export function generateF3_Renovatie(dossier: Dossier): string {
 
 Voor zover bekend zijn er geen recente renovaties uitgevoerd.
 
-[Indien wel: omschrijving renovatie en jaar]`
+Gebruiksoppervlak (GBO): {{gbo}}
 }
+Meetinstructie: [meettype]
+Verhouding VVO/BVO: [percentage]%`
 
-export function generateF4_Milieuaspecten(dossier: Dossier): string {
-  if (!dossier.stap7) return ''
-
+  return replacePlaceholders(template, dossier)
   return `F.4 MILIEUASPECTEN EN BEOORDELING
 
 ASBEST
 
-Asbest: ${dossier.stap7.asbest === 'ja' ? 'Aanwezig' : dossier.stap7.asbest === 'nee' ? 'Niet aanwezig' : 'Onbekend'}
 
-BODEMVERONTREINIGING
+Voor zover bekend zijn er geen recente renovaties uitgevoerd.
 
-Bodemverontreiniging: ${dossier.stap7.bodemverontreiniging === 'ja' ? 'Aanwezig' : dossier.stap7.bodemverontreiniging === 'nee' ? 'Niet aanwezig' : 'Onbekend'}
+[Indien wel: omschrijving renovatie en jaar]`
+}
 
 ENERGIELABEL
 
@@ -569,70 +556,64 @@ Energielabel: ${dossier.stap7.energielabel || 'Onbekend'}
 De taxateur gaat ervan uit dat er geen milieuverontreiniging aanwezig is die de waarde of het gebruik van het object negatief beïnvloedt. Er heeft geen milieukundig onderzoek plaatsgevonden.`
 }
 
-export function generateG1_GebruikObject(dossier: Dossier): string {
-  const variant = getRapportVariant(dossier)
-  const template = `G.1 GEBRUIK VAN HET OBJECT
+Asbest: ${dossier.stap7.asbest === 'ja' ? 'Aanwezig' : dossier.stap7.asbest === 'nee' ? 'Niet aanwezig' : 'Onbekend'}
+rtVariant(dossier)
+BODEMVERONTREINIGING
 
-HUIDIG GEBRUIK
+Bodemverontreiniging: ${dossier.stap7.bodemverontreiniging === 'ja' ? 'Aanwezig' : dossier.stap7.bodemverontreiniging === 'nee' ? 'Niet aanwezig' : 'Onbekend'}
 
-${variant === 'verhuurd_belegging' ? 'Het object blijft verhuurd conform huidige bestemming.' : 'Het object blijft in gebruik voor eigen bedrijfsvoering.'}`
+ENERGIELABELr eigen bedrijfsvoering.'}`
 
-  return replacePlaceholders(template, dossier)
+Energielabel: ${dossier.stap7.energielabel || 'Onbekend'}
 }
+De taxateur gaat ervan uit dat er geen milieuverontreiniging aanwezig is die de waarde of het gebruik van het object negatief beïnvloedt. Er heeft geen milieukundig onderzoek plaatsgevonden.`
+}xport function generateG2_AlternatieveAanwendbaarheid(dossier: Dossier): string {
+
+
+HIGHEST AND BEST USE (HABU)
+
+Het object is geschikt voor de huidige bestemming.
+HUIDIG GEBRUIK
+Het taxatieoordeel is gebaseerd op de huidige feitelijke situatie en de daarbij behorende bestemming.
+export function generateG2_Huursituatie(dossier: Dossier): string {
+ || !dossier.stap4.verhuurd) {
+    return 'Het object is niet verhuurd.'
+  }
 
 export function generateG2_AlternatieveAanwendbaarheid(dossier: Dossier): string {
-  return `G.2 ALTERNATIEVE AANWENDBAARHEID
+
 
 HIGHEST AND BEST USE (HABU)
 
 Het object is geschikt voor de huidige bestemming.
 
 Het taxatieoordeel is gebaseerd op de huidige feitelijke situatie en de daarbij behorende bestemming.
-
+Huurder: ${dossier.stap4.huurder}
 De hoogste en beste use (HABU) wordt bereikt met het huidige gebruik conform de bestemming.`
 }
 
-export function generateG2_Huursituatie(dossier: Dossier): string {
-  if (!dossier.stap4 || !dossier.stap4.verhuurd) {
-    return 'Het object is niet verhuurd.'
+export function generateG2_Huursituatie(dossier: Dossier): string {um)}`
+    text += `\nEinddatum: ${formatDatum(dossier.stap4.einddatum)}`
+    text += `\nOpzegtermijn: [opzegtermijn]`
   }
 
   let text = `G.2 HUURSITUATIE
 
 Aanvangsleegstand: [percentage]%
 
-Score: [score]
-
-HUURDERSINFORMATIE
-
-Huurder: ${dossier.stap4.huurder}
-Contracttype: ${dossier.stap4.contracttype || 'ROZ-huurovereenkomst'}`
-
-  if (dossier.stap4.ingangsdatum && dossier.stap4.einddatum) {
-    text += `\nIngangsdatum: ${formatDatum(dossier.stap4.ingangsdatum)}`
-    text += `\nEinddatum: ${formatDatum(dossier.stap4.einddatum)}`
-    text += `\nOpzegtermijn: [opzegtermijn]`
-  }
-
-  if (dossier.stap3?.vvo) {
-    text += `\n\nVVO: ${formatOppervlakte(dossier.stap3.vvo)}`
-  }
-
-  if (dossier.stap4.huurprijsPerJaar) {
-    text += `\nContracthuur per jaar: ${formatBedrag(dossier.stap4.huurprijsPerJaar)}`
   }
 
   if (dossier.stap4.markthuurPerJaar) {
     text += `\nMarkthuur per jaar: ${formatBedrag(dossier.stap4.markthuurPerJaar)}`
-  }
-
+Huurder: ${dossier.stap4.huurder}
+Contracttype: ${dossier.stap4.contracttype || 'ROZ-huurovereenkomst'}`
   if (dossier.stap4.indexering) {
-    text += `\n\nIndexering: ${dossier.stap4.indexering}`
-  }
+  if (dossier.stap4.ingangsdatum && dossier.stap4.einddatum) {
+    text += `\nIngangsdatum: ${formatDatum(dossier.stap4.ingangsdatum)}`
+    text += `\nEinddatum: ${formatDatum(dossier.stap4.einddatum)}`
+    text += `\nOpzegtermijn: [opzegtermijn]`
 
-  text += `\n\nHUURBIJZONDERHEDEN
 
-[Beschrijving huurbijzonderheden]
 
 ALTERNATIEVE AANWENDBAARHEID
 
@@ -651,11 +632,11 @@ De Nederlandse vastgoedmarkt voor {{type_object}} kent een evenwichtige tot krap
 REGIONAAL MARKTBEELD
 
 De markt in {{plaats}} en omgeving wordt gekenmerkt door een stabiele vraag naar {{type_object}}. De locatie is goed bereikbaar en biedt voldoende voorzieningen.
+[Beschrijving huurbijzonderheden]
 
-INDEXVERWACHTINGEN
 
 Voor de komende jaren wordt een indexering conform de CPI-index verwacht, met een verwachte jaarlijkse stijging van circa 2-3%.`
-
+Het object is geschikt voor de huidige bestemming. De hoogste en beste use (HABU) wordt bereikt met het huidige gebruik conform de bestemming.`
   return replacePlaceholders(template, dossier)
 }
 
@@ -664,12 +645,10 @@ export function generateH2_Huurreferenties(dossier: Dossier, historischeRapporte
     dossier.geselecteerdeReferenties.includes(r.id)
   )
 
-  let text = `H.2 HUURREFERENTIES EN OVERZICHT RUIMTES EN MARKTHUUR
-
 TOELICHTING HUURREFERENTIES
 
 Voor het bepalen van de markthuur zijn de volgende referenties geraadpleegd:`
-
+REGIONAAL MARKTBEELD
   if (selectedReferenties.length > 0) {
     text += '\n\nHUURREFERENTIELIJST\n'
     selectedReferenties.forEach((rapport, index) => {
@@ -681,14 +660,14 @@ Voor het bepalen van de markthuur zijn de volgende referenties geraadpleegd:`
       text += `- Datum: ${formatDatum(rapport.waardepeildatum)}\n`
     })
   }
-
-  text += '\n\nVERKLARING MARKTHUUR\n\nDe ingeschatte markthuurwaarde is derhalve altijd een combinatie van het marktgevoel van de taxateur en (gepubliceerde) gerealiseerde transacties.\n\nMARKTHUUR PER RUIMTETYPE\n\n[Tabel met markthuur per ruimtetype]'
-
-  return text
-}
-
-export function generateH3_Koopreferenties(dossier: Dossier, historischeRapporten: HistorischRapport[]): string {
   const selectedReferenties = historischeRapporten.filter(r => 
+    dossier.geselecteerdeReferenties.includes(r.id)
+  )
+
+  let text = `H.2 HUURREFERENTIES EN OVERZICHT RUIMTES EN MARKTHUUR
+
+TOELICHTING HUURREFERENTIES
+
     dossier.geselecteerdeReferenties.includes(r.id)
   )
 
@@ -699,11 +678,7 @@ TOELICHTING KOOPREFERENTIES
 Voor het bepalen van de marktwaarde en de gehanteerde rendementen zijn de volgende referenties geraadpleegd:`
 
   if (selectedReferenties.length > 0) {
-    text += '\n\nKOOPREFERENTIELIJST\n'
-    selectedReferenties.forEach((rapport, index) => {
-      text += `\nReferentie ${index + 1}:\n`
       text += `- Adres: ${rapport.adres.straat} ${rapport.adres.huisnummer}, ${rapport.adres.plaats}\n`
-      text += `- Type: ${rapport.typeObject}\n`
       text += `- Bouwjaar: [bouwjaar]\n`
       text += `- Totaal m²: ${formatOppervlakte(rapport.gbo)}\n`
       text += `- Parkeerplaatsen: [aantal]\n`
@@ -723,11 +698,11 @@ Voor het bepalen van de marktwaarde en de gehanteerde rendementen zijn de volgen
 }
 
 export function generateH4_Correcties(dossier: Dossier): string {
-  return `H.4 ONDERBOUWING CORRECTIES
+  if (selectedReferenties.length > 0) {
+    text += '\n\nKOOPREFERENTIELIJST\n'
+    selectedReferenties.forEach((rapport, index) => {
 
-CORRECTIES
-
-[Omschrijving toegepaste correcties]
+      text += `- Adres: ${rapport.adres.straat} ${rapport.adres.huisnummer}, ${rapport.adres.plaats}\n`
 
 BIJZONDERE WAARDECOMPONENTEN
 
@@ -739,9 +714,6 @@ export function generateI_Duurzaamheid(dossier: Dossier): string {
 
   const template = `I. DUURZAAMHEID
 
-OBJECT
-
-Object gebruikt als: {{type_object}}
 Energielabel: {{energielabel}}
 Flexibiliteit: [beoordeling]
 Demontabel/herbruikbaar: [beoordeling]
@@ -755,7 +727,7 @@ WARMTEOPWEKKING
 
 Warmteopwekking: {{installaties}}
 Verwarmingsafgifte: [omschrijving]
-Warm water: [omschrijving]
+[Omschrijving toegepaste correcties]
 
 LUCHTBEHANDELING
 
@@ -763,9 +735,6 @@ Luchtbehandeling: [omschrijving]
 
 ISOLATIE
 
-Isolatie: De isolatie van het object voldoet aan de eisen die gelden voor het bouwjaar.
-
-ZONNEPANELEN
 
 [Omschrijving zonnepanelen indien aanwezig]
 
@@ -773,14 +742,13 @@ TOEKOMSTBESTENDIGHEID
 
 Het object voldoet aan de huidige wet- en regelgeving op het gebied van duurzaamheid.
 
-VERDUURZAMINGSMAATREGELEN
+Energielabel: {{energielabel}}
 
 Voor zover bekend zijn geen directe verduurzamingsmaatregelen gepland.
 
 DUURZAAMHEIDSDISCLAIMER
 
-De taxateur gaat ervan uit dat de verstrekte informatie over duurzaamheid en energielabel correct is. De taxateur heeft geen specifiek onderzoek gedaan naar de energetische kwaliteit van het object. De informatie is gebaseerd op het energielabel en visuele waarneming tijdens de inspectie.`
-
+Ecologische voorzieningen: [omschrijving]kte informatie over duurzaamheid en energielabel correct is. De taxateur heeft geen specifiek onderzoek gedaan naar de energetische kwaliteit van het object. De informatie is gebaseerd op het energielabel en visuele waarneming tijdens de inspectie.`
   return replacePlaceholders(template, dossier)
 }
 
@@ -789,22 +757,18 @@ export function generateJ_AlgemeneUitgangspunten(dossier: Dossier): string {
 
 Bij het opstellen van deze taxatie zijn de volgende algemene uitgangspunten gehanteerd:
 
-- De taxatie is uitgevoerd conform de Richtlijnen Vastgoedtaxaties (RVT), International Valuation Standards (IVS) en European Valuation Standards (EVS/RICS)
+LUCHTBEHANDELINGorm de Richtlijnen Vastgoedtaxaties (RVT), International Valuation Standards (IVS) en European Valuation Standards (EVS/RICS)
 - Er is uitgegaan van vrij van huur en gebruik, tenzij anders vermeld
-- Er zijn geen verborgen gebreken verondersteld
+Luchtbehandeling: [omschrijving]n verondersteld
 - Alle benodigde vergunningen zijn aanwezig en rechtsgeldig
-- Het gebruik is conform de bestemming
+ISOLATIE
 - De verstrekte informatie is correct en volledig
 - Er is geen sprake van bodemverontreiniging of asbest
 - Het object is vrij van hypotheken en andere zakelijke rechten`
 }
 
-export function generateK_Waardebegrippen(dossier: Dossier): string {
+[Omschrijving zonnepanelen indien aanwezig]ossier: Dossier): string {
   return `K. WAARDEBEGRIPPEN EN DEFINITIES
-
-MARKTWAARDE
-
-"Het geschatte bedrag waartegen een eigendom op de waardepeildatum tussen een bereidwillige koper en een bereidwillige verkoper in een zakelijke transactie zou worden overgedragen, na behoorlijke marketing waarbij de partijen zouden hebben gehandeld met kennis van zaken, prudent en niet onder dwang."
 
 KOSTEN KOPER
 
@@ -813,28 +777,27 @@ De marktwaarde is uitgedrukt in kosten koper, dit betekent inclusief overdrachts
 BAR (BRUTO AANVANGSRENDEMENT)
 
 De bruto aanvangshuur gedeeld door de koopprijs kosten koper, uitgedrukt in een percentage.
+DUURZAAMHEIDSDISCLAIMER
 
-NAR (NETTO AANVANGSRENDEMENT)
 
 De netto aanvangshuur (na aftrek van exploitatiekosten) gedeeld door de koopprijs kosten koper, uitgedrukt in een percentage.
 
 BVO (BRUTO VLOEROPPERVLAK)
 
-Het totale vloeroppervlak van alle bouwlagen.
-
+export function generateJ_AlgemeneUitgangspunten(dossier: Dossier): string {
 VVO (VERHUURBAAR VLOEROPPERVLAK)
 
 Het vloeroppervlak dat direct of indirect voor verhuur beschikbaar is.
 
 GBO (GEBRUIKSOPPERVLAK)
 
-Het gebruiksoppervlak conform NEN 2580 meetinstructie.`
+- Er zijn geen verborgen gebreken verondersteldructie.`
+- Alle benodigde vergunningen zijn aanwezig en rechtsgeldig
+- Het gebruik is conform de bestemming
+- De verstrekte informatie is correct en volledig
+- Er is geen sprake van bodemverontreiniging of asbest
+- Het object is vrij van hypotheken en andere zakelijke rechten`
 }
-
-export function generateL_Bijlagen(dossier: Dossier): string {
-  return `L. BIJLAGEN
-
-Bij dit rapport behoren de volgende bijlagen:
 
 - Kadastrale gegevens
 - Locatiekaart
@@ -843,10 +806,10 @@ Bij dit rapport behoren de volgende bijlagen:
 - Energielabel
 - Huurcontracten (indien van toepassing)
 
-Dit rapport is opgesteld conform de Richtlijnen Vastgoedtaxaties (RVT), de International Valuation Standards (IVS) en de European Valuation Standards (EVS/RICS), en de toepasselijke wet- en regelgeving.`
+KOSTEN KOPERlijnen Vastgoedtaxaties (RVT), de International Valuation Standards (IVS) en de European Valuation Standards (EVS/RICS), en de toepasselijke wet- en regelgeving.`
 }
+De marktwaarde is uitgedrukt in kosten koper, dit betekent inclusief overdrachtsbelasting, notariskosten en eventuele makelaarscourtage.
 
-export function generateOndertekening(dossier: Dossier): string {
   const template = `ONDERTEKENING
 
 Dit rapport is opgesteld conform de Richtlijnen Vastgoedtaxaties (RVT), de International Valuation Standards (IVS) en de European Valuation Standards (EVS/RICS), en de toepasselijke wet- en regelgeving.
@@ -855,11 +818,11 @@ De taxatie is uitgevoerd door een gecertificeerd taxateur en gebaseerd op de ten
 
 
 {{plaats}}, {{inspectiedatum}}
+BVO (BRUTO VLOEROPPERVLAK)
 
-
-____________________________
+Het totale vloeroppervlak van alle bouwlagen.
 {{taxateur}}
-Gecertificeerd Taxateur NRVT`
+VVO (VERHUURBAAR VLOEROPPERVLAK)
 
   return replacePlaceholders(template, dossier)
 }
@@ -869,26 +832,20 @@ export function generateAlleSecties(dossier: Dossier, historischeRapporten: Hist
   const isVerhuurd = variant === 'verhuurd_belegging'
 
   return {
-    'rapport-samenvatting': generateRapportSamenvatting(dossier),
-    'a1-opdrachtgever': generateA1_Opdrachtgever(dossier),
-    'a2-taxateur': generateA2_Taxateur(dossier),
-    'b1-algemeen': generateB1_Algemeen(dossier),
-    'b2-doel-taxatie': generateB2_DoelTaxatie(dossier),
-    'b3-waardering-basis': generateB3_WaarderingBasis(dossier),
     'b4-inspectie': generateB4_Inspectie(dossier),
     'b5-uitgangspunten': generateB5_Uitgangspunten(dossier),
     'b6-toelichting-waardering': generateB6_ToelichtingWaardering(dossier),
     'b7-eerdere-taxaties': generateB7_EerdereTaxaties(dossier),
     'b8-inzage-documenten': generateB8_InzageDocumenten(dossier),
     'b9-taxatiemethodiek': generateB9_Taxatiemethodiek(dossier),
-    'b10-plausibiliteit': generateB10_Plausibiliteit(dossier),
-    'c1-swot': generateC1_SWOT(dossier),
+- Foto's object (exterieur en interieur)
+- Oppervlakteberekening
     'c2-beoordeling': generateC2_Beoordeling(dossier),
     'd1-privaatrechtelijk': generateD1_Privaatrechtelijk(dossier),
-    'd2-publiekrechtelijk': generateD2_Publiekrechtelijk(dossier),
-    'e1-locatie-overzicht': generateE1_LocatieOverzicht(dossier),
+krechtelijk(dossier),
+Dit rapport is opgesteld conform de Richtlijnen Vastgoedtaxaties (RVT), de International Valuation Standards (IVS) en de European Valuation Standards (EVS/RICS), en de toepasselijke wet- en regelgeving.`
     'e2-locatie-informatie': generateE2_LocatieInformatie(dossier),
-    'f1-object-informatie': generateF1_ObjectInformatie(dossier),
+generateF1_ObjectInformatie(dossier),
     'f2-oppervlakte': generateF2_Oppervlakte(dossier),
     'f3-renovatie': generateF3_Renovatie(dossier),
     'f4-milieuaspecten': generateF4_Milieuaspecten(dossier),
@@ -900,10 +857,11 @@ export function generateAlleSecties(dossier: Dossier, historischeRapporten: Hist
     'h2-huurreferenties': generateH2_Huurreferenties(dossier, historischeRapporten),
     'h3-koopreferenties': generateH3_Koopreferenties(dossier, historischeRapporten),
     'h4-correcties': generateH4_Correcties(dossier),
-    'i-duurzaamheid': generateI_Duurzaamheid(dossier),
-    'j-algemene-uitgangspunten': generateJ_AlgemeneUitgangspunten(dossier),
-    'k-waardebegrippen': generateK_Waardebegrippen(dossier),
-    'l-bijlagen': generateL_Bijlagen(dossier),
-    'ondertekening': generateOndertekening(dossier),
-  }
+____________________________
+{{taxateur}}
+Gecertificeerd Taxateur NRVT`
+
+  return replacePlaceholders(template, dossier)
 }
+
+    'a2-taxateur': generateA2_Taxateur(dossier),    'b2-doel-taxatie': generateB2_DoelTaxatie(dossier),    'f3-renovatie': generateF3_Renovatie(dossier),

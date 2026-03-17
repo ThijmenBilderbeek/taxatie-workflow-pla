@@ -7,43 +7,144 @@ import { Separator } from './ui/separator'
 import { Badge } from './ui/badge'
 import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback } from '@/types'
+import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant } from '@/types'
 import { formatForFlux, createFluxReport } from '@/lib/fluxFormatter'
+import { generateAlleSecties } from '@/lib/templates'
+
+function getRapportVariant(dossier: Dossier): RapportVariant {
+  const isVerhuurd = dossier.stap4?.verhuurd || false
+  const typeObject = dossier.stap1?.typeObject || 'kantoor'
+  
+  if (isVerhuurd) {
+    return 'verhuurd_belegging'
+  }
+  
+  if (typeObject === 'bedrijfscomplex' || typeObject === 'bedrijfshal') {
+    return 'eigenaar_gebruiker_bedrijfscomplex'
+  }
+  
+  return 'eigenaar_gebruiker_kantoor'
+}
+
+interface SectieDefinitie {
+  key: string
+  titel: string
+}
+
+const ALLE_SECTIES: SectieDefinitie[] = [
+  { key: 'samenvatting', titel: 'Rapport Samenvatting' },
+  { key: 'a1-opdrachtgever', titel: 'A.1 Opdrachtgever' },
+  { key: 'a2-taxateur', titel: 'A.2 Opdrachtnemer en Uitvoerend Taxateur' },
+  { key: 'b1-algemeen', titel: 'B.1 Algemeen' },
+  { key: 'b2-doel-taxatie', titel: 'B.2 Doel van de Taxatie' },
+  { key: 'b3-waardering-basis', titel: 'B.3 Waardering & Basis van de Waarde' },
+  { key: 'b4-inspectie', titel: 'B.4 Inspectie' },
+  { key: 'b5-uitgangspunten', titel: 'B.5 Uitgangspunten en Afwijkingen' },
+  { key: 'b6-toelichting-waardering', titel: 'B.6 Nadere Toelichting op de Waardering' },
+  { key: 'b7-eerdere-taxaties', titel: 'B.7 Eerdere Taxaties' },
+  { key: 'b8-inzage-documenten', titel: 'B.8 Overzicht Inzage Documenten' },
+  { key: 'b9-taxatiemethodiek', titel: 'B.9 Gehanteerde Taxatiemethodiek' },
+  { key: 'b10-plausibiliteit', titel: 'B.10 Plausibiliteit Taxatie' },
+  { key: 'c1-swot', titel: 'C.1 SWOT-Analyse' },
+  { key: 'c2-beoordeling', titel: 'C.2 Beoordeling Courantheid' },
+  { key: 'd1-privaatrechtelijk', titel: 'D.1 Privaatrechtelijke Aspecten' },
+  { key: 'd2-publiekrechtelijk', titel: 'D.2 Publiekrechtelijke Aspecten' },
+  { key: 'e1-locatie-overzicht', titel: 'E.1 Locatieoverzicht' },
+  { key: 'e2-locatie-informatie', titel: 'E.2 Locatie Informatie' },
+  { key: 'f1-object-informatie', titel: 'F.1 Objectinformatie' },
+  { key: 'f2-oppervlakte', titel: 'F.2 Oppervlakte' },
+  { key: 'f3-renovatie', titel: 'F.3 Renovatie' },
+  { key: 'f4-milieuaspecten', titel: 'F.4 Milieuaspecten en Beoordeling' },
+  { key: 'g1-gebruik-object', titel: 'G.1 Gebruik Object' },
+  { key: 'g2-alternatieve-aanwendbaarheid', titel: 'G.2 Huursituatie / Alternatieve Aanwendbaarheid' },
+  { key: 'h1-marktvisie', titel: 'H.1 Marktvisie' },
+  { key: 'h2-huurreferenties', titel: 'H.2 Huurreferenties en Overzicht Ruimtes en Markthuur' },
+  { key: 'h3-koopreferenties', titel: 'H.3 Koopreferenties en Onderbouwing Yields' },
+  { key: 'h4-correcties', titel: 'H.4 Correcties en Bijzondere Waardecomponenten' },
+  { key: 'i-duurzaamheid', titel: 'I. Duurzaamheid' },
+  { key: 'j-algemene-uitgangspunten', titel: 'J. Algemene Uitgangspunten' },
+  { key: 'k-waardebegrippen', titel: 'K. Waardebegrippen en Definities' },
+  { key: 'l-bijlagen', titel: 'L. Bijlagen' },
+  { key: 'ondertekening', titel: 'Ondertekening' },
+]
 
 export function RapportView() {
   const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
   const [historischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
   const [similarityFeedback, setSimilarityFeedback] = useKV<SimilarityFeedback[]>('similarity-feedback', [])
 
-  const activeDossier = (dossiers || []).find(d => d.status === 'in_behandeling' || (d.status === 'concept' && Object.keys(d.rapportSecties).length > 0))
+  const activeDossier = (dossiers || []).find(
+    d => d.status === 'in_behandeling' || d.status === 'concept'
+  )
 
   const [editingStates, setEditingStates] = useState<Record<string, string>>({})
+  const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
-    if (activeDossier && Object.keys(editingStates).length === 0) {
+    if (!activeDossier) return
+
+    if (Object.keys(activeDossier.rapportSecties).length === 0) {
+      setIsGenerating(true)
+      const generatedContent = generateAlleSecties(activeDossier, historischeRapporten || [])
+      
+      const newRapportSecties: Record<string, RapportSectie> = {}
+      Object.entries(generatedContent).forEach(([key, content]) => {
+        const sectieDefinitie = ALLE_SECTIES.find(s => s.key === key)
+        newRapportSecties[key] = {
+          titel: sectieDefinitie?.titel || key,
+          inhoud: content,
+          gegenereerdeInhoud: content,
+          fluxKlaarTekst: formatForFlux(content),
+        }
+      })
+
+      setDossiers((current) =>
+        (current || []).map((d) =>
+          d.id === activeDossier.id
+            ? {
+                ...d,
+                rapportSecties: newRapportSecties,
+                updatedAt: new Date().toISOString(),
+              }
+            : d
+        )
+      )
+      setIsGenerating(false)
+      toast.success('Rapport gegenereerd')
+    } else {
       const initial: Record<string, string> = {}
       Object.entries(activeDossier.rapportSecties).forEach(([key, sectie]) => {
         initial[key] = sectie.inhoud
       })
       setEditingStates(initial)
     }
-  }, [activeDossier])
+  }, [activeDossier?.id])
 
   if (!activeDossier) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
-          <p className="text-muted-foreground">Geen rapport beschikbaar. Voltooi eerst de wizard.</p>
+          <p className="text-muted-foreground">Selecteer een dossier vanuit het dashboard</p>
         </CardContent>
       </Card>
     )
   }
 
-  const secties = Object.entries(activeDossier.rapportSecties).sort(([keyA], [keyB]) => {
-    const numA = parseInt(keyA.split('-')[0])
-    const numB = parseInt(keyB.split('-')[0])
-    return numA - numB
-  })
+  if (isGenerating) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-muted-foreground">Rapport wordt gegenereerd...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const variant = getRapportVariant(activeDossier)
+  const secties = ALLE_SECTIES.map(def => {
+    const sectie = activeDossier.rapportSecties[def.key]
+    return sectie ? { key: def.key, ...sectie } : null
+  }).filter(Boolean) as Array<{ key: string } & RapportSectie>
 
   const handleSaveSectie = (key: string) => {
     setDossiers((current) =>
@@ -198,6 +299,9 @@ export function RapportView() {
           <p className="text-sm text-muted-foreground">
             {activeDossier.dossiernummer} • {activeDossier.stap1?.objectnaam || 'Onbekend object'}
           </p>
+          <Badge variant="secondary" className="mt-2">
+            Variant: {variant === 'verhuurd_belegging' ? 'Verhuurd (Belegging)' : 'Eigenaar-Gebruiker'}
+          </Badge>
         </div>
 
         <div className="flex items-center gap-2">
@@ -224,12 +328,12 @@ export function RapportView() {
             </CardContent>
           </Card>
         ) : (
-          secties.map(([key, sectie]) => {
+          secties.map((sectie) => {
             const referentieInfo = getReferentieInfo(sectie.gebaseerdOpReferentie)
-            const hasBeenEdited = editingStates[key] !== sectie.gegenereerdeInhoud
+            const hasBeenEdited = editingStates[sectie.key] !== sectie.gegenereerdeInhoud
 
             return (
-              <Card key={key}>
+              <Card key={sectie.key}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="space-y-2 flex-1">
@@ -255,7 +359,7 @@ export function RapportView() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleCopySectie(key)}
+                        onClick={() => handleCopySectie(sectie.key)}
                         title="Kopieer sectie"
                       >
                         <Copy />
@@ -263,7 +367,7 @@ export function RapportView() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleRegenereerSectie(key)}
+                        onClick={() => handleRegenereerSectie(sectie.key)}
                         title="Regenereer"
                       >
                         <ArrowCounterClockwise />
@@ -272,7 +376,7 @@ export function RapportView() {
                       <Button
                         size="sm"
                         variant={sectie.feedbackScore === 'positief' ? 'default' : 'ghost'}
-                        onClick={() => handleFeedback(key, 'positief')}
+                        onClick={() => handleFeedback(sectie.key, 'positief')}
                         title="Goed"
                       >
                         <ThumbsUp />
@@ -280,7 +384,7 @@ export function RapportView() {
                       <Button
                         size="sm"
                         variant={sectie.feedbackScore === 'negatief' ? 'destructive' : 'ghost'}
-                        onClick={() => handleFeedback(key, 'negatief')}
+                        onClick={() => handleFeedback(sectie.key, 'negatief')}
                         title="Niet goed"
                       >
                         <ThumbsDown />
@@ -290,11 +394,11 @@ export function RapportView() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Textarea
-                    value={editingStates[key] || ''}
+                    value={editingStates[sectie.key] || ''}
                     onChange={(e) =>
                       setEditingStates((current) => ({
                         ...current,
-                        [key]: e.target.value,
+                        [sectie.key]: e.target.value,
                       }))
                     }
                     rows={10}
@@ -302,7 +406,7 @@ export function RapportView() {
                   />
 
                   <div className="flex justify-end">
-                    <Button onClick={() => handleSaveSectie(key)}>
+                    <Button onClick={() => handleSaveSectie(sectie.key)}>
                       Opslaan
                     </Button>
                   </div>

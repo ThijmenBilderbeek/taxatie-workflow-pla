@@ -8,7 +8,7 @@ import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
-import { MagnifyingGlass, MapPin, Buildings, Calendar, CurrencyCircleDollar, ChartBar, Upload, Trash } from '@phosphor-icons/react'
+import { MagnifyingGlass, MapPin, Buildings, Calendar, CurrencyCircleDollar, ChartBar, Upload, Trash, Pencil } from '@phosphor-icons/react'
 import { Checkbox } from './ui/checkbox'
 import { toast } from 'sonner'
 import { parsePdfToRapport } from '../lib/pdfParser'
@@ -17,9 +17,10 @@ interface KennisbankProps {
   historischeRapporten: HistorischRapport[]
   onAddRapport: (rapport: HistorischRapport) => void
   onDeleteRapport: (id: string) => void
+  onUpdateRapport: (rapport: HistorischRapport) => void
 }
 
-export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport }: KennisbankProps) {
+export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport, onUpdateRapport }: KennisbankProps) {
   const [zoekterm, setZoekterm] = useState('')
   const [filterType, setFilterType] = useState<string>('alle')
   const [filterGebruiksdoel, setFilterGebruiksdoel] = useState<string>('alle')
@@ -34,6 +35,44 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   const [selectieModus, setSelectieModus] = useState(false)
   const [geselecteerdeIds, setGeselecteerdeIds] = useState<Set<string>>(new Set())
   const [showVerwijderDialog, setShowVerwijderDialog] = useState(false)
+
+  // Bewerk-dialog state
+  const [bewerkRapport, setBewerkRapport] = useState<HistorischRapport | null>(null)
+  const [bewerkFormulier, setBewerkFormulier] = useState<HistorischRapport | null>(null)
+  const [bewerkFouten, setBewerkFouten] = useState<Partial<Record<string, string>>>({})
+
+  const handleOpenBewerken = (rapport: HistorischRapport) => {
+    setBewerkRapport(rapport)
+    setBewerkFormulier(structuredClone(rapport))
+    setBewerkFouten({})
+  }
+
+  const handleCloseBewerkDialog = () => {
+    setBewerkRapport(null)
+    setBewerkFormulier(null)
+    setBewerkFouten({})
+  }
+
+  const handleSaveBewerkRapport = () => {
+    if (!bewerkFormulier) return
+    const fouten: Partial<Record<string, string>> = {}
+    if (!bewerkFormulier.adres.straat.trim()) fouten.straat = 'Verplicht'
+    if (!bewerkFormulier.adres.huisnummer.trim()) fouten.huisnummer = 'Verplicht'
+    if (!bewerkFormulier.adres.postcode.trim()) fouten.postcode = 'Verplicht'
+    if (!bewerkFormulier.adres.plaats.trim()) fouten.plaats = 'Verplicht'
+    if (!bewerkFormulier.typeObject) fouten.typeObject = 'Verplicht'
+    if (!bewerkFormulier.gebruiksdoel) fouten.gebruiksdoel = 'Verplicht'
+    if (!bewerkFormulier.bvo || bewerkFormulier.bvo <= 0) fouten.bvo = 'Verplicht'
+    if (!bewerkFormulier.marktwaarde || bewerkFormulier.marktwaarde <= 0) fouten.marktwaarde = 'Verplicht'
+    if (!bewerkFormulier.waardepeildatum) fouten.waardepeildatum = 'Verplicht'
+    if (Object.keys(fouten).length > 0) {
+      setBewerkFouten(fouten)
+      return
+    }
+    onUpdateRapport(bewerkFormulier)
+    toast.success('Rapport bijgewerkt in kennisbank')
+    handleCloseBewerkDialog()
+  }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -400,6 +439,183 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!bewerkRapport} onOpenChange={(open) => { if (!open) handleCloseBewerkDialog() }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Rapport bewerken</DialogTitle>
+          </DialogHeader>
+          {bewerkFormulier && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bew-straat">Straatnaam</Label>
+                  <Input
+                    id="bew-straat"
+                    value={bewerkFormulier.adres.straat}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, adres: { ...f.adres, straat: e.target.value } }))}
+                  />
+                  {bewerkFouten.straat && <p className="text-sm text-destructive">{bewerkFouten.straat}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-huisnummer">Huisnummer</Label>
+                  <Input
+                    id="bew-huisnummer"
+                    value={bewerkFormulier.adres.huisnummer}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, adres: { ...f.adres, huisnummer: e.target.value } }))}
+                  />
+                  {bewerkFouten.huisnummer && <p className="text-sm text-destructive">{bewerkFouten.huisnummer}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-postcode">Postcode</Label>
+                  <Input
+                    id="bew-postcode"
+                    value={bewerkFormulier.adres.postcode}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, adres: { ...f.adres, postcode: e.target.value } }))}
+                  />
+                  {bewerkFouten.postcode && <p className="text-sm text-destructive">{bewerkFouten.postcode}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-plaats">Plaats</Label>
+                  <Input
+                    id="bew-plaats"
+                    value={bewerkFormulier.adres.plaats}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, adres: { ...f.adres, plaats: e.target.value } }))}
+                  />
+                  {bewerkFouten.plaats && <p className="text-sm text-destructive">{bewerkFouten.plaats}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bew-type">Type object</Label>
+                  <Select
+                    value={bewerkFormulier.typeObject}
+                    onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, typeObject: v as ObjectType }))}
+                  >
+                    <SelectTrigger id="bew-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kantoor">Kantoor</SelectItem>
+                      <SelectItem value="bedrijfscomplex">Bedrijfscomplex</SelectItem>
+                      <SelectItem value="bedrijfshal">Bedrijfshal</SelectItem>
+                      <SelectItem value="winkel">Winkel</SelectItem>
+                      <SelectItem value="woning">Woning</SelectItem>
+                      <SelectItem value="appartement">Appartement</SelectItem>
+                      <SelectItem value="overig">Overig</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {bewerkFouten.typeObject && <p className="text-sm text-destructive">{bewerkFouten.typeObject}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-gebruiksdoel">Gebruiksdoel</Label>
+                  <Select
+                    value={bewerkFormulier.gebruiksdoel}
+                    onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, gebruiksdoel: v as Gebruiksdoel }))}
+                  >
+                    <SelectTrigger id="bew-gebruiksdoel">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="eigenaar_gebruiker">Eigenaar-gebruiker</SelectItem>
+                      <SelectItem value="verhuurd_belegging">Verhuurd / Belegging</SelectItem>
+                      <SelectItem value="leegstand">Leegstand</SelectItem>
+                      <SelectItem value="overig">Overig</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {bewerkFouten.gebruiksdoel && <p className="text-sm text-destructive">{bewerkFouten.gebruiksdoel}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bew-bvo">BVO (m²)</Label>
+                  <Input
+                    id="bew-bvo"
+                    type="number"
+                    value={bewerkFormulier.bvo || ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, bvo: parseFloat(e.target.value) || 0 }))}
+                  />
+                  {bewerkFouten.bvo && <p className="text-sm text-destructive">{bewerkFouten.bvo}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-marktwaarde">Marktwaarde (€)</Label>
+                  <Input
+                    id="bew-marktwaarde"
+                    type="number"
+                    value={bewerkFormulier.marktwaarde || ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, marktwaarde: parseFloat(e.target.value) || 0 }))}
+                  />
+                  {bewerkFouten.marktwaarde && <p className="text-sm text-destructive">{bewerkFouten.marktwaarde}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-bar">BAR % (optioneel)</Label>
+                  <Input
+                    id="bew-bar"
+                    type="number"
+                    step="0.01"
+                    value={bewerkFormulier.bar ?? ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, bar: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-nar">NAR % (optioneel)</Label>
+                  <Input
+                    id="bew-nar"
+                    type="number"
+                    step="0.01"
+                    value={bewerkFormulier.nar ?? ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, nar: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bew-peildatum">Waardepeildatum</Label>
+                <Input
+                  id="bew-peildatum"
+                  type="date"
+                  value={bewerkFormulier.waardepeildatum}
+                  onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, waardepeildatum: e.target.value }))}
+                />
+                {bewerkFouten.waardepeildatum && <p className="text-sm text-destructive">{bewerkFouten.waardepeildatum}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bew-lat">Breedtegraad (lat, optioneel)</Label>
+                  <Input
+                    id="bew-lat"
+                    type="number"
+                    step="0.000001"
+                    value={bewerkFormulier.coordinaten.lat || ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, coordinaten: { ...f.coordinaten, lat: parseFloat(e.target.value) || 0 } }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-lng">Lengtegraad (lng, optioneel)</Label>
+                  <Input
+                    id="bew-lng"
+                    type="number"
+                    step="0.000001"
+                    value={bewerkFormulier.coordinaten.lng || ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, coordinaten: { ...f.coordinaten, lng: parseFloat(e.target.value) || 0 } }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseBewerkDialog}>
+              Annuleren
+            </Button>
+            <Button onClick={handleSaveBewerkRapport}>
+              Opslaan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -557,6 +773,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                     <TableHead className="text-right">BAR</TableHead>
                     <TableHead className="text-right">NAR</TableHead>
                     <TableHead>Peildatum</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -620,6 +837,16 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDatum(rapport.waardepeildatum)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => { e.stopPropagation(); handleOpenBewerken(rapport) }}
+                          title="Bewerken"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

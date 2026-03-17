@@ -8,7 +8,7 @@ import { Textarea } from './ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Switch } from './ui/switch'
 import { Progress } from './ui/progress'
-import { ArrowLeft, ArrowRight, Check } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowRight, Check, Lightbulb } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { 
   Dossier, 
@@ -25,6 +25,7 @@ import type {
   SimilarityInstellingen
 } from '@/types'
 import { calculateSimilarity, calculateAllSimilarities } from '@/lib/similarity'
+import { getSuggestiesVoorStap, type VeldSuggestie } from '@/lib/suggestions'
 import { generateAlleSecties } from '@/lib/templates'
 import { formatBedrag, formatOppervlakte, formatDatum } from '@/lib/fluxFormatter'
 
@@ -54,6 +55,7 @@ export function WizardFlow() {
   const [stap8, setStap8] = useState<Partial<Waardering>>(activeDossier?.stap8 || { vergelijkingsobjecten: [] })
   const [stap9, setStap9] = useState<Partial<Aannames>>(activeDossier?.stap9 || {})
   const [selectedReferenties, setSelectedReferenties] = useState<string[]>(activeDossier?.geselecteerdeReferenties || [])
+  const [dismissedSuggesties, setDismissedSuggesties] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (activeDossier) {
@@ -282,6 +284,38 @@ export function WizardFlow() {
     })
   }
 
+  const handleSuggestieAccept = (veldNaam: string, waarde: string) => {
+    switch (currentStep) {
+      case 2:
+        setStap2((prev) => ({ ...prev, [veldNaam]: waarde }))
+        break
+      case 5:
+        setStap5((prev) => ({ ...prev, [veldNaam]: waarde }))
+        break
+      case 6:
+        setStap6((prev) => ({ ...prev, [veldNaam]: waarde }))
+        break
+      case 7:
+        setStap7((prev) => ({ ...prev, [veldNaam]: waarde }))
+        break
+      case 9:
+        setStap9((prev) => ({ ...prev, [veldNaam]: waarde }))
+        break
+    }
+    setDismissedSuggesties((prev) => new Set([...prev, veldNaam]))
+  }
+
+  const handleSuggestieDismiss = (veldNaam: string) => {
+    setDismissedSuggesties((prev) => new Set([...prev, veldNaam]))
+  }
+
+  const suggestiesHuidigeStap = getSuggestiesVoorStap(
+    currentStep,
+    { stap1, stap2, stap3, stap4, stap5, stap6, stap7, stap8, stap9 },
+    historischeRapporten || [],
+    similarityInstellingen
+  )
+
   if (!activeDossier) {
     return (
       <Card>
@@ -308,14 +342,14 @@ export function WizardFlow() {
         </CardHeader>
         <CardContent className="space-y-6">
           {currentStep === 1 && <Stap1 data={stap1} onChange={setStap1} />}
-          {currentStep === 2 && <Stap2 data={stap2} onChange={setStap2} />}
+          {currentStep === 2 && <Stap2 data={stap2} onChange={setStap2} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 3 && <Stap3 data={stap3} onChange={setStap3} />}
           {currentStep === 4 && <Stap4 data={stap4} onChange={setStap4} />}
-          {currentStep === 5 && <Stap5 data={stap5} onChange={setStap5} />}
-          {currentStep === 6 && <Stap6 data={stap6} onChange={setStap6} />}
-          {currentStep === 7 && <Stap7 data={stap7} onChange={setStap7} />}
+          {currentStep === 5 && <Stap5 data={stap5} onChange={setStap5} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 6 && <Stap6 data={stap6} onChange={setStap6} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 7 && <Stap7 data={stap7} onChange={setStap7} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 8 && <Stap8 data={stap8} onChange={setStap8} />}
-          {currentStep === 9 && <Stap9 data={stap9} onChange={setStap9} />}
+          {currentStep === 9 && <Stap9 data={stap9} onChange={setStap9} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 10 && (
             <Stap10
               results={similarityResults}
@@ -367,6 +401,49 @@ function getStepTitle(step: number): string {
     'Vergelijkbare rapporten',
   ]
   return titles[step - 1] || ''
+}
+
+function SuggestieBanner({
+  suggestie,
+  bronAdres,
+  bronScore,
+  onAccept,
+  onDismiss,
+}: {
+  suggestie: string
+  bronAdres: string
+  bronScore: number | null
+  onAccept: () => void
+  onDismiss: () => void
+}) {
+  const preview = suggestie.length > 150 ? suggestie.slice(0, 150) + '...' : suggestie
+  return (
+    <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2 text-sm text-accent-foreground font-medium">
+        <Lightbulb className="h-4 w-4" />
+        <span>
+          Suggestie op basis van {bronAdres}
+          {bronScore !== null ? ` (score: ${bronScore})` : ''}
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground italic">"{preview}"</p>
+      <div className="flex gap-2">
+        <Button size="sm" variant="default" onClick={onAccept}>
+          ✓ Overnemen
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onDismiss}>
+          ✗ Negeren
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+interface SuggestieProps {
+  suggesties?: VeldSuggestie[]
+  dismissedSuggesties?: Set<string>
+  onSuggestieAccept?: (veldNaam: string, waarde: string) => void
+  onSuggestieDismiss?: (veldNaam: string) => void
 }
 
 function Stap1({ data, onChange }: { data: Partial<AlgemeneGegevens>; onChange: (data: Partial<AlgemeneGegevens>) => void }) {
@@ -502,7 +579,22 @@ function Stap1({ data, onChange }: { data: Partial<AlgemeneGegevens>; onChange: 
   )
 }
 
-function Stap2({ data, onChange }: { data: Partial<AdresLocatie>; onChange: (data: Partial<AdresLocatie>) => void }) {
+function Stap2({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<AdresLocatie>; onChange: (data: Partial<AdresLocatie>) => void } & SuggestieProps) {
+  const renderSuggestie = (veldNaam: string) => {
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
+    if (dismissedSuggesties?.has(veldNaam)) return null
+    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
+    if (!s) return null
+    return (
+      <SuggestieBanner
+        suggestie={s.suggestie}
+        bronAdres={s.bronAdres}
+        bronScore={s.bronScore}
+        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+        onDismiss={() => onSuggestieDismiss(veldNaam)}
+      />
+    )
+  }
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-3 gap-4">
@@ -629,6 +721,7 @@ function Stap2({ data, onChange }: { data: Partial<AdresLocatie>; onChange: (dat
 
       <div className="grid gap-2">
         <Label htmlFor="bereikbaarheid">Bereikbaarheid / infrastructuur</Label>
+        {renderSuggestie('bereikbaarheid')}
         <Textarea
           id="bereikbaarheid"
           value={data.bereikbaarheid || ''}
@@ -850,11 +943,27 @@ function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (dat
   )
 }
 
-function Stap5({ data, onChange }: { data: Partial<JuridischeInfo>; onChange: (data: Partial<JuridischeInfo>) => void }) {
+function Stap5({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<JuridischeInfo>; onChange: (data: Partial<JuridischeInfo>) => void } & SuggestieProps) {
+  const renderSuggestie = (veldNaam: string) => {
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
+    if (dismissedSuggesties?.has(veldNaam)) return null
+    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
+    if (!s) return null
+    return (
+      <SuggestieBanner
+        suggestie={s.suggestie}
+        bronAdres={s.bronAdres}
+        bronScore={s.bronScore}
+        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+        onDismiss={() => onSuggestieDismiss(veldNaam)}
+      />
+    )
+  }
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
         <Label htmlFor="eigendomssituatie">Eigendomssituatie *</Label>
+        {renderSuggestie('eigendomssituatie')}
         <Textarea
           id="eigendomssituatie"
           value={data.eigendomssituatie || ''}
@@ -865,6 +974,7 @@ function Stap5({ data, onChange }: { data: Partial<JuridischeInfo>; onChange: (d
 
       <div className="grid gap-2">
         <Label htmlFor="erfpacht">Erfpacht</Label>
+        {renderSuggestie('erfpacht')}
         <Textarea
           id="erfpacht"
           value={data.erfpacht || ''}
@@ -875,6 +985,7 @@ function Stap5({ data, onChange }: { data: Partial<JuridischeInfo>; onChange: (d
 
       <div className="grid gap-2">
         <Label htmlFor="zakelijkeRechten">Zakelijke rechten</Label>
+        {renderSuggestie('zakelijkeRechten')}
         <Textarea
           id="zakelijkeRechten"
           value={data.zakelijkeRechten || ''}
@@ -885,6 +996,7 @@ function Stap5({ data, onChange }: { data: Partial<JuridischeInfo>; onChange: (d
 
       <div className="grid gap-2">
         <Label htmlFor="kwalitatieveVerplichtingen">Kwalitatieve verplichtingen</Label>
+        {renderSuggestie('kwalitatieveVerplichtingen')}
         <Textarea
           id="kwalitatieveVerplichtingen"
           value={data.kwalitatieveVerplichtingen || ''}
@@ -895,6 +1007,7 @@ function Stap5({ data, onChange }: { data: Partial<JuridischeInfo>; onChange: (d
 
       <div className="grid gap-2">
         <Label htmlFor="bestemmingsplan">Bestemmingsplan *</Label>
+        {renderSuggestie('bestemmingsplan')}
         <Textarea
           id="bestemmingsplan"
           value={data.bestemmingsplan || ''}
@@ -906,7 +1019,22 @@ function Stap5({ data, onChange }: { data: Partial<JuridischeInfo>; onChange: (d
   )
 }
 
-function Stap6({ data, onChange }: { data: Partial<TechnischeStaat>; onChange: (data: Partial<TechnischeStaat>) => void }) {
+function Stap6({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<TechnischeStaat>; onChange: (data: Partial<TechnischeStaat>) => void } & SuggestieProps) {
+  const renderSuggestie = (veldNaam: string) => {
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
+    if (dismissedSuggesties?.has(veldNaam)) return null
+    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
+    if (!s) return null
+    return (
+      <SuggestieBanner
+        suggestie={s.suggestie}
+        bronAdres={s.bronAdres}
+        bronScore={s.bronScore}
+        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+        onDismiss={() => onSuggestieDismiss(veldNaam)}
+      />
+    )
+  }
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-4">
@@ -951,6 +1079,7 @@ function Stap6({ data, onChange }: { data: Partial<TechnischeStaat>; onChange: (
 
       <div className="grid gap-2">
         <Label htmlFor="fundering">Fundering</Label>
+        {renderSuggestie('fundering')}
         <Textarea
           id="fundering"
           value={data.fundering || ''}
@@ -961,6 +1090,7 @@ function Stap6({ data, onChange }: { data: Partial<TechnischeStaat>; onChange: (
 
       <div className="grid gap-2">
         <Label htmlFor="dakbedekking">Dakbedekking</Label>
+        {renderSuggestie('dakbedekking')}
         <Textarea
           id="dakbedekking"
           value={data.dakbedekking || ''}
@@ -971,6 +1101,7 @@ function Stap6({ data, onChange }: { data: Partial<TechnischeStaat>; onChange: (
 
       <div className="grid gap-2">
         <Label htmlFor="installaties">Installaties</Label>
+        {renderSuggestie('installaties')}
         <Textarea
           id="installaties"
           value={data.installaties || ''}
@@ -991,6 +1122,7 @@ function Stap6({ data, onChange }: { data: Partial<TechnischeStaat>; onChange: (
       {data.achterstalligOnderhoud && (
         <div className="grid gap-2">
           <Label htmlFor="achterstalligOnderhoudBeschrijving">Beschrijving achterstallig onderhoud</Label>
+          {renderSuggestie('achterstalligOnderhoudBeschrijving')}
           <Textarea
             id="achterstalligOnderhoudBeschrijving"
             value={data.achterstalligOnderhoudBeschrijving || ''}
@@ -1013,7 +1145,22 @@ function Stap6({ data, onChange }: { data: Partial<TechnischeStaat>; onChange: (
   )
 }
 
-function Stap7({ data, onChange }: { data: Partial<Vergunningen>; onChange: (data: Partial<Vergunningen>) => void }) {
+function Stap7({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Vergunningen>; onChange: (data: Partial<Vergunningen>) => void } & SuggestieProps) {
+  const renderSuggestie = (veldNaam: string) => {
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
+    if (dismissedSuggesties?.has(veldNaam)) return null
+    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
+    if (!s) return null
+    return (
+      <SuggestieBanner
+        suggestie={s.suggestie}
+        bronAdres={s.bronAdres}
+        bronScore={s.bronScore}
+        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+        onDismiss={() => onSuggestieDismiss(veldNaam)}
+      />
+    )
+  }
   return (
     <div className="grid gap-4">
       <div className="flex items-center gap-2">
@@ -1108,6 +1255,7 @@ function Stap7({ data, onChange }: { data: Partial<Vergunningen>; onChange: (dat
 
       <div className="grid gap-2">
         <Label htmlFor="toelichting">Toelichting</Label>
+        {renderSuggestie('toelichting')}
         <Textarea
           id="toelichting"
           value={data.toelichting || ''}
@@ -1268,11 +1416,27 @@ function Stap8({ data, onChange }: { data: Partial<Waardering>; onChange: (data:
   )
 }
 
-function Stap9({ data, onChange }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void }) {
+function Stap9({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void } & SuggestieProps) {
+  const renderSuggestie = (veldNaam: string) => {
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
+    if (dismissedSuggesties?.has(veldNaam)) return null
+    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
+    if (!s) return null
+    return (
+      <SuggestieBanner
+        suggestie={s.suggestie}
+        bronAdres={s.bronAdres}
+        bronScore={s.bronScore}
+        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+        onDismiss={() => onSuggestieDismiss(veldNaam)}
+      />
+    )
+  }
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
         <Label htmlFor="aannames">Aannames</Label>
+        {renderSuggestie('aannames')}
         <Textarea
           id="aannames"
           value={data.aannames || ''}
@@ -1283,6 +1447,7 @@ function Stap9({ data, onChange }: { data: Partial<Aannames>; onChange: (data: P
 
       <div className="grid gap-2">
         <Label htmlFor="voorbehouden">Voorbehouden</Label>
+        {renderSuggestie('voorbehouden')}
         <Textarea
           id="voorbehouden"
           value={data.voorbehouden || ''}
@@ -1293,6 +1458,7 @@ function Stap9({ data, onChange }: { data: Partial<Aannames>; onChange: (data: P
 
       <div className="grid gap-2">
         <Label htmlFor="bijzondereOmstandigheden">Bijzondere omstandigheden</Label>
+        {renderSuggestie('bijzondereOmstandigheden')}
         <Textarea
           id="bijzondereOmstandigheden"
           value={data.bijzondereOmstandigheden || ''}

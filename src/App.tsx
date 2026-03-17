@@ -16,7 +16,7 @@ type View = 'dashboard' | 'wizard' | 'rapport' | 'instellingen'
 
 function App() {
   const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
-  const [historischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
+  const [historischeRapporten, setHistorischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
   const [similarityInstellingen, setSimilarityInstellingen] = useKV<SimilarityInstellingen>(
     'similarity-instellingen',
     {
@@ -180,7 +180,7 @@ function App() {
         )}
 
         {currentView === 'rapport' && activeDossier && (
-          <RapportView />
+          <RapportView onAfgerond={() => setCurrentView('dashboard')} />
         )}
 
         {currentView === 'instellingen' && (
@@ -195,7 +195,11 @@ function App() {
               },
             }}
             feedback={similarityFeedback || []}
+            historischeRapporten={historischeRapporten || []}
             onUpdateInstellingen={setSimilarityInstellingen}
+            onSeedRapporten={(nieuweRapporten) =>
+              setHistorischeRapporten((current) => [...(current || []), ...nieuweRapporten])
+            }
           />
         )}
       </main>

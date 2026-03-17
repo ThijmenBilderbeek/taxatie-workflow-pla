@@ -5,7 +5,7 @@ import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { Separator } from './ui/separator'
 import { Badge } from './ui/badge'
-import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download } from '@phosphor-icons/react'
+import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download, CheckCircle } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant } from '@/types'
 import { formatForFlux, createFluxReport } from '@/lib/fluxFormatter'
@@ -68,9 +68,9 @@ const ALLE_SECTIES: SectieDefinitie[] = [
   { key: 'ondertekening', titel: 'Ondertekening' },
 ]
 
-export function RapportView() {
+export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
   const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
-  const [historischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
+  const [historischeRapporten, setHistorischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
   const [similarityFeedback, setSimilarityFeedback] = useKV<SimilarityFeedback[]>('similarity-feedback', [])
 
   const activeDossier = (dossiers || []).find(
@@ -79,6 +79,7 @@ export function RapportView() {
 
   const [editingStates, setEditingStates] = useState<Record<string, string>>({})
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isAfronden, setIsAfronden] = useState(false)
 
   useEffect(() => {
     if (!activeDossier) return
@@ -281,6 +282,56 @@ export function RapportView() {
     toast.info('DOCX export komt in volgende versie')
   }
 
+  const kanAfronden =
+    !!activeDossier?.stap1 &&
+    !!activeDossier?.stap2 &&
+    !!activeDossier?.stap3 &&
+    !!activeDossier?.stap8
+
+  const handleAfrondenEnOpslaan = async () => {
+    if (!activeDossier || !kanAfronden) return
+    setIsAfronden(true)
+    try {
+      const rapportTeksten: Record<string, string> = {}
+      Object.entries(activeDossier.rapportSecties).forEach(([key, sectie]) => {
+        rapportTeksten[key] = sectie.inhoud
+      })
+
+      const historischRapport: HistorischRapport = {
+        id: `hr-${crypto.randomUUID()}`,
+        adres: {
+          straat: activeDossier.stap2!.straatnaam,
+          huisnummer: activeDossier.stap2!.huisnummer,
+          postcode: activeDossier.stap2!.postcode,
+          plaats: activeDossier.stap2!.plaats,
+        },
+        coordinaten: activeDossier.stap2!.coordinaten,
+        typeObject: activeDossier.stap1!.typeObject,
+        gebruiksdoel: activeDossier.stap1!.gebruiksdoel,
+        gbo: activeDossier.stap3!.gbo,
+        marktwaarde: activeDossier.stap8!.marktwaarde,
+        bar: activeDossier.stap8!.bar,
+        nar: activeDossier.stap8!.nar,
+        waardepeildatum: activeDossier.stap1!.waardepeildatum,
+        rapportTeksten,
+        wizardData: activeDossier,
+      }
+
+      setHistorischeRapporten((current) => [...(current || []), historischRapport])
+      setDossiers((current) =>
+        (current || []).map((d) =>
+          d.id === activeDossier.id
+            ? { ...d, status: 'afgerond', updatedAt: new Date().toISOString() }
+            : d
+        )
+      )
+      toast.success('Dossier afgerond en opgeslagen in kennisbank')
+      onAfgerond?.()
+    } finally {
+      setIsAfronden(false)
+    }
+  }
+
   const getReferentieInfo = (referentieId?: string) => {
     if (!referentieId) return null
     const rapport = (historischeRapporten || []).find(r => r.id === referentieId)
@@ -317,6 +368,21 @@ export function RapportView() {
             <Copy className="mr-2" />
             Kopieer volledig rapport voor Flux
           </Button>
+          {activeDossier.status === 'afgerond' ? (
+            <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1 text-sm">
+              <CheckCircle className="h-4 w-4" />
+              Opgeslagen in kennisbank
+            </Badge>
+          ) : (
+            <Button
+              variant="default"
+              onClick={handleAfrondenEnOpslaan}
+              disabled={!kanAfronden || isAfronden}
+            >
+              <CheckCircle className="mr-2" />
+              {isAfronden ? 'Bezig...' : 'Dossier afronden & opslaan in kennisbank'}
+            </Button>
+          )}
         </div>
       </div>
 

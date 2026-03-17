@@ -620,6 +620,75 @@ function Stap1({ data, onChange }: { data: Partial<AlgemeneGegevens>; onChange: 
 }
 
 function Stap2({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<AdresLocatie>; onChange: (data: Partial<AdresLocatie>) => void } & SuggestieProps) {
+  const [pdokSuggesties, setPdokSuggesties] = useState<Array<{ id: string; weergavenaam: string }>>([])
+  const [toonSuggesties, setToonSuggesties] = useState(false)
+  const [isLaden, setIsLaden] = useState(false)
+
+  useEffect(() => {
+    const zoekterm = data.straatnaam || ''
+    if (zoekterm.length < 3) {
+      setPdokSuggesties([])
+      setToonSuggesties(false)
+      return
+    }
+    const q = data.huisnummer ? `${zoekterm} ${data.huisnummer}` : zoekterm
+    const timer = setTimeout(async () => {
+      setIsLaden(true)
+      try {
+        const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest?q=${encodeURIComponent(q)}&rows=6&fq=type:adres`
+        const resp = await fetch(url)
+        const json = await resp.json()
+        const docs: Array<{ id: string; weergavenaam: string }> = json?.response?.docs ?? []
+        setPdokSuggesties(docs)
+        setToonSuggesties(docs.length > 0)
+      } catch {
+        setPdokSuggesties([])
+        setToonSuggesties(false)
+      } finally {
+        setIsLaden(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [data.straatnaam, data.huisnummer])
+
+  const DROPDOWN_CLOSE_DELAY = 200
+
+  const selecteerPdokSuggestie = async (id: string) => {
+    setToonSuggesties(false)
+    try {
+      const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`
+      const resp = await fetch(url)
+      const json = await resp.json()
+      const doc = json?.response?.docs?.[0]
+      if (!doc) return
+      let lat = data.coordinaten?.lat
+      let lng = data.coordinaten?.lng
+      if (doc.centroide_ll) {
+        const match = doc.centroide_ll.match(/POINT\(([+-]?[0-9.eE-]+)\s+([+-]?[0-9.eE-]+)\)/)
+        if (match) {
+          lng = parseFloat(match[1])
+          lat = parseFloat(match[2])
+        }
+      }
+      onChange({
+        ...data,
+        straatnaam: doc.straatnaam || data.straatnaam || '',
+        huisnummer: doc.huis_nlt || data.huisnummer || '',
+        postcode: doc.postcode || data.postcode || '',
+        plaats: doc.woonplaatsnaam || data.plaats || '',
+        gemeente: doc.gemeentenaam || data.gemeente || '',
+        provincie: doc.provincienaam || data.provincie || '',
+        ...(lat !== undefined && lng !== undefined ? { coordinaten: { lat, lng } } : {}),
+      })
+    } catch {
+      // silently ignore lookup errors
+    }
+  }
+
+  const handleStraatnaamBlur = () => {
+    setTimeout(() => setToonSuggesties(false), DROPDOWN_CLOSE_DELAY)
+  }
+
   const renderSuggestie = (veldNaam: string) => {
     if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     if (dismissedSuggesties?.has(veldNaam)) return null
@@ -640,11 +709,36 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 grid gap-2">
           <Label htmlFor="straatnaam">Straatnaam *</Label>
-          <Input
-            id="straatnaam"
-            value={data.straatnaam || ''}
-            onChange={(e) => onChange({ ...data, straatnaam: e.target.value })}
-          />
+          <div className="relative">
+            <Input
+              id="straatnaam"
+              value={data.straatnaam || ''}
+              onChange={(e) => onChange({ ...data, straatnaam: e.target.value })}
+              onBlur={handleStraatnaamBlur}
+              autoComplete="off"
+            />
+            {toonSuggesties && (
+              <Card className="absolute z-50 w-full mt-1 shadow-lg">
+                <CardContent className="p-1">
+                  {isLaden ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">Zoeken…</div>
+                  ) : (
+                    pdokSuggesties.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm rounded hover:bg-accent hover:text-accent-foreground transition-colors"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selecteerPdokSuggestie(s.id)}
+                      >
+                        {s.weergavenaam}
+                      </button>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="huisnummer">Huisnummer *</Label>

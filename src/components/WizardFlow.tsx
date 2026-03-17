@@ -29,7 +29,7 @@ import { getSuggestiesVoorStap, type VeldSuggestie } from '@/lib/suggestions'
 import { generateAlleSecties } from '@/lib/templates'
 import { formatBedrag, formatOppervlakte, formatDatum } from '@/lib/fluxFormatter'
 
-export function WizardFlow() {
+export function WizardFlow({ activeDossierId }: { activeDossierId: string }) {
   const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
   const [historischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
   const [similarityInstellingen] = useKV<SimilarityInstellingen>('similarity-instellingen', {
@@ -42,7 +42,7 @@ export function WizardFlow() {
     },
   })
 
-  const activeDossier = (dossiers || []).find(d => d.status === 'concept')
+  const activeDossier = (dossiers || []).find(d => d.id === activeDossierId)
   const [currentStep, setCurrentStep] = useState(activeDossier?.huidigeStap || 1)
 
   const [stap1, setStap1] = useState<Partial<AlgemeneGegevens>>(activeDossier?.stap1 || {})
@@ -71,7 +71,7 @@ export function WizardFlow() {
       if (activeDossier.stap9) setStap9(activeDossier.stap9)
       if (activeDossier.geselecteerdeReferenties) setSelectedReferenties(activeDossier.geselecteerdeReferenties)
     }
-  }, [activeDossier])
+  }, [activeDossier?.id])
 
   const saveAndNavigateTo = (targetStep: number) => {
     if (!activeDossier) return

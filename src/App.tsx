@@ -39,6 +39,7 @@ function App() {
   const [showNieuwDossierDialog, setShowNieuwDossierDialog] = useState(false)
   const [nieuwDossiernummer, setNieuwDossiernummer] = useState('')
   const [dossiernummerFout, setDossiernummerFout] = useState(false)
+  const [wizardShouldSaveAndNavigate, setWizardShouldSaveAndNavigate] = useState(false)
 
   const activeDossier = activeDossierId
     ? (dossiers || []).find((d) => d.id === activeDossierId)
@@ -109,12 +110,30 @@ function App() {
     }
   }
 
+  const handleLogoClick = () => {
+    if (currentView === 'wizard') {
+      setWizardShouldSaveAndNavigate(true)
+    } else {
+      setCurrentView('dashboard')
+    }
+  }
+
+  const handleWizardSavedAndNavigated = () => {
+    setWizardShouldSaveAndNavigate(false)
+    setCurrentView('dashboard')
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div>
+            <div
+              className="cursor-pointer select-none hover:opacity-80 transition-opacity"
+              onClick={handleLogoClick}
+              role="button"
+              aria-label="Naar dashboard"
+            >
               <h1 className="text-2xl font-semibold text-foreground">
                 Taxatieplatform
               </h1>
@@ -153,7 +172,11 @@ function App() {
         )}
 
         {currentView === 'wizard' && activeDossier && activeDossierId && (
-          <WizardFlow activeDossierId={activeDossierId} />
+          <WizardFlow
+            activeDossierId={activeDossierId}
+            shouldSaveAndNavigateToDashboard={wizardShouldSaveAndNavigate}
+            onSavedAndNavigated={handleWizardSavedAndNavigated}
+          />
         )}
 
         {currentView === 'rapport' && activeDossier && (

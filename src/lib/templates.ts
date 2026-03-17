@@ -302,19 +302,99 @@ Deze waardering is tot stand gekomen conform de Richtlijnen Vastgoedtaxaties (RV
   return replacePlaceholders(template, dossier)
 }
 
+export function generateVoorblad(dossier: Dossier): string {
+  const template = `TAXATIERAPPORT
+
+Dossiernummer: {{dossiernummer}}
+
+{{objectnaam}}
+{{adres}}
+{{postcode}} {{plaats}}
+
+Opdrachtgever: {{opdrachtgever_naam}}
+{{opdrachtgever_bedrijf}}
+
+Taxateur: {{taxateur}}
+
+Waardepeildatum: {{waardepeildatum}}
+Inspectiedatum: {{inspectiedatum}}`
+
+  return replacePlaceholders(template, dossier)
+}
+
+export function generateMarktanalyse(dossier: Dossier): string {
+  if (!dossier.stap2) return ''
+
+  const template = `De vastgoedmarkt in {{plaats}} kenmerkt zich door een gevarieerd aanbod van {{type_object}}en. De ligging van het object in een {{ligging}} draagt bij aan de waardevorming.
+
+Op basis van de beschikbare markten transactiegegevens en de huidige marktsituatie, is een analyse uitgevoerd van vergelijkbare objecten in de omgeving.`
+
+  return replacePlaceholders(template, dossier)
+}
+
+export function generateGebruikteReferenties(dossier: Dossier, historischeRapporten: HistorischRapport[]): string {
+  if (dossier.geselecteerdeReferenties.length === 0) {
+    return 'Voor deze taxatie zijn geen referentierapporten uit de kennisbank gebruikt.'
+  }
+
+  let text = 'Voor deze taxatie zijn de volgende referentierapporten uit onze kennisbank geraadpleegd:\n\n'
+
+  dossier.geselecteerdeReferenties.forEach((refId, index) => {
+    const rapport = historischeRapporten.find(r => r.id === refId)
+    if (!rapport) return
+
+    const similarityResult = dossier.similarityResults.find(r => r.rapportId === refId)
+
+    text += `Referentie ${index + 1}:\n`
+    text += `- Adres: ${rapport.adres.straat} ${rapport.adres.huisnummer}, ${rapport.adres.plaats}\n`
+    text += `- Type object: ${rapport.typeObject}\n`
+    text += `- GBO: ${formatOppervlakte(rapport.gbo)}\n`
+    text += `- Marktwaarde: ${formatBedrag(rapport.marktwaarde)}\n`
+    text += `- Waardepeildatum: ${formatDatum(rapport.waardepeildatum)}\n`
+    
+    if (similarityResult) {
+      text += `- Vergelijkbaarheidsscore: ${similarityResult.totaalScore}/100 (${similarityResult.classificatie})\n`
+      text += `- Afstand tot object: ${similarityResult.afstandKm} km\n`
+    }
+    
+    text += '\n'
+  })
+
+  return text
+}
+
+export function generateOndertekening(dossier: Dossier): string {
+  const template = `Dit rapport is opgesteld conform de Richtlijnen Vastgoedtaxaties (RVT) en de toepasselijke wet- en regelgeving.
+
+De taxatie is uitgevoerd door een gecertificeerd taxateur en gebaseerd op de ten tijde van de inspectie aangetroffen situatie en de verstrekte informatie.
+
+
+{{plaats}}, {{inspectiedatum}}
+
+
+{{taxateur}}
+Gecertificeerd Taxateur`
+
+  return replacePlaceholders(template, dossier)
+}
+
 export function generateAlleSecties(dossier: Dossier, historischeRapporten: HistorischRapport[]): Record<string, string> {
   return {
-    '1-opdracht': generateOpdracht(dossier),
-    '2-objectomschrijving': generateObjectomschrijving(dossier),
-    '3-ligging': generateLiggingEnBereikbaarheid(dossier),
-    '4-kadaster': generateKadasterEnEigendom(dossier),
-    '5-oppervlakten': generateOppervlakten(dossier),
-    '6-technisch': generateTechnischeStaat(dossier),
-    '7-huur': generateHuurgegevens(dossier),
-    '8-vergunningen': generateVergunningenEnMilieu(dossier),
-    '9-vergelijkingen': generateVergelijkingsobjecten(dossier, historischeRapporten),
-    '10-waardering': generateWaardering(dossier, historischeRapporten),
-    '11-aannames': generateAannames(dossier),
-    '12-conclusie': generateConclusie(dossier),
+    '01-voorblad': generateVoorblad(dossier),
+    '02-opdracht': generateOpdracht(dossier),
+    '03-objectomschrijving': generateObjectomschrijving(dossier),
+    '04-ligging': generateLiggingEnBereikbaarheid(dossier),
+    '05-kadaster': generateKadasterEnEigendom(dossier),
+    '06-oppervlakten': generateOppervlakten(dossier),
+    '07-technisch': generateTechnischeStaat(dossier),
+    '08-huur': generateHuurgegevens(dossier),
+    '09-vergunningen': generateVergunningenEnMilieu(dossier),
+    '10-marktanalyse': generateMarktanalyse(dossier),
+    '11-vergelijkingen': generateVergelijkingsobjecten(dossier, historischeRapporten),
+    '12-waardering': generateWaardering(dossier, historischeRapporten),
+    '13-aannames': generateAannames(dossier),
+    '14-conclusie': generateConclusie(dossier),
+    '15-referenties': generateGebruikteReferenties(dossier, historischeRapporten),
+    '16-ondertekening': generateOndertekening(dossier),
   }
 }

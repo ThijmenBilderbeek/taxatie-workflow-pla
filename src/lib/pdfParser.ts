@@ -1,10 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import type { HistorischRapport, ObjectType, Gebruiksdoel } from '../types'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
-  import.meta.url
-).href
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
 async function extractTextFromPdf(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer()

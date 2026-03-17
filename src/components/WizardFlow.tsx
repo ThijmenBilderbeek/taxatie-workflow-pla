@@ -351,7 +351,7 @@ export function WizardFlow({
 
   const suggestiesHuidigeStap = getSuggestiesVoorStap(
     currentStep,
-    { stap1, stap2, stap3, stap4, stap5, stap6, stap7, stap8, stap9 },
+    { stap1, stap2, stap3, stap4, stap5, stap6, stap7, stap8, stap9 } as Partial<Dossier>,
     historischeRapporten || [],
     similarityInstellingen
   )

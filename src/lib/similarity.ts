@@ -46,8 +46,9 @@ function scoreTypeObject(type1: ObjectType, type2: ObjectType): number {
   if (type1 === type2) return 100
 
   const verwanteTypes: Record<ObjectType, ObjectType[]> = {
-    kantoor: ['bedrijfshal'],
-    bedrijfshal: ['kantoor'],
+    kantoor: ['bedrijfscomplex', 'bedrijfshal'],
+    bedrijfscomplex: ['kantoor', 'bedrijfshal'],
+    bedrijfshal: ['kantoor', 'bedrijfscomplex'],
     woning: ['appartement'],
     appartement: ['woning'],
     winkel: [],

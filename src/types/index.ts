@@ -1,8 +1,10 @@
 export type DossierStatus = 'concept' | 'in_behandeling' | 'afgerond'
 
-export type ObjectType = 'woning' | 'appartement' | 'kantoor' | 'bedrijfshal' | 'winkel' | 'overig'
+export type ObjectType = 'kantoor' | 'bedrijfscomplex' | 'bedrijfshal' | 'winkel' | 'woning' | 'appartement' | 'overig'
 
-export type Gebruiksdoel = 'eigen_gebruik' | 'verhuur' | 'belegging' | 'overig'
+export type Gebruiksdoel = 'eigenaar_gebruiker' | 'verhuurd_belegging' | 'leegstand' | 'overig'
+
+export type RapportVariant = 'eigenaar_gebruiker_kantoor' | 'eigenaar_gebruiker_bedrijfscomplex' | 'verhuurd_belegging'
 
 export type Ligging = 'binnenstad' | 'woonwijk' | 'bedrijventerrein' | 'buitengebied' | 'gemengd'
 

@@ -393,11 +393,12 @@ function Stap1({ data, onChange }: { data: Partial<AlgemeneGegevens>; onChange: 
               <SelectValue placeholder="Selecteer type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="woning">Woning</SelectItem>
-              <SelectItem value="appartement">Appartement</SelectItem>
               <SelectItem value="kantoor">Kantoor</SelectItem>
+              <SelectItem value="bedrijfscomplex">Bedrijfscomplex</SelectItem>
               <SelectItem value="bedrijfshal">Bedrijfshal</SelectItem>
               <SelectItem value="winkel">Winkel</SelectItem>
+              <SelectItem value="woning">Woning</SelectItem>
+              <SelectItem value="appartement">Appartement</SelectItem>
               <SelectItem value="overig">Overig</SelectItem>
             </SelectContent>
           </Select>
@@ -413,9 +414,9 @@ function Stap1({ data, onChange }: { data: Partial<AlgemeneGegevens>; onChange: 
               <SelectValue placeholder="Selecteer doel" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="eigen_gebruik">Eigen gebruik</SelectItem>
-              <SelectItem value="verhuur">Verhuur</SelectItem>
-              <SelectItem value="belegging">Belegging</SelectItem>
+              <SelectItem value="eigenaar_gebruiker">Eigenaar gebruiker</SelectItem>
+              <SelectItem value="verhuurd_belegging">Verhuurd / Belegging</SelectItem>
+              <SelectItem value="leegstand">Leegstand</SelectItem>
               <SelectItem value="overig">Overig</SelectItem>
             </SelectContent>
           </Select>

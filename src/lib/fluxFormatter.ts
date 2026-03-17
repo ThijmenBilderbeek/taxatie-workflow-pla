@@ -59,6 +59,10 @@ export function formatOppervlakte(oppervlakte: number): string {
   return `${oppervlakte.toLocaleString('nl-NL')} m²`
 }
 
+export function formatPercentage(percentage: number): string {
+  return `${percentage.toFixed(2).replace('.', ',')} %`
+}
+
 export function createFluxReport(dossier: Dossier): string {
   const secties = Object.values(dossier.rapportSecties)
     .map((sectie, index) => {

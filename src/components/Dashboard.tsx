@@ -1,7 +1,17 @@
+import { useState } from 'react'
 import { FileText, Plus, Building, TrendingUp, Filter } from 'lucide-react'
+import { Trash } from '@phosphor-icons/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog'
 import type { Dossier, HistorischRapport } from '../types'
 import { formatDatum, formatBedrag } from '../lib/fluxFormatter'
 
@@ -18,7 +28,11 @@ export function Dashboard({
   historischeRapporten,
   onCreateDossier,
   onOpenDossier,
+  onDeleteDossier,
 }: DashboardProps) {
+  const [teVerwijderenId, setTeVerwijderenId] = useState<string | null>(null)
+  const teVerwijderenDossier = dossiers.find((d) => d.id === teVerwijderenId)
+
   const getStatusBadge = (status: Dossier['status']) => {
     const variants = {
       concept: 'bg-muted text-muted-foreground',
@@ -165,6 +179,20 @@ export function Dashboard({
                     <div className="text-xs text-muted-foreground pt-2 border-t">
                       Bijgewerkt: {formatDatum(dossier.updatedAt)}
                     </div>
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setTeVerwijderenId(dossier.id)
+                        }}
+                      >
+                        <Trash className="h-4 w-4" />
+                        Verwijderen
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -172,6 +200,38 @@ export function Dashboard({
           </div>
         )}
       </div>
+
+      <Dialog
+        open={teVerwijderenId !== null}
+        onOpenChange={(open) => !open && setTeVerwijderenId(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Dossier verwijderen?</DialogTitle>
+            <DialogDescription>
+              Weet je zeker dat je dossier{' '}
+              <strong>{teVerwijderenDossier?.dossiernummer}</strong> wilt verwijderen?
+              Dit kan niet ongedaan worden gemaakt.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTeVerwijderenId(null)}>
+              Annuleren
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (teVerwijderenId) {
+                  onDeleteDossier(teVerwijderenId)
+                }
+                setTeVerwijderenId(null)
+              }}
+            >
+              Verwijderen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

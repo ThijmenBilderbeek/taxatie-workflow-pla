@@ -62,7 +62,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       coordinaten: { lat: 0, lng: 0 },
       typeObject: (preview.typeObject ?? 'overig') as ObjectType,
       gebruiksdoel: (preview.gebruiksdoel ?? 'overig') as Gebruiksdoel,
-      gbo: preview.gbo ?? 0,
+      bvo: preview.bvo ?? 0,
       marktwaarde: preview.marktwaarde ?? 0,
       bar: preview.bar,
       nar: preview.nar,
@@ -308,12 +308,12 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="prev-gbo">GBO (m²)</Label>
+                    <Label htmlFor="prev-bvo">BVO (m²)</Label>
                     <Input
-                      id="prev-gbo"
+                      id="prev-bvo"
                       type="number"
-                      value={preview.gbo ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, gbo: parseFloat(e.target.value) || 0 }))}
+                      value={preview.bvo ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, bvo: parseFloat(e.target.value) || 0 }))}
                     />
                   </div>
                   <div className="space-y-2">
@@ -552,7 +552,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                     <TableHead>Adres</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Gebruiksdoel</TableHead>
-                    <TableHead className="text-right">GBO (m²)</TableHead>
+                    <TableHead className="text-right">BVO (m²)</TableHead>
                     <TableHead className="text-right">Marktwaarde</TableHead>
                     <TableHead className="text-right">BAR</TableHead>
                     <TableHead className="text-right">NAR</TableHead>
@@ -597,7 +597,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {rapport.gbo.toLocaleString('nl-NL')}
+                        {rapport.bvo.toLocaleString('nl-NL')}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatBedrag(rapport.marktwaarde)}

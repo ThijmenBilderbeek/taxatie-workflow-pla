@@ -118,10 +118,10 @@ export function getSuggestiesVoorStap(
     if (gefilterd.length > 0) kandidaten = gefilterd
   }
 
-  // Sort candidates by similarity score when coordinates + GBO are available
+  // Sort candidates by similarity score when coordinates + BVO are available
   const kanSimilarityBerekenen =
     huidigeDossier.stap2?.coordinaten &&
-    huidigeDossier.stap3?.gbo &&
+    huidigeDossier.stap3?.bvo &&
     huidigeDossier.stap1
 
   type Kandidaat = { rapport: HistorischRapport; score: number | null }

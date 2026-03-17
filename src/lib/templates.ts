@@ -52,7 +52,6 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
   }
 
   if (dossier.stap3) {
-    result = result.replace(/{{gbo}}/g, dossier.stap3.gbo ? formatOppervlakte(dossier.stap3.gbo) : '')
     result = result.replace(/{{bvo}}/g, dossier.stap3.bvo ? formatOppervlakte(dossier.stap3.bvo) : '')
     result = result.replace(/{{vvo}}/g, dossier.stap3.vvo ? formatOppervlakte(dossier.stap3.vvo) : '')
     result = result.replace(/{{perceeloppervlak}}/g, dossier.stap3.perceeloppervlak ? formatOppervlakte(dossier.stap3.perceeloppervlak) : '')
@@ -504,7 +503,6 @@ Het object heeft de volgende oppervlakten:
 
 Bruto vloeroppervlak (BVO): {{bvo}}
 Verhuurbaar vloeroppervlak (VVO): {{vvo}}
-Gebruiksoppervlak (GBO): {{gbo}}
 
 Meetinstructie: [meettype]
 Verhouding VVO/BVO: [percentage]%`
@@ -644,7 +642,7 @@ Voor het bepalen van de markthuur zijn de volgende referenties geraadpleegd:`
       text += `\nReferentie ${index + 1}:\n`
       text += `- Adres: ${rapport.adres.straat} ${rapport.adres.huisnummer}, ${rapport.adres.plaats}\n`
       text += `- Type: ${rapport.typeObject}\n`
-      text += `- GBO: ${formatOppervlakte(rapport.gbo)}\n`
+      text += `- BVO: ${formatOppervlakte(rapport.bvo)}\n`
       text += `- Bouwjaar: [bouwjaar]\n`
       text += `- Datum: ${formatDatum(rapport.waardepeildatum)}\n`
     })
@@ -673,7 +671,7 @@ Voor het bepalen van de marktwaarde en de gehanteerde rendementen zijn de volgen
       text += `- Adres: ${rapport.adres.straat} ${rapport.adres.huisnummer}, ${rapport.adres.plaats}\n`
       text += `- Type: ${rapport.typeObject}\n`
       text += `- Bouwjaar: [bouwjaar]\n`
-      text += `- Totaal m²: ${formatOppervlakte(rapport.gbo)}\n`
+      text += `- BVO: ${formatOppervlakte(rapport.bvo)}\n`
       text += `- Parkeerplaatsen: [aantal]\n`
       text += `- Bron: [bron]\n`
       text += `- Koopsom k.k.: ${formatBedrag(rapport.marktwaarde)}\n`
@@ -787,11 +785,7 @@ Het totale vloeroppervlak van alle bouwlagen.
 
 VVO (VERHUURBAAR VLOEROPPERVLAK)
 
-Het vloeroppervlak dat direct of indirect voor verhuur beschikbaar is.
-
-GBO (GEBRUIKSOPPERVLAK)
-
-Het gebruiksoppervlak volgens NEN-meetinstructie.`
+Het vloeroppervlak dat direct of indirect voor verhuur beschikbaar is.`
 }
 
 export function generateL_Bijlagen(dossier: Dossier): string {

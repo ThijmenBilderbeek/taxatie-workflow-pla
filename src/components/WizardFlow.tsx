@@ -155,7 +155,7 @@ export function WizardFlow({
         }
         return true
       case 3:
-        if (!stap3.gbo || !stap3.bouwjaar) {
+        if (!stap3.bvo || !stap3.bouwjaar) {
           toast.error('Vul alle verplichte velden in')
           return false
         }
@@ -295,7 +295,7 @@ export function WizardFlow({
 
   const progress = (currentStep / 10) * 100
 
-  const similarityResults = activeDossier && stap2.coordinaten && stap3.gbo && stap1.typeObject
+  const similarityResults = activeDossier && stap2.coordinaten && stap3.bvo && stap1.typeObject
     ? (historischeRapporten || []).map(rapport => {
         const tempDossier: Dossier = {
           ...activeDossier,
@@ -905,16 +905,7 @@ function Stap3({ data, onChange }: { data: Partial<Oppervlaktes>; onChange: (dat
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="gbo">GBO (m²) *</Label>
-          <Input
-            id="gbo"
-            type="number"
-            value={data.gbo || ''}
-            onChange={(e) => onChange({ ...data, gbo: Number(e.target.value) })}
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="bvo">BVO (m²)</Label>
+          <Label htmlFor="bvo">BVO (m²) *</Label>
           <Input
             id="bvo"
             type="number"
@@ -1682,8 +1673,8 @@ function Stap10({
                           {result.afstandKm.toFixed(1)} km
                         </div>
                         <div>
-                          <span className="text-muted-foreground">GBO:</span>{' '}
-                          {formatOppervlakte(rapport.gbo)}
+                          <span className="text-muted-foreground">BVO:</span>{' '}
+                          {formatOppervlakte(rapport.bvo)}
                         </div>
                         <div>
                           <span className="text-muted-foreground">Marktwaarde:</span>{' '}

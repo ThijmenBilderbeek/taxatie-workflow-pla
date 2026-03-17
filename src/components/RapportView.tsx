@@ -308,7 +308,7 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
         coordinaten: activeDossier.stap2!.coordinaten,
         typeObject: activeDossier.stap1!.typeObject,
         gebruiksdoel: activeDossier.stap1!.gebruiksdoel,
-        gbo: activeDossier.stap3!.gbo,
+        bvo: activeDossier.stap3!.bvo,
         marktwaarde: activeDossier.stap8!.marktwaarde,
         bar: activeDossier.stap8!.bar,
         nar: activeDossier.stap8!.nar,
@@ -508,7 +508,7 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
                         {rapport.adres.straat} {rapport.adres.huisnummer}, {rapport.adres.plaats}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {rapport.typeObject} • GBO: {rapport.gbo} m²
+                        {rapport.typeObject} • BVO: {rapport.bvo} m²
                       </p>
                     </div>
                     {similarityResult && (

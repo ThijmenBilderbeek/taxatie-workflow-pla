@@ -186,7 +186,12 @@ function App() {
         )}
 
         {currentView === 'kennisbank' && (
-          <Kennisbank historischeRapporten={historischeRapporten || []} />
+          <Kennisbank
+            historischeRapporten={historischeRapporten || []}
+            onAddRapport={(rapport) =>
+              setHistorischeRapporten((current) => [...(current || []), rapport])
+            }
+          />
         )}
 
         {currentView === 'instellingen' && (

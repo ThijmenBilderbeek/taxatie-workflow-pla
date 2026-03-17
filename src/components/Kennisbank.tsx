@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import type { HistorischRapport } from '../types'
+import { useState, useMemo, useRef } from 'react'
+import type { HistorischRapport, ObjectType, Gebruiksdoel } from '../types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -7,16 +7,73 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
-import { MagnifyingGlass, MapPin, Buildings, Calendar, CurrencyCircleDollar, ChartBar } from '@phosphor-icons/react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
+import { MagnifyingGlass, MapPin, Buildings, Calendar, CurrencyCircleDollar, ChartBar, Upload } from '@phosphor-icons/react'
+import { toast } from 'sonner'
+import { parsePdfToRapport } from '../lib/pdfParser'
 
 interface KennisbankProps {
   historischeRapporten: HistorischRapport[]
+  onAddRapport: (rapport: HistorischRapport) => void
 }
 
-export function Kennisbank({ historischeRapporten }: KennisbankProps) {
+export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankProps) {
   const [zoekterm, setZoekterm] = useState('')
   const [filterType, setFilterType] = useState<string>('alle')
   const [filterGebruiksdoel, setFilterGebruiksdoel] = useState<string>('alle')
+
+  // PDF upload dialog state
+  const [showUploadDialog, setShowUploadDialog] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [preview, setPreview] = useState<Partial<HistorischRapport> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsLoading(true)
+    try {
+      const parsed = await parsePdfToRapport(file)
+      setPreview(parsed)
+    } catch {
+      toast.error('Kon de PDF niet uitlezen. Probeer een ander bestand.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSaveRapport = () => {
+    if (!preview) return
+    const rapport: HistorischRapport = {
+      id: `rapport-${Date.now()}`,
+      adres: {
+        straat: preview.adres?.straat ?? '',
+        huisnummer: preview.adres?.huisnummer ?? '',
+        postcode: preview.adres?.postcode ?? '',
+        plaats: preview.adres?.plaats ?? '',
+      },
+      coordinaten: { lat: 0, lng: 0 },
+      typeObject: (preview.typeObject ?? 'overig') as ObjectType,
+      gebruiksdoel: (preview.gebruiksdoel ?? 'overig') as Gebruiksdoel,
+      gbo: preview.gbo ?? 0,
+      marktwaarde: preview.marktwaarde ?? 0,
+      bar: preview.bar,
+      nar: preview.nar,
+      waardepeildatum: preview.waardepeildatum ?? new Date().toISOString().slice(0, 10),
+      rapportTeksten: preview.rapportTeksten ?? {},
+      wizardData: {},
+    }
+    onAddRapport(rapport)
+    toast.success('Rapport toegevoegd aan kennisbank')
+    handleCloseDialog()
+  }
+
+  const handleCloseDialog = () => {
+    setShowUploadDialog(false)
+    setPreview(null)
+    setIsLoading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const stats = useMemo(() => {
     const totaal = historischeRapporten.length
@@ -73,12 +130,191 @@ export function Kennisbank({ historischeRapporten }: KennisbankProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold text-foreground mb-2">Kennisbank</h1>
-        <p className="text-muted-foreground">
-          Overzicht van alle historische rapporten beschikbaar voor de similarity engine
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold text-foreground mb-2">Kennisbank</h1>
+          <p className="text-muted-foreground">
+            Overzicht van alle historische rapporten beschikbaar voor de similarity engine
+          </p>
+        </div>
+        <Button onClick={() => setShowUploadDialog(true)} className="flex items-center gap-2">
+          <Upload className="h-4 w-4" />
+          PDF uploaden
+        </Button>
       </div>
+
+      <Dialog open={showUploadDialog} onOpenChange={(open) => { if (!open) handleCloseDialog() }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Taxatierapport uploaden als PDF</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {!preview && (
+              <div className="space-y-2">
+                <Label htmlFor="pdf-upload">PDF-bestand selecteren</Label>
+                <input
+                  ref={fileInputRef}
+                  id="pdf-upload"
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileChange}
+                  className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                />
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <span>PDF wordt verwerkt...</span>
+              </div>
+            )}
+
+            {preview && !isLoading && (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Controleer en pas de geëxtraheerde gegevens aan voor het opslaan.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-straat">Straatnaam</Label>
+                    <Input
+                      id="prev-straat"
+                      value={preview.adres?.straat ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, straat: e.target.value } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-huisnummer">Huisnummer</Label>
+                    <Input
+                      id="prev-huisnummer"
+                      value={preview.adres?.huisnummer ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, huisnummer: e.target.value } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-postcode">Postcode</Label>
+                    <Input
+                      id="prev-postcode"
+                      value={preview.adres?.postcode ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, postcode: e.target.value } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-plaats">Plaats</Label>
+                    <Input
+                      id="prev-plaats"
+                      value={preview.adres?.plaats ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, plaats: e.target.value } }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-type">Type object</Label>
+                    <Select
+                      value={preview.typeObject ?? 'overig'}
+                      onValueChange={(v) => setPreview((p) => ({ ...p, typeObject: v as ObjectType }))}
+                    >
+                      <SelectTrigger id="prev-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="kantoor">Kantoor</SelectItem>
+                        <SelectItem value="bedrijfscomplex">Bedrijfscomplex</SelectItem>
+                        <SelectItem value="bedrijfshal">Bedrijfshal</SelectItem>
+                        <SelectItem value="winkel">Winkel</SelectItem>
+                        <SelectItem value="woning">Woning</SelectItem>
+                        <SelectItem value="appartement">Appartement</SelectItem>
+                        <SelectItem value="overig">Overig</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-gebruiksdoel">Gebruiksdoel</Label>
+                    <Select
+                      value={preview.gebruiksdoel ?? 'overig'}
+                      onValueChange={(v) => setPreview((p) => ({ ...p, gebruiksdoel: v as Gebruiksdoel }))}
+                    >
+                      <SelectTrigger id="prev-gebruiksdoel">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="eigenaar_gebruiker">Eigenaar-gebruiker</SelectItem>
+                        <SelectItem value="verhuurd_belegging">Verhuurd / Belegging</SelectItem>
+                        <SelectItem value="leegstand">Leegstand</SelectItem>
+                        <SelectItem value="overig">Overig</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-gbo">GBO (m²)</Label>
+                    <Input
+                      id="prev-gbo"
+                      type="number"
+                      value={preview.gbo ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, gbo: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-marktwaarde">Marktwaarde (€)</Label>
+                    <Input
+                      id="prev-marktwaarde"
+                      type="number"
+                      value={preview.marktwaarde ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, marktwaarde: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-bar">BAR % (optioneel)</Label>
+                    <Input
+                      id="prev-bar"
+                      type="number"
+                      step="0.01"
+                      value={preview.bar ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, bar: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-nar">NAR % (optioneel)</Label>
+                    <Input
+                      id="prev-nar"
+                      type="number"
+                      step="0.01"
+                      value={preview.nar ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, nar: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="prev-peildatum">Waardepeildatum</Label>
+                  <Input
+                    id="prev-peildatum"
+                    type="date"
+                    value={preview.waardepeildatum ?? ''}
+                    onChange={(e) => setPreview((p) => ({ ...p, waardepeildatum: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseDialog}>
+              Annuleren
+            </Button>
+            {preview && !isLoading && (
+              <Button onClick={handleSaveRapport}>
+                Opslaan in kennisbank
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

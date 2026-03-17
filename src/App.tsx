@@ -104,6 +104,10 @@ function App() {
     }
   }
 
+  const handleDeleteHistorischRapport = (id: string) => {
+    setHistorischeRapporten((current) => (current || []).filter((r) => r.id !== id))
+  }
+
   const handleNavigate = (view: View, dossierId?: string) => {
     setCurrentView(view)
     if (dossierId) {
@@ -191,6 +195,7 @@ function App() {
             onAddRapport={(rapport) =>
               setHistorischeRapporten((current) => [...(current || []), rapport])
             }
+            onDeleteRapport={handleDeleteHistorischRapport}
           />
         )}
 

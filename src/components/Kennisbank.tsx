@@ -7,17 +7,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
-import { MagnifyingGlass, MapPin, Buildings, Calendar, CurrencyCircleDollar, ChartBar, Upload } from '@phosphor-icons/react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
+import { MagnifyingGlass, MapPin, Buildings, Calendar, CurrencyCircleDollar, ChartBar, Upload, Trash } from '@phosphor-icons/react'
+import { Checkbox } from './ui/checkbox'
 import { toast } from 'sonner'
 import { parsePdfToRapport } from '../lib/pdfParser'
 
 interface KennisbankProps {
   historischeRapporten: HistorischRapport[]
   onAddRapport: (rapport: HistorischRapport) => void
+  onDeleteRapport: (id: string) => void
 }
 
-export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankProps) {
+export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport }: KennisbankProps) {
   const [zoekterm, setZoekterm] = useState('')
   const [filterType, setFilterType] = useState<string>('alle')
   const [filterGebruiksdoel, setFilterGebruiksdoel] = useState<string>('alle')
@@ -27,6 +29,11 @@ export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankPro
   const [isLoading, setIsLoading] = useState(false)
   const [preview, setPreview] = useState<Partial<HistorischRapport> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Selectie-modus state
+  const [selectieModus, setSelectieModus] = useState(false)
+  const [geselecteerdeIds, setGeselecteerdeIds] = useState<Set<string>>(new Set())
+  const [showVerwijderDialog, setShowVerwijderDialog] = useState(false)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -73,6 +80,35 @@ export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankPro
     setPreview(null)
     setIsLoading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleToggleSelectieModus = () => {
+    setSelectieModus((prev) => !prev)
+    setGeselecteerdeIds(new Set())
+  }
+
+  const handleToggleSelectie = (id: string) => {
+    setGeselecteerdeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleBevestigVerwijderen = () => {
+    geselecteerdeIds.forEach((id) => onDeleteRapport(id))
+    toast.success(
+      geselecteerdeIds.size === 1
+        ? 'Rapport verwijderd uit kennisbank'
+        : `${geselecteerdeIds.size} rapporten verwijderd uit kennisbank`
+    )
+    setShowVerwijderDialog(false)
+    setGeselecteerdeIds(new Set())
+    setSelectieModus(false)
   }
 
   const stats = useMemo(() => {
@@ -137,10 +173,30 @@ export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankPro
             Overzicht van alle historische rapporten beschikbaar voor de similarity engine
           </p>
         </div>
-        <Button onClick={() => setShowUploadDialog(true)} className="flex items-center gap-2">
-          <Upload className="h-4 w-4" />
-          PDF uploaden
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={selectieModus ? 'default' : 'outline'}
+            onClick={handleToggleSelectieModus}
+            className="flex items-center gap-2"
+          >
+            <Trash className="h-4 w-4" />
+            {selectieModus ? 'Selectie annuleren' : 'Verwijderen'}
+          </Button>
+          {selectieModus && geselecteerdeIds.size > 0 && (
+            <Button
+              variant="destructive"
+              onClick={() => setShowVerwijderDialog(true)}
+              className="flex items-center gap-2"
+            >
+              <Trash className="h-4 w-4" />
+              Verwijder geselecteerde ({geselecteerdeIds.size})
+            </Button>
+          )}
+          <Button onClick={() => setShowUploadDialog(true)} className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            PDF uploaden
+          </Button>
+        </div>
       </div>
 
       <Dialog open={showUploadDialog} onOpenChange={(open) => { if (!open) handleCloseDialog() }}>
@@ -316,6 +372,34 @@ export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankPro
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showVerwijderDialog} onOpenChange={(open) => !open && setShowVerwijderDialog(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rapporten verwijderen?</DialogTitle>
+            <DialogDescription>
+              Weet je het zeker? Wil je{' '}
+              {geselecteerdeIds.size === 1
+                ? (() => {
+                    const rapport = historischeRapporten.find((r) => geselecteerdeIds.has(r.id))
+                    return rapport
+                      ? <strong>{rapport.adres.straat} {rapport.adres.huisnummer}, {rapport.adres.plaats}</strong>
+                      : 'dit rapport'
+                  })()
+                : <strong>{geselecteerdeIds.size} rapporten</strong>}{' '}
+              verwijderen? Dit kan niet ongedaan worden gemaakt.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVerwijderDialog(false)}>
+              Annuleren
+            </Button>
+            <Button variant="destructive" onClick={handleBevestigVerwijderen}>
+              Verwijderen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -464,6 +548,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankPro
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {selectieModus && <TableHead className="w-10"></TableHead>}
                     <TableHead>Adres</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Gebruiksdoel</TableHead>
@@ -476,7 +561,21 @@ export function Kennisbank({ historischeRapporten, onAddRapport }: KennisbankPro
                 </TableHeader>
                 <TableBody>
                   {gefilterdRapporten.map((rapport) => (
-                    <TableRow key={rapport.id}>
+                    <TableRow
+                      key={rapport.id}
+                      className={selectieModus ? 'cursor-pointer' : ''}
+                      onClick={selectieModus ? () => handleToggleSelectie(rapport.id) : undefined}
+                      data-selected={selectieModus && geselecteerdeIds.has(rapport.id)}
+                    >
+                      {selectieModus && (
+                        <TableCell>
+                          <Checkbox
+                            checked={geselecteerdeIds.has(rapport.id)}
+                            onCheckedChange={() => handleToggleSelectie(rapport.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="font-medium">
                           {rapport.adres.straat} {rapport.adres.huisnummer}

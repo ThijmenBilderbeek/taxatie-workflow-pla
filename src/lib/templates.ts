@@ -669,5 +669,3 @@ export function generateAlleSecties(dossier: Dossier, historischeRapporten: Hist
     'ondertekening': generateOndertekening(dossier),
   }
 }
-  }
-}

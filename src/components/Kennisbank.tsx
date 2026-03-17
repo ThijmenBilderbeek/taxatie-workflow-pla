@@ -597,13 +597,13 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {rapport.bvo.toLocaleString('nl-NL')}
+                        {rapport.bvo ? rapport.bvo.toLocaleString('nl-NL') : '-'}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatBedrag(rapport.marktwaarde)}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {rapport.bar
+                        {rapport.bar !== undefined && rapport.bar !== null
                           ? `${rapport.bar.toLocaleString('nl-NL', {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
@@ -611,7 +611,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                           : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {rapport.nar
+                        {rapport.nar !== undefined && rapport.nar !== null
                           ? `${rapport.nar.toLocaleString('nl-NL', {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,

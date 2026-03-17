@@ -71,7 +71,7 @@ export function WizardFlow() {
     }
   }, [activeDossier])
 
-  const saveCurrentStep = () => {
+  const saveAndNavigateTo = (targetStep: number) => {
     if (!activeDossier) return
 
     setDossiers((current) =>
@@ -79,22 +79,23 @@ export function WizardFlow() {
         d.id === activeDossier.id
           ? {
               ...d,
-              stap1: currentStep >= 1 ? (stap1 as AlgemeneGegevens) : d.stap1,
-              stap2: currentStep >= 2 ? (stap2 as AdresLocatie) : d.stap2,
-              stap3: currentStep >= 3 ? (stap3 as Oppervlaktes) : d.stap3,
-              stap4: currentStep >= 4 ? (stap4 as Huurgegevens) : d.stap4,
-              stap5: currentStep >= 5 ? (stap5 as JuridischeInfo) : d.stap5,
-              stap6: currentStep >= 6 ? (stap6 as TechnischeStaat) : d.stap6,
-              stap7: currentStep >= 7 ? (stap7 as Vergunningen) : d.stap7,
-              stap8: currentStep >= 8 ? (stap8 as Waardering) : d.stap8,
-              stap9: currentStep >= 9 ? (stap9 as Aannames) : d.stap9,
+              stap1: stap1 as AlgemeneGegevens,
+              stap2: stap2 as AdresLocatie,
+              stap3: stap3 as Oppervlaktes,
+              stap4: stap4 as Huurgegevens,
+              stap5: stap5 as JuridischeInfo,
+              stap6: stap6 as TechnischeStaat,
+              stap7: stap7 as Vergunningen,
+              stap8: stap8 as Waardering,
+              stap9: stap9 as Aannames,
               geselecteerdeReferenties: selectedReferenties,
-              huidigeStap: currentStep,
+              huidigeStap: targetStep,
               updatedAt: new Date().toISOString(),
             }
           : d
       )
     )
+    setCurrentStep(targetStep)
   }
 
   const validateStep = (step: number): boolean => {
@@ -154,18 +155,16 @@ export function WizardFlow() {
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      saveCurrentStep()
       if (currentStep < 10) {
-        setCurrentStep(currentStep + 1)
+        saveAndNavigateTo(currentStep + 1)
         toast.success('Stap opgeslagen')
       }
     }
   }
 
   const handlePrevious = () => {
-    saveCurrentStep()
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
+      saveAndNavigateTo(currentStep - 1)
     }
   }
 

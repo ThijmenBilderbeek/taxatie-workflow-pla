@@ -56,7 +56,6 @@ export interface AdresLocatie {
 }
 
 export interface Oppervlaktes {
-  gbo: number
   bvo: number
   vvo: number
   perceeloppervlak: number
@@ -198,7 +197,7 @@ export interface HistorischRapport {
   }
   typeObject: ObjectType
   gebruiksdoel: Gebruiksdoel
-  gbo: number
+  bvo: number
   marktwaarde: number
   bar?: number
   nar?: number

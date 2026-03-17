@@ -121,8 +121,8 @@ export function calculateSimilarity(
       historischRapport.typeObject
     ),
     oppervlakte: scoreOppervlakte(
-      huidigDossier.stap3.gbo,
-      historischRapport.gbo
+      huidigDossier.stap3.bvo,
+      historischRapport.bvo
     ),
     ouderheidRapport: scoreOuderdomRapport(historischRapport.waardepeildatum),
     gebruiksdoel: scoreGebruiksdoel(

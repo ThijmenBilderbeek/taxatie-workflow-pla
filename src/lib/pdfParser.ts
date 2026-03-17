@@ -96,11 +96,11 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
     }
   }
 
-  // --- GBO ---
-  const gboMatch = text.match(/(?:GBO|gebruiksoppervlak(?:te)?)[:\s]+([0-9]{1,6}[.,]?[0-9]*)\s*m[²2]?/i)
-  if (gboMatch) {
-    const val = parseNumber(gboMatch[1])
-    if (val !== undefined) result.gbo = val
+  // --- BVO ---
+  const bvoMatch = text.match(/(?:BVO|GBO|bruto vloeroppervlak|gebruiksoppervlak(?:te)?)[:\s]+([0-9]{1,6}[.,]?[0-9]*)\s*m[²2]?/i)
+  if (bvoMatch) {
+    const val = parseNumber(bvoMatch[1])
+    if (val !== undefined) result.bvo = val
   }
 
   // --- Marktwaarde ---

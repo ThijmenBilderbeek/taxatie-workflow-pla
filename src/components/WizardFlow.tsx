@@ -29,7 +29,15 @@ import { getSuggestiesVoorStap, type VeldSuggestie } from '@/lib/suggestions'
 import { generateAlleSecties } from '@/lib/templates'
 import { formatBedrag, formatOppervlakte, formatDatum } from '@/lib/fluxFormatter'
 
-export function WizardFlow({ activeDossierId }: { activeDossierId: string }) {
+export function WizardFlow({
+  activeDossierId,
+  shouldSaveAndNavigateToDashboard,
+  onSavedAndNavigated,
+}: {
+  activeDossierId: string
+  shouldSaveAndNavigateToDashboard?: boolean
+  onSavedAndNavigated?: () => void
+}) {
   const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
   const [historischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
   const [similarityInstellingen] = useKV<SimilarityInstellingen>('similarity-instellingen', {
@@ -99,6 +107,38 @@ export function WizardFlow({ activeDossierId }: { activeDossierId: string }) {
     )
     setCurrentStep(targetStep)
   }
+
+  const saveCurrentData = () => {
+    if (!activeDossier) return
+    setDossiers((current) =>
+      (current || []).map((d) =>
+        d.id === activeDossier.id
+          ? {
+              ...d,
+              stap1: stap1 as AlgemeneGegevens,
+              stap2: stap2 as AdresLocatie,
+              stap3: stap3 as Oppervlaktes,
+              stap4: stap4 as Huurgegevens,
+              stap5: stap5 as JuridischeInfo,
+              stap6: stap6 as TechnischeStaat,
+              stap7: stap7 as Vergunningen,
+              stap8: stap8 as Waardering,
+              stap9: stap9 as Aannames,
+              geselecteerdeReferenties: selectedReferenties,
+              huidigeStap: currentStep,
+              updatedAt: new Date().toISOString(),
+            }
+          : d
+      )
+    )
+  }
+
+  useEffect(() => {
+    if (shouldSaveAndNavigateToDashboard) {
+      saveCurrentData()
+      onSavedAndNavigated?.()
+    }
+  }, [shouldSaveAndNavigateToDashboard])
 
   const validateStep = (step: number): boolean => {
     switch (step) {

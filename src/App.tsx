@@ -6,6 +6,10 @@ import { RapportView } from './components/RapportView'
 import { Instellingen } from './components/Instellingen'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Toaster } from './components/ui/sonner'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog'
+import { Input } from './components/ui/input'
+import { Label } from './components/ui/label'
+import { Button } from './components/ui/button'
 import type { Dossier, HistorischRapport, SimilarityInstellingen, SimilarityFeedback } from './types'
 
 type View = 'dashboard' | 'wizard' | 'rapport' | 'instellingen'
@@ -32,16 +36,29 @@ function App() {
 
   const [currentView, setCurrentView] = useState<View>('dashboard')
   const [activeDossierId, setActiveDossierId] = useState<string | null>(null)
+  const [showNieuwDossierDialog, setShowNieuwDossierDialog] = useState(false)
+  const [nieuwDossiernummer, setNieuwDossiernummer] = useState('')
+  const [dossiernummerFout, setDossiernummerFout] = useState(false)
 
   const activeDossier = activeDossierId
     ? (dossiers || []).find((d) => d.id === activeDossierId)
     : null
 
   const handleCreateDossier = () => {
-    const currentDossiers = dossiers || []
+    setNieuwDossiernummer('')
+    setDossiernummerFout(false)
+    setShowNieuwDossierDialog(true)
+  }
+
+  const handleConfirmCreateDossier = () => {
+    if (!nieuwDossiernummer.trim()) {
+      setDossiernummerFout(true)
+      return
+    }
+
     const newDossier: Dossier = {
       id: `doss-${Date.now()}`,
-      dossiernummer: `TAX-2026-${String(currentDossiers.length + 1).padStart(3, '0')}`,
+      dossiernummer: nieuwDossiernummer.trim(),
       versieNummer: 1,
       isActualisatie: false,
       status: 'concept',
@@ -55,6 +72,7 @@ function App() {
 
     setDossiers((current) => [...(current || []), newDossier])
     setActiveDossierId(newDossier.id)
+    setShowNieuwDossierDialog(false)
     setCurrentView('wizard')
   }
 
@@ -134,8 +152,8 @@ function App() {
           />
         )}
 
-        {currentView === 'wizard' && activeDossier && (
-          <WizardFlow />
+        {currentView === 'wizard' && activeDossier && activeDossierId && (
+          <WizardFlow activeDossierId={activeDossierId} />
         )}
 
         {currentView === 'rapport' && activeDossier && (
@@ -158,6 +176,38 @@ function App() {
           />
         )}
       </main>
+
+      <Dialog open={showNieuwDossierDialog} onOpenChange={setShowNieuwDossierDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nieuw dossier aanmaken</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="dossiernummer">Dossiernummer</Label>
+              <Input
+                id="dossiernummer"
+                placeholder="bijv. T260305"
+                value={nieuwDossiernummer}
+                onChange={(e) => {
+                  setNieuwDossiernummer(e.target.value)
+                  if (e.target.value.trim()) setDossiernummerFout(false)
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleConfirmCreateDossier()}
+              />
+              {dossiernummerFout && (
+                <p className="text-sm text-destructive">Dossiernummer mag niet leeg zijn.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNieuwDossierDialog(false)}>
+              Annuleren
+            </Button>
+            <Button onClick={handleConfirmCreateDossier}>Aanmaken</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Toaster />
     </div>

@@ -59,9 +59,16 @@ export function useDossiers() {
   const [loading, setLoading] = useState(true)
 
   const fetchDossiers = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      setDossiers([])
+      setLoading(false)
+      return
+    }
     const { data, error } = await supabase
       .from('dossiers')
       .select('*')
+      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
     if (!error && data) {
       setDossiers(data.map(rowToDossier))
@@ -72,6 +79,12 @@ export function useDossiers() {
   useEffect(() => {
     fetchDossiers()
 
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        fetchDossiers()
+      }
+    })
+
     const channel = supabase
       .channel('dossiers_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dossiers' }, () => {
@@ -80,6 +93,7 @@ export function useDossiers() {
       .subscribe()
 
     return () => {
+      authSubscription.unsubscribe()
       supabase.removeChannel(channel)
     }
   }, [fetchDossiers])

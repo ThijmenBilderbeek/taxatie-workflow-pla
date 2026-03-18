@@ -1,5 +1,5 @@
 -- Dossiers tabel
-CREATE TABLE dossiers (
+CREATE TABLE IF NOT EXISTS dossiers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   dossiernummer TEXT,
@@ -26,7 +26,7 @@ CREATE TABLE dossiers (
 );
 
 -- Historische rapporten tabel
-CREATE TABLE historische_rapporten (
+CREATE TABLE IF NOT EXISTS historische_rapporten (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   rapport_id TEXT UNIQUE NOT NULL,
@@ -48,7 +48,7 @@ CREATE TABLE historische_rapporten (
 );
 
 -- Similarity instellingen tabel
-CREATE TABLE similarity_instellingen (
+CREATE TABLE IF NOT EXISTS similarity_instellingen (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
   gewichten JSONB,
@@ -61,11 +61,19 @@ ALTER TABLE historische_rapporten ENABLE ROW LEVEL SECURITY;
 ALTER TABLE similarity_instellingen ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies: users can only access their own data
+-- WITH CHECK is required for INSERT operations in addition to USING (which covers SELECT/UPDATE/DELETE)
 CREATE POLICY "Users can CRUD own dossiers" ON dossiers
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can CRUD own historische_rapporten" ON historische_rapporten
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can CRUD own similarity_instellingen" ON similarity_instellingen
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Grants: allow anon and authenticated roles to access the tables
+-- Without these grants, all requests return 403 regardless of RLS state
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON TABLE public.dossiers TO anon, authenticated;
+GRANT ALL ON TABLE public.historische_rapporten TO anon, authenticated;
+GRANT ALL ON TABLE public.similarity_instellingen TO anon, authenticated;

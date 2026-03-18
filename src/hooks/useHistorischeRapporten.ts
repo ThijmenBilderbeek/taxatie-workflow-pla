@@ -43,9 +43,16 @@ export function useHistorischeRapporten() {
   const [loading, setLoading] = useState(true)
 
   const fetchRapporten = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      setRapporten([])
+      setLoading(false)
+      return
+    }
     const { data, error } = await supabase
       .from('historische_rapporten')
       .select('*')
+      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
     if (!error && data) {
       setRapporten(data.map(rowToRapport))
@@ -56,6 +63,12 @@ export function useHistorischeRapporten() {
   useEffect(() => {
     fetchRapporten()
 
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        fetchRapporten()
+      }
+    })
+
     const channel = supabase
       .channel('historische_rapporten_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'historische_rapporten' }, () => {
@@ -64,6 +77,7 @@ export function useHistorischeRapporten() {
       .subscribe()
 
     return () => {
+      authSubscription.unsubscribe()
       supabase.removeChannel(channel)
     }
   }, [fetchRapporten])

@@ -133,7 +133,7 @@ function App() {
     }
 
     const newDossier: Dossier = {
-      id: `doss-${Date.now()}`,
+      id: crypto.randomUUID(),
       dossiernummer: nieuwDossiernummer.trim(),
       versieNummer: 1,
       isActualisatie: false,
@@ -239,16 +239,22 @@ function App() {
           />
         )}
 
-        {currentView === 'wizard' && activeDossier && activeDossierId && (
-          <WizardFlow
-            activeDossierId={activeDossierId}
-            dossiers={dossiers}
-            historischeRapporten={historischeRapporten}
-            similarityInstellingen={similarityInstellingen}
-            onUpdateDossier={updateDossier}
-            shouldSaveAndNavigateToDashboard={wizardShouldSaveAndNavigate}
-            onSavedAndNavigated={handleWizardSavedAndNavigated}
-          />
+        {currentView === 'wizard' && activeDossierId && (
+          activeDossier ? (
+            <WizardFlow
+              activeDossierId={activeDossierId}
+              dossiers={dossiers}
+              historischeRapporten={historischeRapporten}
+              similarityInstellingen={similarityInstellingen}
+              onUpdateDossier={updateDossier}
+              shouldSaveAndNavigateToDashboard={wizardShouldSaveAndNavigate}
+              onSavedAndNavigated={handleWizardSavedAndNavigated}
+            />
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-muted-foreground">Dossier laden...</p>
+            </div>
+          )
         )}
 
         {currentView === 'rapport' && activeDossier && activeDossierId && (

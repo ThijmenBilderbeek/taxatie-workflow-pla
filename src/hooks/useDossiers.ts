@@ -101,10 +101,14 @@ export function useDossiers() {
   const createDossier = useCallback(async (dossier: Dossier) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
+
+    setDossiers((current) => [dossier, ...current])
+
     const row = dossierToRow(dossier, user.id)
     const { error } = await supabase.from('dossiers').insert(row)
-    if (!error) {
-      setDossiers((current) => [dossier, ...current])
+    if (error) {
+      console.error('Failed to create dossier:', error)
+      setDossiers((current) => current.filter((d) => d.id !== dossier.id))
     }
   }, [])
 

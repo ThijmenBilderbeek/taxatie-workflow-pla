@@ -32,3 +32,11 @@ pids
 .devcontainer/
 
 .spark-workbench-id
+
+.env
+.env.local
+.env.production
+frontend/.env
+frontend/.env.local
+backend/.env
+backend/.env.local

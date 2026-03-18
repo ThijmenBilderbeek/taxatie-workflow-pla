@@ -16,6 +16,11 @@ const allowedOrigins = [
   'http://localhost:4173',
 ]
 
+// Voeg FRONTEND_URL toe als die is ingesteld (bijv. Render deployment URL)
+if (process.env.FRONTEND_URL && !allowedOrigins.includes(process.env.FRONTEND_URL)) {
+  allowedOrigins.push(process.env.FRONTEND_URL)
+}
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {

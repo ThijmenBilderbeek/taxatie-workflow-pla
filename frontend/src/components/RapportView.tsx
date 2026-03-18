@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useDossiers } from '../hooks/useDossiers'
+import { useHistorischeRapporten } from '../hooks/useHistorischeRapporten'
+import { useSimilarityFeedback } from '../hooks/useSimilarityFeedback'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
@@ -69,9 +71,9 @@ const ALLE_SECTIES: SectieDefinitie[] = [
 ]
 
 export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
-  const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
-  const [historischeRapporten, setHistorischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
-  const [similarityFeedback, setSimilarityFeedback] = useKV<SimilarityFeedback[]>('similarity-feedback', [])
+  const { dossiers, updateDossier } = useDossiers()
+  const { historischeRapporten, addRapport } = useHistorischeRapporten()
+  const { addFeedback } = useSimilarityFeedback()
 
   const activeDossier = (dossiers || []).find(
     d => d.status === 'in_behandeling' || d.status === 'concept'
@@ -99,17 +101,11 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
         }
       })
 
-      setDossiers((current) =>
-        (current || []).map((d) =>
-          d.id === activeDossier.id
-            ? {
-                ...d,
-                rapportSecties: newRapportSecties,
-                updatedAt: new Date().toISOString(),
-              }
-            : d
-        )
-      )
+      updateDossier({
+        ...activeDossier,
+        rapportSecties: newRapportSecties,
+        updatedAt: new Date().toISOString(),
+      })
       setIsGenerating(false)
       toast.success('Rapport gegenereerd')
     } else {
@@ -148,24 +144,18 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
   }).filter(Boolean) as Array<{ key: string } & RapportSectie>
 
   const handleSaveSectie = (key: string) => {
-    setDossiers((current) =>
-      (current || []).map((d) =>
-        d.id === activeDossier.id
-          ? {
-              ...d,
-              rapportSecties: {
-                ...d.rapportSecties,
-                [key]: {
-                  ...d.rapportSecties[key],
-                  inhoud: editingStates[key],
-                  fluxKlaarTekst: formatForFlux(editingStates[key]),
-                },
-              },
-              updatedAt: new Date().toISOString(),
-            }
-          : d
-      )
-    )
+    updateDossier({
+      ...activeDossier,
+      rapportSecties: {
+        ...activeDossier.rapportSecties,
+        [key]: {
+          ...activeDossier.rapportSecties[key],
+          inhoud: editingStates[key],
+          fluxKlaarTekst: formatForFlux(editingStates[key]),
+        },
+      },
+      updatedAt: new Date().toISOString(),
+    })
     toast.success('Sectie opgeslagen')
   }
 
@@ -180,23 +170,17 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
       [key]: updatedInhoud,
     }))
 
-    setDossiers((current) =>
-      (current || []).map((d) =>
-        d.id === activeDossier.id
-          ? {
-              ...d,
-              rapportSecties: {
-                ...d.rapportSecties,
-                [key]: {
-                  ...d.rapportSecties[key],
-                  inhoud: updatedInhoud,
-                  fluxKlaarTekst: formatForFlux(updatedInhoud),
-                },
-              },
-            }
-          : d
-      )
-    )
+    updateDossier({
+      ...activeDossier,
+      rapportSecties: {
+        ...activeDossier.rapportSecties,
+        [key]: {
+          ...activeDossier.rapportSecties[key],
+          inhoud: updatedInhoud,
+          fluxKlaarTekst: formatForFlux(updatedInhoud),
+        },
+      },
+    })
 
     toast.success('Sectie geregenereerd')
   }
@@ -204,22 +188,16 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
   const handleFeedback = (key: string, score: 'positief' | 'negatief') => {
     const sectie = activeDossier.rapportSecties[key]
 
-    setDossiers((current) =>
-      (current || []).map((d) =>
-        d.id === activeDossier.id
-          ? {
-              ...d,
-              rapportSecties: {
-                ...d.rapportSecties,
-                [key]: {
-                  ...d.rapportSecties[key],
-                  feedbackScore: score,
-                },
-              },
-            }
-          : d
-      )
-    )
+    updateDossier({
+      ...activeDossier,
+      rapportSecties: {
+        ...activeDossier.rapportSecties,
+        [key]: {
+          ...activeDossier.rapportSecties[key],
+          feedbackScore: score,
+        },
+      },
+    })
 
     if (score === 'negatief') {
       const newFeedback: SimilarityFeedback = {
@@ -233,7 +211,7 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
         createdAt: new Date().toISOString(),
       }
 
-      setSimilarityFeedback((current) => [...(current || []), newFeedback])
+      addFeedback(newFeedback)
     }
 
     toast.success(score === 'positief' ? 'Bedankt voor je feedback!' : 'Feedback geregistreerd')
@@ -317,14 +295,8 @@ export function RapportView({ onAfgerond }: { onAfgerond?: () => void }) {
         wizardData: activeDossier,
       }
 
-      setHistorischeRapporten((current) => [...(current || []), historischRapport])
-      setDossiers((current) =>
-        (current || []).map((d) =>
-          d.id === activeDossier.id
-            ? { ...d, status: 'afgerond', updatedAt: new Date().toISOString() }
-            : d
-        )
-      )
+      await addRapport(historischRapport)
+      await updateDossier({ ...activeDossier, status: 'afgerond', updatedAt: new Date().toISOString() })
       toast.success('Dossier afgerond en opgeslagen in kennisbank')
       onAfgerond?.()
     } finally {

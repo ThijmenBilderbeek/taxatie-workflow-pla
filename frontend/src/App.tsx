@@ -1,39 +1,31 @@
 import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
 import { Dashboard } from './components/Dashboard'
 import { WizardFlow } from './components/WizardFlow'
 import { RapportView } from './components/RapportView'
 import { Instellingen } from './components/Instellingen'
 import { Kennisbank } from './components/Kennisbank'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
+import { LoginPage } from './components/LoginPage'
+import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Toaster } from './components/ui/sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog'
 import { Input } from './components/ui/input'
 import { Label } from './components/ui/label'
 import { Button } from './components/ui/button'
-import type { Dossier, HistorischRapport, SimilarityInstellingen, SimilarityFeedback } from './types'
+import { useAuth } from './context/AuthContext'
+import { useDossiers } from './hooks/useDossiers'
+import { useHistorischeRapporten } from './hooks/useHistorischeRapporten'
+import { useSimilarityInstellingen } from './hooks/useSimilarityInstellingen'
+import { useSimilarityFeedback } from './hooks/useSimilarityFeedback'
+import type { Dossier, HistorischRapport } from './types'
 
 type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen'
 
-function App() {
-  const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
-  const [historischeRapporten, setHistorischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
-  const [similarityInstellingen, setSimilarityInstellingen] = useKV<SimilarityInstellingen>(
-    'similarity-instellingen',
-    {
-      gewichten: {
-        afstand: 30,
-        typeObject: 25,
-        oppervlakte: 20,
-        ouderheidRapport: 15,
-        gebruiksdoel: 10,
-      },
-    }
-  )
-  const [similarityFeedback, setSimilarityFeedback] = useKV<SimilarityFeedback[]>(
-    'similarity-feedback',
-    []
-  )
+function AppInner() {
+  const { user, signOut } = useAuth()
+  const { dossiers, addDossier, updateDossier, deleteDossier } = useDossiers()
+  const { historischeRapporten, addRapport, deleteRapport, updateRapport, addRapporten } = useHistorischeRapporten()
+  const { similarityInstellingen, updateInstellingen } = useSimilarityInstellingen()
+  const { similarityFeedback } = useSimilarityFeedback()
 
   const [currentView, setCurrentView] = useState<View>('dashboard')
   const [activeDossierId, setActiveDossierId] = useState<string | null>(null)
@@ -52,14 +44,14 @@ function App() {
     setShowNieuwDossierDialog(true)
   }
 
-  const handleConfirmCreateDossier = () => {
+  const handleConfirmCreateDossier = async () => {
     if (!nieuwDossiernummer.trim()) {
       setDossiernummerFout(true)
       return
     }
 
     const newDossier: Dossier = {
-      id: `doss-${Date.now()}`,
+      id: crypto.randomUUID(),
       dossiernummer: nieuwDossiernummer.trim(),
       versieNummer: 1,
       isActualisatie: false,
@@ -72,7 +64,7 @@ function App() {
       updatedAt: new Date().toISOString(),
     }
 
-    setDossiers((current) => [...(current || []), newDossier])
+    await addDossier(newDossier)
     setActiveDossierId(newDossier.id)
     setShowNieuwDossierDialog(false)
     setCurrentView('wizard')
@@ -90,35 +82,20 @@ function App() {
     }
   }
 
-  const handleUpdateDossier = (updatedDossier: Dossier) => {
-    setDossiers((current) =>
-      (current || []).map((d) => (d.id === updatedDossier.id ? updatedDossier : d))
-    )
-  }
-
-  const handleDeleteDossier = (dossierId: string) => {
-    setDossiers((current) => (current || []).filter((d) => d.id !== dossierId))
+  const handleDeleteDossier = async (dossierId: string) => {
+    await deleteDossier(dossierId)
     if (activeDossierId === dossierId) {
       setActiveDossierId(null)
       setCurrentView('dashboard')
     }
   }
 
-  const handleDeleteHistorischRapport = (id: string) => {
-    setHistorischeRapporten((current) => (current || []).filter((r) => r.id !== id))
+  const handleDeleteHistorischRapport = async (id: string) => {
+    await deleteRapport(id)
   }
 
-  const handleUpdateHistorischRapport = (rapport: HistorischRapport) => {
-    setHistorischeRapporten((current) =>
-      (current || []).map((r) => (r.id === rapport.id ? rapport : r))
-    )
-  }
-
-  const handleNavigate = (view: View, dossierId?: string) => {
-    setCurrentView(view)
-    if (dossierId) {
-      setActiveDossierId(dossierId)
-    }
+  const handleUpdateHistorischRapport = async (rapport: HistorischRapport) => {
+    await updateRapport(rapport)
   }
 
   const handleLogoClick = () => {
@@ -152,22 +129,30 @@ function App() {
                 Intelligente Vastgoedwaardering
               </p>
             </div>
-            <Tabs
-              value={currentView}
-              onValueChange={(v) => setCurrentView(v as View)}
-            >
-              <TabsList>
-                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                <TabsTrigger value="wizard" disabled={!activeDossier}>
-                  Wizard
-                </TabsTrigger>
-                <TabsTrigger value="rapport" disabled={!activeDossier}>
-                  Rapport
-                </TabsTrigger>
-                <TabsTrigger value="kennisbank">Kennisbank</TabsTrigger>
-                <TabsTrigger value="instellingen">Instellingen</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex items-center gap-4">
+              <Tabs
+                value={currentView}
+                onValueChange={(v) => setCurrentView(v as View)}
+              >
+                <TabsList>
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                  <TabsTrigger value="wizard" disabled={!activeDossier}>
+                    Wizard
+                  </TabsTrigger>
+                  <TabsTrigger value="rapport" disabled={!activeDossier}>
+                    Rapport
+                  </TabsTrigger>
+                  <TabsTrigger value="kennisbank">Kennisbank</TabsTrigger>
+                  <TabsTrigger value="instellingen">Instellingen</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{user?.email}</span>
+                <Button variant="outline" size="sm" onClick={signOut}>
+                  Uitloggen
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -198,9 +183,7 @@ function App() {
         {currentView === 'kennisbank' && (
           <Kennisbank
             historischeRapporten={historischeRapporten || []}
-            onAddRapport={(rapport) =>
-              setHistorischeRapporten((current) => [...(current || []), rapport])
-            }
+            onAddRapport={addRapport}
             onDeleteRapport={handleDeleteHistorischRapport}
             onUpdateRapport={handleUpdateHistorischRapport}
           />
@@ -219,10 +202,8 @@ function App() {
             }}
             feedback={similarityFeedback || []}
             historischeRapporten={historischeRapporten || []}
-            onUpdateInstellingen={setSimilarityInstellingen}
-            onSeedRapporten={(nieuweRapporten) =>
-              setHistorischeRapporten((current) => [...(current || []), ...nieuweRapporten])
-            }
+            onUpdateInstellingen={updateInstellingen}
+            onSeedRapporten={addRapporten}
           />
         )}
       </main>
@@ -262,6 +243,24 @@ function App() {
       <Toaster />
     </div>
   )
+}
+
+function App() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Laden...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginPage />
+  }
+
+  return <AppInner />
 }
 
 export default App

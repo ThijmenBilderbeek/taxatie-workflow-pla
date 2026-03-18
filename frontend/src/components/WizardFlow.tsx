@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useDossiers } from '../hooks/useDossiers'
+import { useHistorischeRapporten } from '../hooks/useHistorischeRapporten'
+import { useSimilarityInstellingen } from '../hooks/useSimilarityInstellingen'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -38,17 +40,9 @@ export function WizardFlow({
   shouldSaveAndNavigateToDashboard?: boolean
   onSavedAndNavigated?: () => void
 }) {
-  const [dossiers, setDossiers] = useKV<Dossier[]>('dossiers', [])
-  const [historischeRapporten] = useKV<HistorischRapport[]>('historische-rapporten', [])
-  const [similarityInstellingen] = useKV<SimilarityInstellingen>('similarity-instellingen', {
-    gewichten: {
-      afstand: 30,
-      typeObject: 25,
-      oppervlakte: 20,
-      ouderheidRapport: 15,
-      gebruiksdoel: 10,
-    },
-  })
+  const { dossiers, updateDossier } = useDossiers()
+  const { historischeRapporten } = useHistorischeRapporten()
+  const { similarityInstellingen } = useSimilarityInstellingen()
 
   const activeDossier = (dossiers || []).find(d => d.id === activeDossierId)
   const [currentStep, setCurrentStep] = useState(activeDossier?.huidigeStap || 1)
@@ -84,53 +78,41 @@ export function WizardFlow({
   const saveAndNavigateTo = (targetStep: number) => {
     if (!activeDossier) return
 
-    setDossiers((current) =>
-      (current || []).map((d) =>
-        d.id === activeDossier.id
-          ? {
-              ...d,
-              stap1: stap1 as AlgemeneGegevens,
-              stap2: stap2 as AdresLocatie,
-              stap3: stap3 as Oppervlaktes,
-              stap4: stap4 as Huurgegevens,
-              stap5: stap5 as JuridischeInfo,
-              stap6: stap6 as TechnischeStaat,
-              stap7: stap7 as Vergunningen,
-              stap8: stap8 as Waardering,
-              stap9: stap9 as Aannames,
-              geselecteerdeReferenties: selectedReferenties,
-              huidigeStap: targetStep,
-              updatedAt: new Date().toISOString(),
-            }
-          : d
-      )
-    )
+    updateDossier({
+      ...activeDossier,
+      stap1: stap1 as AlgemeneGegevens,
+      stap2: stap2 as AdresLocatie,
+      stap3: stap3 as Oppervlaktes,
+      stap4: stap4 as Huurgegevens,
+      stap5: stap5 as JuridischeInfo,
+      stap6: stap6 as TechnischeStaat,
+      stap7: stap7 as Vergunningen,
+      stap8: stap8 as Waardering,
+      stap9: stap9 as Aannames,
+      geselecteerdeReferenties: selectedReferenties,
+      huidigeStap: targetStep,
+      updatedAt: new Date().toISOString(),
+    })
     setCurrentStep(targetStep)
   }
 
   const saveCurrentData = () => {
     if (!activeDossier) return
-    setDossiers((current) =>
-      (current || []).map((d) =>
-        d.id === activeDossier.id
-          ? {
-              ...d,
-              stap1: stap1 as AlgemeneGegevens,
-              stap2: stap2 as AdresLocatie,
-              stap3: stap3 as Oppervlaktes,
-              stap4: stap4 as Huurgegevens,
-              stap5: stap5 as JuridischeInfo,
-              stap6: stap6 as TechnischeStaat,
-              stap7: stap7 as Vergunningen,
-              stap8: stap8 as Waardering,
-              stap9: stap9 as Aannames,
-              geselecteerdeReferenties: selectedReferenties,
-              huidigeStap: currentStep,
-              updatedAt: new Date().toISOString(),
-            }
-          : d
-      )
-    )
+    updateDossier({
+      ...activeDossier,
+      stap1: stap1 as AlgemeneGegevens,
+      stap2: stap2 as AdresLocatie,
+      stap3: stap3 as Oppervlaktes,
+      stap4: stap4 as Huurgegevens,
+      stap5: stap5 as JuridischeInfo,
+      stap6: stap6 as TechnischeStaat,
+      stap7: stap7 as Vergunningen,
+      stap8: stap8 as Waardering,
+      stap9: stap9 as Aannames,
+      geselecteerdeReferenties: selectedReferenties,
+      huidigeStap: currentStep,
+      updatedAt: new Date().toISOString(),
+    })
   }
 
   useEffect(() => {
@@ -239,17 +221,11 @@ export function WizardFlow({
       }
     })
 
-    setDossiers((current) =>
-      (current || []).map((d) =>
-        d.id === activeDossier.id
-          ? {
-              ...updatedDossier,
-              rapportSecties,
-              status: 'in_behandeling' as const,
-            }
-          : d
-      )
-    )
+    updateDossier({
+      ...updatedDossier,
+      rapportSecties,
+      status: 'in_behandeling' as const,
+    })
 
     toast.success('Rapport gegenereerd!')
   }

@@ -17,17 +17,34 @@ export function useSimilarityInstellingen() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetch() {
+    async function fetchInstellingen() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        setLoading(false)
+        return
+      }
       const { data, error } = await supabase
         .from('similarity_instellingen')
         .select('*')
+        .eq('user_id', session.user.id)
         .maybeSingle()
       if (!error && data) {
         setInstellingen({ gewichten: data.gewichten })
       }
       setLoading(false)
     }
-    fetch()
+
+    fetchInstellingen()
+
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        fetchInstellingen()
+      }
+    })
+
+    return () => {
+      authSubscription.unsubscribe()
+    }
   }, [])
 
   const updateInstellingen = useCallback(async (nieuw: SimilarityInstellingen) => {

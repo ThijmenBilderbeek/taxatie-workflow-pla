@@ -73,7 +73,10 @@ CREATE TABLE taxateur_profielen (
 -- Auto-update updated_at
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
-BEGIN NEW.updated_at = now(); RETURN NEW; END;
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER dossiers_updated_at

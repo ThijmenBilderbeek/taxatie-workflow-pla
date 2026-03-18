@@ -126,7 +126,7 @@ function App() {
     setShowNieuwDossierDialog(true)
   }
 
-  const handleConfirmCreateDossier = () => {
+  const handleConfirmCreateDossier = async () => {
     if (!nieuwDossiernummer.trim()) {
       setDossiernummerFout(true)
       return
@@ -146,7 +146,7 @@ function App() {
       updatedAt: new Date().toISOString(),
     }
 
-    createDossier(newDossier)
+    await createDossier(newDossier)
     setActiveDossierId(newDossier.id)
     setShowNieuwDossierDialog(false)
     setCurrentView('wizard')

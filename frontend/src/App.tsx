@@ -112,7 +112,7 @@ function AppInner() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background"> 
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -136,7 +136,7 @@ function AppInner() {
               >
                 <TabsList>
                   <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                  <TabsTrigger value="wizard" disabled={!activeDossier}>
+                  <TabsTrigger value="wizard" disabled={!activeDossierId}>
                     Wizard
                   </TabsTrigger>
                   <TabsTrigger value="rapport" disabled={!activeDossier}>
@@ -168,7 +168,7 @@ function AppInner() {
           />
         )}
 
-        {currentView === 'wizard' && activeDossier && activeDossierId && (
+        {currentView === 'wizard' && activeDossierId && (
           <WizardFlow
             activeDossierId={activeDossierId}
             shouldSaveAndNavigateToDashboard={wizardShouldSaveAndNavigate}

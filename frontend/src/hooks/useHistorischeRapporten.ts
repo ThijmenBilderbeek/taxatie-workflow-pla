@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { apiGet, apiPost, apiPut, apiDelete } from '../lib/api'
 import type { HistorischRapport } from '../types'
 
 function dbRowToRapport(row: Record<string, unknown>): HistorischRapport {
@@ -52,13 +53,11 @@ export function useHistorischeRapporten() {
 
   useEffect(() => {
     const fetchRapporten = async () => {
-      const { data, error } = await supabase
-        .from('historische_rapporten')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (!error && data) {
+      try {
+        const data = await apiGet<Record<string, unknown>[]>('/api/rapporten')
         setHistorischeRapporten(data.map(dbRowToRapport))
+      } catch (error) {
+        console.error('Fout bij ophalen rapporten:', error)
       }
       setLoading(false)
     }
@@ -78,37 +77,35 @@ export function useHistorischeRapporten() {
   }, [])
 
   const addRapport = async (rapport: HistorischRapport) => {
-    const { error } = await supabase
-      .from('historische_rapporten')
-      .insert(rapportToDbRow(rapport))
-
-    if (error) console.error('Fout bij aanmaken rapport:', error)
+    try {
+      await apiPost('/api/rapporten', rapportToDbRow(rapport))
+    } catch (error) {
+      console.error('Fout bij aanmaken rapport:', error)
+    }
   }
 
   const updateRapport = async (rapport: HistorischRapport) => {
-    const { error } = await supabase
-      .from('historische_rapporten')
-      .update(rapportToDbRow(rapport))
-      .eq('id', rapport.id)
-
-    if (error) console.error('Fout bij bijwerken rapport:', error)
+    try {
+      await apiPut(`/api/rapporten/${rapport.id}`, rapportToDbRow(rapport))
+    } catch (error) {
+      console.error('Fout bij bijwerken rapport:', error)
+    }
   }
 
   const deleteRapport = async (id: string) => {
-    const { error } = await supabase
-      .from('historische_rapporten')
-      .delete()
-      .eq('id', id)
-
-    if (error) console.error('Fout bij verwijderen rapport:', error)
+    try {
+      await apiDelete(`/api/rapporten/${id}`)
+    } catch (error) {
+      console.error('Fout bij verwijderen rapport:', error)
+    }
   }
 
   const addRapporten = async (rapporten: HistorischRapport[]) => {
-    const { error } = await supabase
-      .from('historische_rapporten')
-      .insert(rapporten.map(rapportToDbRow))
-
-    if (error) console.error('Fout bij aanmaken rapporten:', error)
+    try {
+      await apiPost('/api/rapporten/bulk', rapporten.map(rapportToDbRow))
+    } catch (error) {
+      console.error('Fout bij aanmaken rapporten:', error)
+    }
   }
 
   return { historischeRapporten, loading, addRapport, updateRapport, deleteRapport, addRapporten }

@@ -19,6 +19,20 @@ router.get('/', async (_req, res) => {
   res.json(data)
 })
 
+router.post('/', async (req, res) => {
+  const { data, error } = await supabase
+    .from('similarity_instellingen')
+    .insert(req.body)
+    .select()
+    .single()
+
+  if (error) {
+    res.status(500).json({ error: error.message })
+    return
+  }
+  res.status(201).json(data)
+})
+
 router.put('/:id', async (req, res) => {
   const { data, error } = await supabase
     .from('similarity_instellingen')

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { apiGet, apiPost, apiPut, apiDelete } from '../lib/api'
 import type { Dossier } from '../types'
 
 function dbRowToDossier(row: Record<string, unknown>): Dossier {
@@ -59,13 +60,11 @@ export function useDossiers() {
 
   useEffect(() => {
     const fetchDossiers = async () => {
-      const { data, error } = await supabase
-        .from('dossiers')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (!error && data) {
+      try {
+        const data = await apiGet<Record<string, unknown>[]>('/api/dossiers')
         setDossiers(data.map(dbRowToDossier))
+      } catch (error) {
+        console.error('Fout bij ophalen dossiers:', error)
       }
       setLoading(false)
     }
@@ -85,29 +84,27 @@ export function useDossiers() {
   }, [])
 
   const addDossier = async (dossier: Dossier) => {
-    const { error } = await supabase
-      .from('dossiers')
-      .insert(dossierToDbRow(dossier))
-
-    if (error) console.error('Fout bij aanmaken dossier:', error)
+    try {
+      await apiPost('/api/dossiers', dossierToDbRow(dossier))
+    } catch (error) {
+      console.error('Fout bij aanmaken dossier:', error)
+    }
   }
 
   const updateDossier = async (dossier: Dossier) => {
-    const { error } = await supabase
-      .from('dossiers')
-      .update(dossierToDbRow(dossier))
-      .eq('id', dossier.id)
-
-    if (error) console.error('Fout bij bijwerken dossier:', error)
+    try {
+      await apiPut(`/api/dossiers/${dossier.id}`, dossierToDbRow(dossier))
+    } catch (error) {
+      console.error('Fout bij bijwerken dossier:', error)
+    }
   }
 
   const deleteDossier = async (id: string) => {
-    const { error } = await supabase
-      .from('dossiers')
-      .delete()
-      .eq('id', id)
-
-    if (error) console.error('Fout bij verwijderen dossier:', error)
+    try {
+      await apiDelete(`/api/dossiers/${id}`)
+    } catch (error) {
+      console.error('Fout bij verwijderen dossier:', error)
+    }
   }
 
   return { dossiers, loading, addDossier, updateDossier, deleteDossier }

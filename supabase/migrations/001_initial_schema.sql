@@ -62,10 +62,16 @@ ALTER TABLE similarity_instellingen ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies: users can only access their own data
 CREATE POLICY "Users can CRUD own dossiers" ON dossiers
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can CRUD own historische_rapporten" ON historische_rapporten
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can CRUD own similarity_instellingen" ON similarity_instellingen
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);

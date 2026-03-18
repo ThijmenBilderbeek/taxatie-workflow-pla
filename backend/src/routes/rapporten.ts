@@ -32,6 +32,20 @@ router.get('/:id', async (req, res) => {
   res.json(data)
 })
 
+router.post('/bulk', async (req, res) => {
+  const rapporten = req.body // array van rapport objecten
+  const { data, error } = await supabase
+    .from('historische_rapporten')
+    .insert(rapporten)
+    .select()
+
+  if (error) {
+    res.status(500).json({ error: error.message })
+    return
+  }
+  res.status(201).json(data)
+})
+
 router.post('/', async (req, res) => {
   const { data, error } = await supabase
     .from('historische_rapporten')

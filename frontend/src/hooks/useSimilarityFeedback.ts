@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { apiGet, apiPost, apiDelete } from '../lib/api'
 import type { SimilarityFeedback } from '../types'
 
 function dbRowToFeedback(row: Record<string, unknown>): SimilarityFeedback {
@@ -32,13 +33,11 @@ export function useSimilarityFeedback() {
 
   useEffect(() => {
     const fetchFeedback = async () => {
-      const { data, error } = await supabase
-        .from('similarity_feedback')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (!error && data) {
+      try {
+        const data = await apiGet<Record<string, unknown>[]>('/api/feedback')
         setSimilarityFeedback(data.map(dbRowToFeedback))
+      } catch (error) {
+        console.error('Fout bij ophalen feedback:', error)
       }
       setLoading(false)
     }
@@ -58,20 +57,19 @@ export function useSimilarityFeedback() {
   }, [])
 
   const addFeedback = async (feedback: SimilarityFeedback) => {
-    const { error } = await supabase
-      .from('similarity_feedback')
-      .insert(feedbackToDbRow(feedback))
-
-    if (error) console.error('Fout bij aanmaken feedback:', error)
+    try {
+      await apiPost('/api/feedback', feedbackToDbRow(feedback))
+    } catch (error) {
+      console.error('Fout bij aanmaken feedback:', error)
+    }
   }
 
   const deleteFeedback = async (id: string) => {
-    const { error } = await supabase
-      .from('similarity_feedback')
-      .delete()
-      .eq('id', id)
-
-    if (error) console.error('Fout bij verwijderen feedback:', error)
+    try {
+      await apiDelete(`/api/feedback/${id}`)
+    } catch (error) {
+      console.error('Fout bij verwijderen feedback:', error)
+    }
   }
 
   return { similarityFeedback, loading, addFeedback, deleteFeedback }

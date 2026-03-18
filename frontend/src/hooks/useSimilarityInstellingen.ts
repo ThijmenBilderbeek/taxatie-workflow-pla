@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { apiGet, apiPost, apiPut } from '../lib/api'
 import type { SimilarityInstellingen } from '../types'
 
 const DEFAULT_INSTELLINGEN: SimilarityInstellingen = {
@@ -19,13 +20,8 @@ export function useSimilarityInstellingen() {
 
   useEffect(() => {
     const fetchInstellingen = async () => {
-      const { data, error } = await supabase
-        .from('similarity_instellingen')
-        .select('*')
-        .limit(1)
-        .single()
-
-      if (!error && data) {
+      try {
+        const data = await apiGet<Record<string, unknown>>('/api/instellingen')
         setInstellingenId(data.id as string)
         setSimilarityInstellingen({
           gewichten: {
@@ -36,6 +32,8 @@ export function useSimilarityInstellingen() {
             gebruiksdoel: (data.gewicht_gebruiksdoel as number) ?? 10,
           },
         })
+      } catch {
+        // Geen instellingen gevonden, gebruik defaults
       }
       setLoading(false)
     }
@@ -63,25 +61,15 @@ export function useSimilarityInstellingen() {
       gewicht_gebruiksdoel: instellingen.gewichten.gebruiksdoel,
     }
 
-    if (instellingenId) {
-      const { error } = await supabase
-        .from('similarity_instellingen')
-        .update(row)
-        .eq('id', instellingenId)
-
-      if (error) console.error('Fout bij bijwerken instellingen:', error)
-    } else {
-      const { data, error } = await supabase
-        .from('similarity_instellingen')
-        .insert(row)
-        .select()
-        .single()
-
-      if (!error && data) {
+    try {
+      if (instellingenId) {
+        await apiPut(`/api/instellingen/${instellingenId}`, row)
+      } else {
+        const data = await apiPost<Record<string, unknown>>('/api/instellingen', row)
         setInstellingenId(data.id as string)
-      } else if (error) {
-        console.error('Fout bij aanmaken instellingen:', error)
       }
+    } catch (error) {
+      console.error('Fout bij opslaan instellingen:', error)
     }
 
     setSimilarityInstellingen(instellingen)

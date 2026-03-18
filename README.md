@@ -59,6 +59,7 @@ cp .env.example backend/.env
 Vul de juiste waarden in:
 - `VITE_SUPABASE_URL` — Supabase project URL
 - `VITE_SUPABASE_ANON_KEY` — Supabase anon/public key
+- `VITE_BACKEND_URL` — URL van de backend (bijv. `http://localhost:3001` voor lokale ontwikkeling)
 - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key (alleen backend!)
 
 ### 3. Frontend starten
@@ -97,6 +98,7 @@ Stel per service de volgende variabelen in:
 **Frontend service (`taxatie-frontend`):**
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
+- `VITE_BACKEND_URL`
 
 **Backend service (`taxatie-backend`):**
 - `SUPABASE_URL`
@@ -125,6 +127,7 @@ Nieuwe taxateurs worden aangemaakt via Supabase Auth:
 |-----------|----------|--------------|
 | `VITE_SUPABASE_URL` | Frontend | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Frontend | Supabase public/anon key |
+| `VITE_BACKEND_URL` | Frontend | URL van de Express-backend |
 | `SUPABASE_URL` | Backend | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Backend | Supabase service role key (geheim!) |
 | `FRONTEND_URL` | Backend | URL van de frontend (voor CORS) |

@@ -103,10 +103,16 @@ export function getSuggestiesVoorStap(
   historischeRapporten: HistorischRapport[],
   similarityInstellingen?: SimilarityInstellingen
 ): VeldSuggestie[] {
-  if (historischeRapporten.length === 0) return []
+  if (historischeRapporten.length === 0) {
+    console.debug('[Suggesties] Geen historische rapporten beschikbaar')
+    return []
+  }
 
   const veldConfigs = VELD_CONFIGS[stap]
-  if (!veldConfigs) return []
+  if (!veldConfigs) {
+    console.debug(`[Suggesties] Geen veld configs voor stap ${stap}`)
+    return []
+  }
 
   const typeObject = huidigeDossier.stap1?.typeObject
   const gebruiksdoel = huidigeDossier.stap1?.gebruiksdoel
@@ -175,5 +181,6 @@ export function getSuggestiesVoorStap(
     }
   }
 
+  console.debug(`[Suggesties] Stap ${stap}: ${suggesties.length} suggestie(s) gevonden`, suggesties.map(s => s.veldNaam))
   return suggesties
 }

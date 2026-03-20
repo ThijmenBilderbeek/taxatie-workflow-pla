@@ -123,6 +123,10 @@ export function WizardFlow({
     }
   }, [shouldSaveAndNavigateToDashboard])
 
+  useEffect(() => {
+    setDismissedSuggesties(new Set())
+  }, [currentStep])
+
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
@@ -326,12 +330,14 @@ export function WizardFlow({
     setDismissedSuggesties((prev) => new Set([...prev, veldNaam]))
   }
 
-  const suggestiesHuidigeStap = getSuggestiesVoorStap(
-    currentStep,
-    { stap1, stap2, stap3, stap4, stap5, stap6, stap7, stap8, stap9 } as Partial<Dossier>,
-    historischeRapporten || [],
-    similarityInstellingen
-  )
+  const suggestiesHuidigeStap = activeDossier
+    ? getSuggestiesVoorStap(
+        currentStep,
+        { stap1, stap2, stap3, stap4, stap5, stap6, stap7, stap8, stap9 } as Partial<Dossier>,
+        historischeRapporten || [],
+        similarityInstellingen
+      )
+    : []
 
   if (!activeDossier) {
     return (

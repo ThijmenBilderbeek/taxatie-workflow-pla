@@ -283,11 +283,11 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       </div>
 
       <Dialog open={showUploadDialog} onOpenChange={(open) => { if (!open) handleCloseDialog() }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Taxatierapport uploaden als PDF</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="flex-1 overflow-y-auto space-y-4 py-2">
             {!preview && (
               <div className="space-y-2">
                 <Label htmlFor="pdf-upload">PDF-bestand selecteren</Label>
@@ -318,7 +318,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 <div className="space-y-3">
                   <h3 className="font-semibold text-sm text-foreground">Algemene gegevens</h3>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="prev-objectnaam">Objectnaam</Label>
                       <Input
@@ -397,7 +397,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 <div className="space-y-3">
                   <h3 className="font-semibold text-sm text-foreground">Adres &amp; Locatie</h3>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="prev-straat">Straatnaam</Label>
                       <Input
@@ -499,7 +499,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 <div className="space-y-3">
                   <h3 className="font-semibold text-sm text-foreground">Oppervlaktes</h3>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="prev-bvo">BVO (m²)</Label>
                       <Input
@@ -568,7 +568,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                     />
                     <Label htmlFor="prev-verhuurd">Verhuurd</Label>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="prev-huurder">Huurder</Label>
                       <Input
@@ -654,7 +654,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 <div className="space-y-3">
                   <h3 className="font-semibold text-sm text-foreground">Technische staat</h3>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="prev-exterieur">Exterieur staat</Label>
                       <Select
@@ -750,7 +750,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 <div className="space-y-3">
                   <h3 className="font-semibold text-sm text-foreground">Vergunningen &amp; duurzaamheid</h3>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="prev-energielabel">Energielabel</Label>
                       <Select
@@ -815,7 +815,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 <div className="space-y-3">
                   <h3 className="font-semibold text-sm text-foreground">Waardering</h3>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="prev-methode">Waarderingsmethode</Label>
                       <Select
@@ -922,7 +922,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={handleCloseDialog}>
               Annuleren
             </Button>
@@ -964,13 +964,14 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       </Dialog>
 
       <Dialog open={!!bewerkRapport} onOpenChange={(open) => { if (!open) handleCloseBewerkDialog() }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Rapport bewerken</DialogTitle>
           </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
           {bewerkFormulier && (
             <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="bew-straat">Straatnaam</Label>
                   <Input
@@ -1009,7 +1010,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="bew-type">Type object</Label>
                   <Select
@@ -1051,7 +1052,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="bew-bvo">BVO (m²)</Label>
                   <Input
@@ -1105,7 +1106,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 {bewerkFouten.waardepeildatum && <p className="text-sm text-destructive">{bewerkFouten.waardepeildatum}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="bew-lat">Breedtegraad (lat, optioneel)</Label>
                   <Input
@@ -1129,7 +1130,8 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
               </div>
             </div>
           )}
-          <DialogFooter>
+          </div>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={handleCloseBewerkDialog}>
               Annuleren
             </Button>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
-import type { HistorischRapport, ObjectType, Gebruiksdoel, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Waardering } from '../types'
+import type { HistorischRapport, ObjectType, Gebruiksdoel, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Waardering, Ligging, Onderhoudsstaat, Energielabel, WaarderingsMethode, Huurgegevens, TechnischeStaat, Vergunningen, Aannames, JuridischeInfo } from '../types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
 import { MagnifyingGlass, MapPin, Buildings, Calendar, CurrencyCircleDollar, ChartBar, Upload, Trash, Pencil } from '@phosphor-icons/react'
 import { Checkbox } from './ui/checkbox'
+import { Textarea } from './ui/textarea'
+import { Separator } from './ui/separator'
 import { toast } from 'sonner'
 import { parsePdfToRapport } from '../lib/pdfParser'
 
@@ -98,7 +100,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
         postcode: preview.adres?.postcode ?? '',
         plaats: preview.adres?.plaats ?? '',
       },
-      coordinaten: { lat: 0, lng: 0 },
+      coordinaten: preview.coordinaten ?? { lat: 0, lng: 0 },
       typeObject: (preview.typeObject ?? 'overig') as ObjectType,
       gebruiksdoel: (preview.gebruiksdoel ?? 'overig') as Gebruiksdoel,
       bvo: preview.bvo ?? 0,
@@ -108,46 +110,46 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       waardepeildatum: preview.waardepeildatum ?? new Date().toISOString().slice(0, 10),
       rapportTeksten: preview.rapportTeksten ?? {},
       wizardData: {
-        ...(preview.typeObject || preview.gebruiksdoel
-          ? {
-              stap1: {
-                typeObject: preview.typeObject,
-                gebruiksdoel: preview.gebruiksdoel,
-              } as AlgemeneGegevens,
-            }
-          : {}),
-        ...(preview.adres
-          ? {
-              stap2: {
-                straatnaam: preview.adres.straat,
-                huisnummer: preview.adres.huisnummer,
-                postcode: preview.adres.postcode,
-                plaats: preview.adres.plaats,
-                ...preview.wizardData?.stap2,
-              } as AdresLocatie,
-            }
-          : preview.wizardData?.stap2
-            ? { stap2: preview.wizardData.stap2 }
-            : {}),
-        ...(preview.bvo
-          ? {
-              stap3: {
-                bvo: preview.bvo,
-              } as Oppervlaktes,
-            }
-          : {}),
+        stap1: {
+          typeObject: preview.typeObject,
+          gebruiksdoel: preview.gebruiksdoel,
+          objectnaam: preview.wizardData?.stap1?.objectnaam,
+          naamTaxateur: preview.wizardData?.stap1?.naamTaxateur,
+          waardepeildatum: preview.waardepeildatum,
+          inspectiedatum: preview.wizardData?.stap1?.inspectiedatum,
+        } as AlgemeneGegevens,
+        stap2: {
+          straatnaam: preview.adres?.straat ?? '',
+          huisnummer: preview.adres?.huisnummer ?? '',
+          postcode: preview.adres?.postcode ?? '',
+          plaats: preview.adres?.plaats ?? '',
+          gemeente: preview.wizardData?.stap2?.gemeente,
+          provincie: preview.wizardData?.stap2?.provincie,
+          ligging: preview.wizardData?.stap2?.ligging,
+          bereikbaarheid: preview.wizardData?.stap2?.bereikbaarheid,
+          coordinaten: preview.coordinaten ?? { lat: 0, lng: 0 },
+        } as AdresLocatie,
+        stap3: {
+          bvo: preview.bvo ?? 0,
+          vvo: preview.wizardData?.stap3?.vvo,
+          perceeloppervlak: preview.wizardData?.stap3?.perceeloppervlak,
+          aantalBouwlagen: preview.wizardData?.stap3?.aantalBouwlagen,
+          bouwjaar: preview.wizardData?.stap3?.bouwjaar,
+          aanbouwen: preview.wizardData?.stap3?.aanbouwen,
+        } as Oppervlaktes,
+        ...(preview.wizardData?.stap4 ? { stap4: preview.wizardData.stap4 } : {}),
         ...(preview.wizardData?.stap5 ? { stap5: preview.wizardData.stap5 } : {}),
         ...(preview.wizardData?.stap6 ? { stap6: preview.wizardData.stap6 } : {}),
         ...(preview.wizardData?.stap7 ? { stap7: preview.wizardData.stap7 } : {}),
-        ...(preview.marktwaarde || preview.bar || preview.nar
-          ? {
-              stap8: {
-                marktwaarde: preview.marktwaarde,
-                bar: preview.bar,
-                nar: preview.nar,
-              } as Waardering,
-            }
-          : {}),
+        stap8: {
+          marktwaarde: preview.marktwaarde ?? 0,
+          bar: preview.bar,
+          nar: preview.nar,
+          methode: preview.wizardData?.stap8?.methode,
+          onderhandseVerkoopwaarde: preview.wizardData?.stap8?.onderhandseVerkoopwaarde,
+          kapitalisatiefactor: preview.wizardData?.stap8?.kapitalisatiefactor,
+          vergelijkingsobjecten: preview.wizardData?.stap8?.vergelijkingsobjecten ?? [],
+        } as Waardering,
         ...(preview.wizardData?.stap9 ? { stap9: preview.wizardData.stap9 } : {}),
       },
     }
@@ -307,135 +309,615 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
             )}
 
             {preview && !isLoading && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <p className="text-sm text-muted-foreground">
                   Controleer en pas de geëxtraheerde gegevens aan voor het opslaan.
                 </p>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-straat">Straatnaam</Label>
-                    <Input
-                      id="prev-straat"
-                      value={preview.adres?.straat ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, straat: e.target.value } }))}
-                    />
+                {/* Stap 1: Algemene gegevens */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Algemene gegevens</h3>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-objectnaam">Objectnaam</Label>
+                      <Input
+                        id="prev-objectnaam"
+                        value={preview.wizardData?.stap1?.objectnaam ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap1: { ...p?.wizardData?.stap1, objectnaam: e.target.value } as AlgemeneGegevens } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-taxateur">Naam taxateur</Label>
+                      <Input
+                        id="prev-taxateur"
+                        value={preview.wizardData?.stap1?.naamTaxateur ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap1: { ...p?.wizardData?.stap1, naamTaxateur: e.target.value } as AlgemeneGegevens } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-type">Type object</Label>
+                      <Select
+                        value={preview.typeObject ?? 'overig'}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, typeObject: v as ObjectType }))}
+                      >
+                        <SelectTrigger id="prev-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="kantoor">Kantoor</SelectItem>
+                          <SelectItem value="bedrijfscomplex">Bedrijfscomplex</SelectItem>
+                          <SelectItem value="bedrijfshal">Bedrijfshal</SelectItem>
+                          <SelectItem value="winkel">Winkel</SelectItem>
+                          <SelectItem value="woning">Woning</SelectItem>
+                          <SelectItem value="appartement">Appartement</SelectItem>
+                          <SelectItem value="overig">Overig</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-gebruiksdoel">Gebruiksdoel</Label>
+                      <Select
+                        value={preview.gebruiksdoel ?? 'overig'}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, gebruiksdoel: v as Gebruiksdoel }))}
+                      >
+                        <SelectTrigger id="prev-gebruiksdoel">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="eigenaar_gebruiker">Eigenaar-gebruiker</SelectItem>
+                          <SelectItem value="verhuurd_belegging">Verhuurd / Belegging</SelectItem>
+                          <SelectItem value="leegstand">Leegstand</SelectItem>
+                          <SelectItem value="overig">Overig</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-peildatum">Waardepeildatum</Label>
+                      <Input
+                        id="prev-peildatum"
+                        type="date"
+                        value={preview.waardepeildatum ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, waardepeildatum: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-inspectiedatum">Inspectiedatum</Label>
+                      <Input
+                        id="prev-inspectiedatum"
+                        type="date"
+                        value={preview.wizardData?.stap1?.inspectiedatum ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap1: { ...p?.wizardData?.stap1, inspectiedatum: e.target.value } as AlgemeneGegevens } }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stap 2: Adres & Locatie */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Adres &amp; Locatie</h3>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-straat">Straatnaam</Label>
+                      <Input
+                        id="prev-straat"
+                        value={preview.adres?.straat ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, straat: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-huisnummer">Huisnummer</Label>
+                      <Input
+                        id="prev-huisnummer"
+                        value={preview.adres?.huisnummer ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, huisnummer: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-postcode">Postcode</Label>
+                      <Input
+                        id="prev-postcode"
+                        value={preview.adres?.postcode ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, postcode: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-plaats">Plaats</Label>
+                      <Input
+                        id="prev-plaats"
+                        value={preview.adres?.plaats ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, plaats: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-gemeente">Gemeente</Label>
+                      <Input
+                        id="prev-gemeente"
+                        value={preview.wizardData?.stap2?.gemeente ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, gemeente: e.target.value } as AdresLocatie } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-provincie">Provincie</Label>
+                      <Input
+                        id="prev-provincie"
+                        value={preview.wizardData?.stap2?.provincie ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, provincie: e.target.value } as AdresLocatie } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-ligging">Ligging</Label>
+                      <Select
+                        value={preview.wizardData?.stap2?.ligging ?? ''}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, ligging: v as Ligging } as AdresLocatie } }))}
+                      >
+                        <SelectTrigger id="prev-ligging">
+                          <SelectValue placeholder="Selecteer ligging" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="binnenstad">Binnenstad</SelectItem>
+                          <SelectItem value="woonwijk">Woonwijk</SelectItem>
+                          <SelectItem value="bedrijventerrein">Bedrijventerrein</SelectItem>
+                          <SelectItem value="buitengebied">Buitengebied</SelectItem>
+                          <SelectItem value="gemengd">Gemengd</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Coördinaten (lat / lng)</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          step="0.000001"
+                          placeholder="Latitude"
+                          value={preview.coordinaten?.lat || ''}
+                          onChange={(e) => setPreview((p) => ({ ...p, coordinaten: { lat: parseFloat(e.target.value) || 0, lng: p?.coordinaten?.lng ?? 0 } }))}
+                        />
+                        <Input
+                          type="number"
+                          step="0.000001"
+                          placeholder="Longitude"
+                          value={preview.coordinaten?.lng || ''}
+                          onChange={(e) => setPreview((p) => ({ ...p, coordinaten: { lat: p?.coordinaten?.lat ?? 0, lng: parseFloat(e.target.value) || 0 } }))}
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="prev-huisnummer">Huisnummer</Label>
-                    <Input
-                      id="prev-huisnummer"
-                      value={preview.adres?.huisnummer ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, huisnummer: e.target.value } }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-postcode">Postcode</Label>
-                    <Input
-                      id="prev-postcode"
-                      value={preview.adres?.postcode ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, postcode: e.target.value } }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-plaats">Plaats</Label>
-                    <Input
-                      id="prev-plaats"
-                      value={preview.adres?.plaats ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, plaats: e.target.value } }))}
+                    <Label htmlFor="prev-bereikbaarheid">Bereikbaarheid</Label>
+                    <Textarea
+                      id="prev-bereikbaarheid"
+                      rows={3}
+                      value={preview.wizardData?.stap2?.bereikbaarheid ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, bereikbaarheid: e.target.value } as AdresLocatie } }))}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-type">Type object</Label>
-                    <Select
-                      value={preview.typeObject ?? 'overig'}
-                      onValueChange={(v) => setPreview((p) => ({ ...p, typeObject: v as ObjectType }))}
-                    >
-                      <SelectTrigger id="prev-type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="kantoor">Kantoor</SelectItem>
-                        <SelectItem value="bedrijfscomplex">Bedrijfscomplex</SelectItem>
-                        <SelectItem value="bedrijfshal">Bedrijfshal</SelectItem>
-                        <SelectItem value="winkel">Winkel</SelectItem>
-                        <SelectItem value="woning">Woning</SelectItem>
-                        <SelectItem value="appartement">Appartement</SelectItem>
-                        <SelectItem value="overig">Overig</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-gebruiksdoel">Gebruiksdoel</Label>
-                    <Select
-                      value={preview.gebruiksdoel ?? 'overig'}
-                      onValueChange={(v) => setPreview((p) => ({ ...p, gebruiksdoel: v as Gebruiksdoel }))}
-                    >
-                      <SelectTrigger id="prev-gebruiksdoel">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="eigenaar_gebruiker">Eigenaar-gebruiker</SelectItem>
-                        <SelectItem value="verhuurd_belegging">Verhuurd / Belegging</SelectItem>
-                        <SelectItem value="leegstand">Leegstand</SelectItem>
-                        <SelectItem value="overig">Overig</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-bvo">BVO (m²)</Label>
-                    <Input
-                      id="prev-bvo"
-                      type="number"
-                      value={preview.bvo ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, bvo: parseFloat(e.target.value) || 0 }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-marktwaarde">Marktwaarde (€)</Label>
-                    <Input
-                      id="prev-marktwaarde"
-                      type="number"
-                      value={preview.marktwaarde ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, marktwaarde: parseFloat(e.target.value) || 0 }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-bar">BAR % (optioneel)</Label>
-                    <Input
-                      id="prev-bar"
-                      type="number"
-                      step="0.01"
-                      value={preview.bar ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, bar: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="prev-nar">NAR % (optioneel)</Label>
-                    <Input
-                      id="prev-nar"
-                      type="number"
-                      step="0.01"
-                      value={preview.nar ?? ''}
-                      onChange={(e) => setPreview((p) => ({ ...p, nar: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                    />
+                {/* Stap 3: Oppervlaktes */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Oppervlaktes</h3>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bvo">BVO (m²)</Label>
+                      <Input
+                        id="prev-bvo"
+                        type="number"
+                        value={preview.bvo ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, bvo: parseFloat(e.target.value) || 0 }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-vvo">VVO (m²)</Label>
+                      <Input
+                        id="prev-vvo"
+                        type="number"
+                        value={preview.wizardData?.stap3?.vvo ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, vvo: parseFloat(e.target.value) || 0 } as Oppervlaktes } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-perceel">Perceeloppervlak (m²)</Label>
+                      <Input
+                        id="prev-perceel"
+                        type="number"
+                        value={preview.wizardData?.stap3?.perceeloppervlak ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, perceeloppervlak: parseFloat(e.target.value) || 0 } as Oppervlaktes } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bouwlagen">Aantal bouwlagen</Label>
+                      <Input
+                        id="prev-bouwlagen"
+                        type="number"
+                        value={preview.wizardData?.stap3?.aantalBouwlagen ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, aantalBouwlagen: parseInt(e.target.value) || 0 } as Oppervlaktes } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bouwjaar">Bouwjaar</Label>
+                      <Input
+                        id="prev-bouwjaar"
+                        type="number"
+                        value={preview.wizardData?.stap3?.bouwjaar ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, bouwjaar: parseInt(e.target.value) || 0 } as Oppervlaktes } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-aanbouwen">Aanbouwen</Label>
+                      <Input
+                        id="prev-aanbouwen"
+                        value={preview.wizardData?.stap3?.aanbouwen ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, aanbouwen: e.target.value } as Oppervlaktes } }))}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="prev-peildatum">Waardepeildatum</Label>
-                  <Input
-                    id="prev-peildatum"
-                    type="date"
-                    value={preview.waardepeildatum ?? ''}
-                    onChange={(e) => setPreview((p) => ({ ...p, waardepeildatum: e.target.value }))}
-                  />
+                {/* Stap 4: Huurgegevens */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Huurgegevens</h3>
+                  <Separator />
+                  <div className="flex items-center gap-2 mb-2">
+                    <Checkbox
+                      id="prev-verhuurd"
+                      checked={preview.wizardData?.stap4?.verhuurd ?? false}
+                      onCheckedChange={(checked) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap4: { ...p?.wizardData?.stap4, verhuurd: !!checked } as Huurgegevens } }))}
+                    />
+                    <Label htmlFor="prev-verhuurd">Verhuurd</Label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-huurder">Huurder</Label>
+                      <Input
+                        id="prev-huurder"
+                        value={preview.wizardData?.stap4?.huurder ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap4: { ...p?.wizardData?.stap4, huurder: e.target.value } as Huurgegevens } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-huurprijs">Huurprijs per jaar (€)</Label>
+                      <Input
+                        id="prev-huurprijs"
+                        type="number"
+                        value={preview.wizardData?.stap4?.huurprijsPerJaar ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap4: { ...p?.wizardData?.stap4, huurprijsPerJaar: parseFloat(e.target.value) || undefined } as Huurgegevens } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-markthuur">Markthuur per jaar (€)</Label>
+                      <Input
+                        id="prev-markthuur"
+                        type="number"
+                        value={preview.wizardData?.stap4?.markthuurPerJaar ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap4: { ...p?.wizardData?.stap4, markthuurPerJaar: parseFloat(e.target.value) || undefined } as Huurgegevens } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-contracttype">Contracttype</Label>
+                      <Input
+                        id="prev-contracttype"
+                        value={preview.wizardData?.stap4?.contracttype ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap4: { ...p?.wizardData?.stap4, contracttype: e.target.value } as Huurgegevens } }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stap 5: Juridische Info */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Juridische informatie</h3>
+                  <Separator />
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-eigendom">Eigendomssituatie</Label>
+                      <Textarea
+                        id="prev-eigendom"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.eigendomssituatie ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, eigendomssituatie: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-erfpacht">Erfpacht</Label>
+                      <Textarea
+                        id="prev-erfpacht"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.erfpacht ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, erfpacht: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-zakelijkerechten">Zakelijke rechten</Label>
+                      <Textarea
+                        id="prev-zakelijkerechten"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.zakelijkeRechten ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, zakelijkeRechten: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bestemmingsplan">Bestemmingsplan</Label>
+                      <Textarea
+                        id="prev-bestemmingsplan"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.bestemmingsplan ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, bestemmingsplan: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stap 6: Technische Staat */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Technische staat</h3>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-exterieur">Exterieur staat</Label>
+                      <Select
+                        value={preview.wizardData?.stap6?.exterieurStaat ?? ''}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, exterieurStaat: v as Onderhoudsstaat } as TechnischeStaat } }))}
+                      >
+                        <SelectTrigger id="prev-exterieur">
+                          <SelectValue placeholder="Selecteer staat" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="uitstekend">Uitstekend</SelectItem>
+                          <SelectItem value="goed">Goed</SelectItem>
+                          <SelectItem value="redelijk">Redelijk</SelectItem>
+                          <SelectItem value="matig">Matig</SelectItem>
+                          <SelectItem value="slecht">Slecht</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-interieur">Interieur staat</Label>
+                      <Select
+                        value={preview.wizardData?.stap6?.interieurStaat ?? ''}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, interieurStaat: v as Onderhoudsstaat } as TechnischeStaat } }))}
+                      >
+                        <SelectTrigger id="prev-interieur">
+                          <SelectValue placeholder="Selecteer staat" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="uitstekend">Uitstekend</SelectItem>
+                          <SelectItem value="goed">Goed</SelectItem>
+                          <SelectItem value="redelijk">Redelijk</SelectItem>
+                          <SelectItem value="matig">Matig</SelectItem>
+                          <SelectItem value="slecht">Slecht</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-fundering">Fundering</Label>
+                      <Input
+                        id="prev-fundering"
+                        value={preview.wizardData?.stap6?.fundering ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, fundering: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-dak">Dakbedekking</Label>
+                      <Input
+                        id="prev-dak"
+                        value={preview.wizardData?.stap6?.dakbedekking ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, dakbedekking: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-installaties">Installaties</Label>
+                      <Input
+                        id="prev-installaties"
+                        value={preview.wizardData?.stap6?.installaties ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, installaties: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-onderhoudskosten">Onderhoudskosten per jaar (€)</Label>
+                      <Input
+                        id="prev-onderhoudskosten"
+                        type="number"
+                        value={preview.wizardData?.stap6?.onderhoudskosten ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, onderhoudskosten: parseFloat(e.target.value) || 0 } as TechnischeStaat } }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="prev-achterstallig"
+                      checked={preview.wizardData?.stap6?.achterstalligOnderhoud ?? false}
+                      onCheckedChange={(checked) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, achterstalligOnderhoud: !!checked } as TechnischeStaat } }))}
+                    />
+                    <Label htmlFor="prev-achterstallig">Achterstallig onderhoud</Label>
+                  </div>
+                  {preview.wizardData?.stap6?.achterstalligOnderhoud && (
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-achterstallig-beschrijving">Beschrijving achterstallig onderhoud</Label>
+                      <Textarea
+                        id="prev-achterstallig-beschrijving"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.achterstalligOnderhoudBeschrijving ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, achterstalligOnderhoudBeschrijving: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Stap 7: Vergunningen */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Vergunningen &amp; duurzaamheid</h3>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-energielabel">Energielabel</Label>
+                      <Select
+                        value={preview.wizardData?.stap7?.energielabel ?? ''}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap7: { ...p?.wizardData?.stap7, energielabel: v as Energielabel } as Vergunningen } }))}
+                      >
+                        <SelectTrigger id="prev-energielabel">
+                          <SelectValue placeholder="Selecteer label" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(['A++++', 'A+++', 'A++', 'A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G'] as Energielabel[]).map((l) => (
+                            <SelectItem key={l} value={l}>{l}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-asbest">Asbest</Label>
+                      <Select
+                        value={preview.wizardData?.stap7?.asbest ?? ''}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap7: { ...p?.wizardData?.stap7, asbest: v as 'ja' | 'nee' | 'onbekend' } as Vergunningen } }))}
+                      >
+                        <SelectTrigger id="prev-asbest">
+                          <SelectValue placeholder="Selecteer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ja">Ja</SelectItem>
+                          <SelectItem value="nee">Nee</SelectItem>
+                          <SelectItem value="onbekend">Onbekend</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bodem">Bodemverontreiniging</Label>
+                      <Select
+                        value={preview.wizardData?.stap7?.bodemverontreiniging ?? ''}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap7: { ...p?.wizardData?.stap7, bodemverontreiniging: v as 'ja' | 'nee' | 'onbekend' } as Vergunningen } }))}
+                      >
+                        <SelectTrigger id="prev-bodem">
+                          <SelectValue placeholder="Selecteer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ja">Ja</SelectItem>
+                          <SelectItem value="nee">Nee</SelectItem>
+                          <SelectItem value="onbekend">Onbekend</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-toelichting-verg">Toelichting</Label>
+                    <Textarea
+                      id="prev-toelichting-verg"
+                      rows={2}
+                      value={preview.wizardData?.stap7?.toelichting ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap7: { ...p?.wizardData?.stap7, toelichting: e.target.value } as Vergunningen } }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Stap 8: Waardering */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Waardering</h3>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-methode">Waarderingsmethode</Label>
+                      <Select
+                        value={preview.wizardData?.stap8?.methode ?? ''}
+                        onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap8: { ...p?.wizardData?.stap8, methode: v as WaarderingsMethode } as Waardering } }))}
+                      >
+                        <SelectTrigger id="prev-methode">
+                          <SelectValue placeholder="Selecteer methode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vergelijkingsmethode">Vergelijkingsmethode</SelectItem>
+                          <SelectItem value="BAR_NAR">BAR/NAR</SelectItem>
+                          <SelectItem value="DCF">DCF</SelectItem>
+                          <SelectItem value="kostenmethode">Kostenmethode</SelectItem>
+                          <SelectItem value="combinatie">Combinatie</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-marktwaarde">Marktwaarde (€)</Label>
+                      <Input
+                        id="prev-marktwaarde"
+                        type="number"
+                        value={preview.marktwaarde ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, marktwaarde: parseFloat(e.target.value) || 0 }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-ovw">Onderhandse verkoopwaarde (€)</Label>
+                      <Input
+                        id="prev-ovw"
+                        type="number"
+                        value={preview.wizardData?.stap8?.onderhandseVerkoopwaarde ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap8: { ...p?.wizardData?.stap8, onderhandseVerkoopwaarde: parseFloat(e.target.value) || 0 } as Waardering } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bar">BAR % (optioneel)</Label>
+                      <Input
+                        id="prev-bar"
+                        type="number"
+                        step="0.01"
+                        value={preview.bar ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, bar: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-nar">NAR % (optioneel)</Label>
+                      <Input
+                        id="prev-nar"
+                        type="number"
+                        step="0.01"
+                        value={preview.nar ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, nar: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-kapfac">Kapitalisatiefactor</Label>
+                      <Input
+                        id="prev-kapfac"
+                        type="number"
+                        step="0.01"
+                        value={preview.wizardData?.stap8?.kapitalisatiefactor ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap8: { ...p?.wizardData?.stap8, kapitalisatiefactor: e.target.value ? parseFloat(e.target.value) : undefined } as Waardering } }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stap 9: Aannames */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">Aannames &amp; voorbehouden</h3>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-aannames">Aannames</Label>
+                      <Textarea
+                        id="prev-aannames"
+                        rows={3}
+                        value={preview.wizardData?.stap9?.aannames ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, aannames: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-voorbehouden">Voorbehouden</Label>
+                      <Textarea
+                        id="prev-voorbehouden"
+                        rows={3}
+                        value={preview.wizardData?.stap9?.voorbehouden ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, voorbehouden: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bijzonder">Bijzondere omstandigheden</Label>
+                      <Textarea
+                        id="prev-bijzonder"
+                        rows={3}
+                        value={preview.wizardData?.stap9?.bijzondereOmstandigheden ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, bijzondereOmstandigheden: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

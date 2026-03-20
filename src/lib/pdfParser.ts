@@ -100,7 +100,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const lowerText = text.toLowerCase()
 
   // --- Stap 1: Algemene Gegevens ---
-  const stap1objectnaam = extractSectionAfterKeyword(text, ['objectnaam', 'object:', 'pand:'], 100)
+  const stap1objectnaam = extractSectionAfterKeyword(text, ['objectnaam', 'object:', 'pand:', 'objectomschrijving'], 100)
 
   const stap1naamTaxateur = extractSectionAfterKeyword(text, [
     'taxateur:',
@@ -117,9 +117,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap1inspectiedatum = stap1inspectiedatumRaw ? parseDatum(stap1inspectiedatumRaw) : undefined
 
   // --- Stap 2: Adres & Locatie ---
-  const stap2gemeente = extractSectionAfterKeyword(text, ['gemeente:'], 80)
+  const stap2gemeente = extractSectionAfterKeyword(text, ['gemeente:', 'gemeente'], 80)
 
-  const stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 80)
+  const stap2provincie = extractSectionAfterKeyword(text, ['provincie:', 'provincie'], 80)
 
   const LIGGING_VALUES: Ligging[] = ['binnenstad', 'woonwijk', 'bedrijventerrein', 'buitengebied', 'gemengd']
   let stap2ligging: Ligging | undefined

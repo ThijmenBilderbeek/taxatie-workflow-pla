@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
-import type { Dossier, HistorischRapport, ObjectType, Gebruiksdoel } from '../types'
+import type { Dossier, HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Onderhoudsstaat, Energielabel, WaarderingsMethode } from '../types'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -97,6 +97,39 @@ function extractSectionAfterKeyword(
  * This is best-effort: missing sections simply return undefined.
  */
 export function extractWizardDataFromText(text: string): Partial<Dossier> {
+  const lowerText = text.toLowerCase()
+
+  // --- Stap 1: Algemene Gegevens ---
+  const stap1objectnaam = extractSectionAfterKeyword(text, ['objectnaam', 'object:', 'pand:'], 100)
+
+  const stap1naamTaxateur = extractSectionAfterKeyword(text, [
+    'taxateur:',
+    'beëdigd taxateur',
+    'getaxeerd door',
+    'naam taxateur',
+  ], 100)
+
+  const stap1inspectiedatumRaw = extractSectionAfterKeyword(text, [
+    'inspectiedatum',
+    'datum inspectie',
+    'opnamedatum',
+  ], 30)
+  const stap1inspectiedatum = stap1inspectiedatumRaw ? parseDatum(stap1inspectiedatumRaw) : undefined
+
+  // --- Stap 2: Adres & Locatie ---
+  const stap2gemeente = extractSectionAfterKeyword(text, ['gemeente:'], 80)
+
+  const stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 80)
+
+  const LIGGING_VALUES: Ligging[] = ['binnenstad', 'woonwijk', 'bedrijventerrein', 'buitengebied', 'gemengd']
+  let stap2ligging: Ligging | undefined
+  for (const val of LIGGING_VALUES) {
+    if (lowerText.includes(val)) {
+      stap2ligging = val
+      break
+    }
+  }
+
   const stap2bereikbaarheid = extractSectionAfterKeyword(text, [
     'bereikbaarheid',
     'ontsluiting',
@@ -106,6 +139,92 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'snelweg',
   ])
 
+  // --- Stap 3: Oppervlaktes ---
+  const vvoMatch = text.match(/(?:VVO|verhuurbaar vloeroppervlak)[:\s]+([0-9]{1,6}[.,]?[0-9]*)\s*m[²2]?/i)
+  const stap3vvo = vvoMatch ? parseNumber(vvoMatch[1]) : undefined
+
+  const perceelMatch = text.match(/(?:perceeloppervlak|kaveloppervlak|perceel[:\s])[:\s]+([0-9]{1,6}[.,]?[0-9]*)\s*m[²2]?/i)
+  const stap3perceeloppervlak = perceelMatch ? parseNumber(perceelMatch[1]) : undefined
+
+  const bouwlagenMatch = text.match(/(?:bouwlagen|verdiepingen|lagen)[:\s]+([0-9]{1,2})/i)
+  const stap3aantalBouwlagen = bouwlagenMatch ? parseInt(bouwlagenMatch[1], 10) : undefined
+
+  const bouwjaarMatch = text.match(/(?:bouwjaar|gebouwd in|jaar van oplevering)[:\s]+([0-9]{4})/i)
+  const stap3bouwjaar = bouwjaarMatch ? parseInt(bouwjaarMatch[1], 10) : undefined
+
+  const stap3aanbouwen = extractSectionAfterKeyword(text, ['aanbouw', 'uitbreiding', 'bijgebouw'], 200)
+
+  // --- Stap 4: Huurgegevens ---
+  const huurprijsMatch = text.match(/(?:huurprijs|jaarhuur|huur per jaar)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i)
+  const stap4huurprijsPerJaar = huurprijsMatch ? parseNumber(huurprijsMatch[1]) : undefined
+
+  const markthuurMatch = text.match(/(?:markthuur)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i)
+  const stap4markthuurPerJaar = markthuurMatch ? parseNumber(markthuurMatch[1]) : undefined
+
+  const stap4contracttype = extractSectionAfterKeyword(text, ['huurovereenkomst', 'contracttype', 'roz'], 100)
+
+  const stap4huurder = extractSectionAfterKeyword(text, ['huurder:'], 100)
+
+  const stap4verhuurd = lowerText.includes('verhuurd') || stap4huurder !== undefined || stap4huurprijsPerJaar !== undefined
+
+  // --- Stap 6: Technische Staat ---
+  const ONDERHOUD_VALUES: Onderhoudsstaat[] = ['uitstekend', 'goed', 'redelijk', 'matig', 'slecht']
+
+  let stap6exterieurStaat: Onderhoudsstaat | undefined
+  const exterieurIdx = lowerText.indexOf('exterieur')
+  if (exterieurIdx !== -1) {
+    const exterieurContext = lowerText.slice(exterieurIdx, exterieurIdx + 100)
+    for (const val of ONDERHOUD_VALUES) {
+      if (exterieurContext.includes(val)) {
+        stap6exterieurStaat = val
+        break
+      }
+    }
+  }
+
+  let stap6interieurStaat: Onderhoudsstaat | undefined
+  const interieurIdx = lowerText.indexOf('interieur')
+  if (interieurIdx !== -1) {
+    const interieurContext = lowerText.slice(interieurIdx, interieurIdx + 100)
+    for (const val of ONDERHOUD_VALUES) {
+      if (interieurContext.includes(val)) {
+        stap6interieurStaat = val
+        break
+      }
+    }
+  }
+
+  const onderhoudskostenMatch = text.match(/(?:onderhoudskosten|onderhoud per jaar)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i)
+  const stap6onderhoudskosten = onderhoudskostenMatch ? parseNumber(onderhoudskostenMatch[1]) : undefined
+
+  const stap6fundering = extractSectionAfterKeyword(text, [
+    'fundering',
+    'funderingstype',
+    'funderingssituatie',
+  ])
+
+  const stap6dakbedekking = extractSectionAfterKeyword(text, [
+    'dakbedekking',
+    'daktype',
+    'dak:',
+    'dakconstruct',
+  ])
+
+  const stap6installaties = extractSectionAfterKeyword(text, [
+    'installaties',
+    'installatie:',
+    'klimaatinstallatie',
+    'verwarmingssysteem',
+    'technische installaties',
+  ])
+
+  const stap6achterstallig = extractSectionAfterKeyword(text, [
+    'achterstallig onderhoud',
+    'achterstalligonderhoud',
+    'onderhoudstoestand',
+  ])
+
+  // --- Stap 5: Juridische Info ---
   const stap5eigendomssituatie = extractSectionAfterKeyword(text, [
     'eigendomssituatie',
     'eigendomsvorm',
@@ -137,32 +256,39 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'planologische bestemming',
   ])
 
-  const stap6fundering = extractSectionAfterKeyword(text, [
-    'fundering',
-    'funderingstype',
-    'funderingssituatie',
-  ])
+  // --- Stap 7: Vergunningen ---
+  let stap7energielabel: Energielabel | undefined
+  const energielabelMatch = text.match(/energielabel[:\s]+([A-G][+]{0,4})/i)
+  if (energielabelMatch) {
+    stap7energielabel = energielabelMatch[1] as Energielabel
+  }
 
-  const stap6dakbedekking = extractSectionAfterKeyword(text, [
-    'dakbedekking',
-    'daktype',
-    'dak:',
-    'dakconstruct',
-  ])
+  let stap7asbest: 'ja' | 'nee' | 'onbekend' | undefined
+  const asbestIdx = lowerText.indexOf('asbest')
+  if (asbestIdx !== -1) {
+    const asbestContext = lowerText.slice(asbestIdx, asbestIdx + 150)
+    if (asbestContext.includes('aanwezig') || asbestContext.includes('ja') || asbestContext.includes('vastgesteld')) {
+      stap7asbest = 'ja'
+    } else if (asbestContext.includes('niet aanwezig') || asbestContext.includes('nee') || asbestContext.includes('geen asbest')) {
+      stap7asbest = 'nee'
+    } else if (asbestContext.includes('onbekend') || asbestContext.includes('niet onderzocht')) {
+      stap7asbest = 'onbekend'
+    }
+  }
 
-  const stap6installaties = extractSectionAfterKeyword(text, [
-    'installaties',
-    'installatie:',
-    'klimaatinstallatie',
-    'verwarmingssysteem',
-    'technische installaties',
-  ])
-
-  const stap6achterstallig = extractSectionAfterKeyword(text, [
-    'achterstallig onderhoud',
-    'achterstalligonderhoud',
-    'onderhoudstoestand',
-  ])
+  let stap7bodemverontreiniging: 'ja' | 'nee' | 'onbekend' | undefined
+  let bodemIdx = lowerText.indexOf('bodemverontreiniging')
+  if (bodemIdx === -1) bodemIdx = lowerText.indexOf('bodemkwaliteit')
+  if (bodemIdx !== -1) {
+    const bodemContext = lowerText.slice(bodemIdx, bodemIdx + 150)
+    if (bodemContext.includes('aanwezig') || bodemContext.includes('verontreinigd') || bodemContext.includes('ja')) {
+      stap7bodemverontreiniging = 'ja'
+    } else if (bodemContext.includes('niet aanwezig') || bodemContext.includes('schoon') || bodemContext.includes('nee')) {
+      stap7bodemverontreiniging = 'nee'
+    } else if (bodemContext.includes('onbekend') || bodemContext.includes('niet onderzocht')) {
+      stap7bodemverontreiniging = 'onbekend'
+    }
+  }
 
   const stap7toelichting = extractSectionAfterKeyword(text, [
     'toelichting vergunningen',
@@ -172,6 +298,35 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'asbest toelichting',
   ])
 
+  // --- Stap 8: Waardering ---
+  const WAARDERINGSMETHODEN: { keyword: string; value: WaarderingsMethode }[] = [
+    { keyword: 'vergelijkingsmethode', value: 'vergelijkingsmethode' },
+    { keyword: 'bar/nar', value: 'BAR_NAR' },
+    { keyword: 'bar-nar', value: 'BAR_NAR' },
+    { keyword: 'dcf', value: 'DCF' },
+    { keyword: 'discounted cash flow', value: 'DCF' },
+    { keyword: 'kostenmethode', value: 'kostenmethode' },
+    { keyword: 'combinatie', value: 'combinatie' },
+  ]
+  let stap8methode: WaarderingsMethode | undefined
+  const methodeIdx = lowerText.search(/waarderingsmethode|taxatiemethode/)
+  if (methodeIdx !== -1) {
+    const methodeContext = lowerText.slice(methodeIdx, methodeIdx + 100)
+    for (const { keyword, value } of WAARDERINGSMETHODEN) {
+      if (methodeContext.includes(keyword)) {
+        stap8methode = value
+        break
+      }
+    }
+  }
+
+  const ovwMatch = text.match(/onderhandse verkoopwaarde[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i)
+  const stap8onderhandseVerkoopwaarde = ovwMatch ? parseNumber(ovwMatch[1]) : undefined
+
+  const kapFacMatch = text.match(/kapitalisatiefactor[:\s]+([0-9]{1,2}[.,][0-9]{1,2})/i)
+  const stap8kapitalisatiefactor = kapFacMatch ? parseNumber(kapFacMatch[1]) : undefined
+
+  // --- Stap 9: Aannames ---
   const stap9aannames = extractSectionAfterKeyword(text, [
     'aannames',
     'aanname:',
@@ -190,11 +345,43 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'bijzonderheden',
   ])
 
+  // --- Build wizardData ---
   const wizardData: Partial<Dossier> = {}
 
-  if (stap2bereikbaarheid) {
-    wizardData.stap2 = { bereikbaarheid: stap2bereikbaarheid } as Dossier['stap2']
+  const stap1Fields: Partial<NonNullable<Dossier['stap1']>> = {}
+  if (stap1objectnaam) stap1Fields.objectnaam = stap1objectnaam
+  if (stap1naamTaxateur) stap1Fields.naamTaxateur = stap1naamTaxateur
+  if (stap1inspectiedatum) stap1Fields.inspectiedatum = stap1inspectiedatum
+  if (Object.keys(stap1Fields).length > 0) {
+    wizardData.stap1 = stap1Fields as Dossier['stap1']
   }
+
+  const stap2Fields: Partial<NonNullable<Dossier['stap2']>> = {}
+  if (stap2bereikbaarheid) stap2Fields.bereikbaarheid = stap2bereikbaarheid
+  if (stap2gemeente) stap2Fields.gemeente = stap2gemeente
+  if (stap2provincie) stap2Fields.provincie = stap2provincie
+  if (stap2ligging) stap2Fields.ligging = stap2ligging
+  if (Object.keys(stap2Fields).length > 0) {
+    wizardData.stap2 = stap2Fields as Dossier['stap2']
+  }
+
+  const stap3Fields: Partial<NonNullable<Dossier['stap3']>> = {}
+  if (stap3vvo !== undefined) stap3Fields.vvo = stap3vvo
+  if (stap3perceeloppervlak !== undefined) stap3Fields.perceeloppervlak = stap3perceeloppervlak
+  if (stap3aantalBouwlagen !== undefined) stap3Fields.aantalBouwlagen = stap3aantalBouwlagen
+  if (stap3bouwjaar !== undefined) stap3Fields.bouwjaar = stap3bouwjaar
+  if (stap3aanbouwen) stap3Fields.aanbouwen = stap3aanbouwen
+  if (Object.keys(stap3Fields).length > 0) {
+    wizardData.stap3 = stap3Fields as Dossier['stap3']
+  }
+
+  const stap4Fields: Partial<NonNullable<Dossier['stap4']>> = {}
+  stap4Fields.verhuurd = stap4verhuurd
+  if (stap4huurder) stap4Fields.huurder = stap4huurder
+  if (stap4huurprijsPerJaar !== undefined) stap4Fields.huurprijsPerJaar = stap4huurprijsPerJaar
+  if (stap4markthuurPerJaar !== undefined) stap4Fields.markthuurPerJaar = stap4markthuurPerJaar
+  if (stap4contracttype) stap4Fields.contracttype = stap4contracttype
+  wizardData.stap4 = stap4Fields as Dossier['stap4']
 
   const stap5Fields: Partial<NonNullable<Dossier['stap5']>> = {}
   if (stap5eigendomssituatie) stap5Fields.eigendomssituatie = stap5eigendomssituatie
@@ -211,12 +398,28 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap6dakbedekking) stap6Fields.dakbedekking = stap6dakbedekking
   if (stap6installaties) stap6Fields.installaties = stap6installaties
   if (stap6achterstallig) stap6Fields.achterstalligOnderhoudBeschrijving = stap6achterstallig
+  if (stap6exterieurStaat) stap6Fields.exterieurStaat = stap6exterieurStaat
+  if (stap6interieurStaat) stap6Fields.interieurStaat = stap6interieurStaat
+  if (stap6onderhoudskosten !== undefined) stap6Fields.onderhoudskosten = stap6onderhoudskosten
   if (Object.keys(stap6Fields).length > 0) {
     wizardData.stap6 = stap6Fields as Dossier['stap6']
   }
 
-  if (stap7toelichting) {
-    wizardData.stap7 = { toelichting: stap7toelichting } as Dossier['stap7']
+  const stap7Fields: Partial<NonNullable<Dossier['stap7']>> = {}
+  if (stap7toelichting) stap7Fields.toelichting = stap7toelichting
+  if (stap7energielabel) stap7Fields.energielabel = stap7energielabel
+  if (stap7asbest) stap7Fields.asbest = stap7asbest
+  if (stap7bodemverontreiniging) stap7Fields.bodemverontreiniging = stap7bodemverontreiniging
+  if (Object.keys(stap7Fields).length > 0) {
+    wizardData.stap7 = stap7Fields as Dossier['stap7']
+  }
+
+  const stap8Fields: Partial<NonNullable<Dossier['stap8']>> = {}
+  if (stap8methode) stap8Fields.methode = stap8methode
+  if (stap8onderhandseVerkoopwaarde !== undefined) stap8Fields.onderhandseVerkoopwaarde = stap8onderhandseVerkoopwaarde
+  if (stap8kapitalisatiefactor !== undefined) stap8Fields.kapitalisatiefactor = stap8kapitalisatiefactor
+  if (Object.keys(stap8Fields).length > 0) {
+    wizardData.stap8 = stap8Fields as Dossier['stap8']
   }
 
   const stap9Fields: Partial<NonNullable<Dossier['stap9']>> = {}

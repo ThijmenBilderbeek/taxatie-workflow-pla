@@ -4,6 +4,7 @@ import { Trash } from '@phosphor-icons/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
+import { Checkbox } from './ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -14,6 +15,7 @@ import {
 } from './ui/dialog'
 import type { Dossier, HistorischRapport } from '../types'
 import { formatDatum, formatBedrag } from '../lib/fluxFormatter'
+import { cn } from '../lib/utils'
 
 interface DashboardProps {
   dossiers: Dossier[]
@@ -30,8 +32,33 @@ export function Dashboard({
   onOpenDossier,
   onDeleteDossier,
 }: DashboardProps) {
-  const [teVerwijderenId, setTeVerwijderenId] = useState<string | null>(null)
-  const teVerwijderenDossier = dossiers.find((d) => d.id === teVerwijderenId)
+  const [selectieModus, setSelectieModus] = useState(false)
+  const [geselecteerdeIds, setGeselecteerdeIds] = useState<Set<string>>(new Set())
+  const [toonBevestigDialog, setToonBevestigDialog] = useState(false)
+
+  const toggleSelectie = (id: string) => {
+    setGeselecteerdeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const annuleerSelectie = () => {
+    setSelectieModus(false)
+    setGeselecteerdeIds(new Set())
+  }
+
+  const bevestigVerwijderen = () => {
+    geselecteerdeIds.forEach((id) => onDeleteDossier(id))
+    setGeselecteerdeIds(new Set())
+    setSelectieModus(false)
+    setToonBevestigDialog(false)
+  }
 
   const getStatusBadge = (status: Dossier['status']) => {
     const variants = {
@@ -63,10 +90,41 @@ export function Dashboard({
           <h2 className="text-3xl font-semibold">Dashboard</h2>
           <p className="text-muted-foreground">Overzicht van uw taxaties</p>
         </div>
-        <Button onClick={onCreateDossier} size="lg" className="gap-2">
-          <Plus className="h-5 w-5" />
-          Nieuw Dossier
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectieModus ? (
+            <>
+              <Button
+                variant="destructive"
+                size="lg"
+                className="gap-2"
+                disabled={geselecteerdeIds.size === 0}
+                onClick={() => setToonBevestigDialog(true)}
+              >
+                <Trash className="h-5 w-5" />
+                Bevestig verwijderen ({geselecteerdeIds.size})
+              </Button>
+              <Button variant="outline" size="lg" onClick={annuleerSelectie}>
+                Annuleren
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="destructive"
+                size="lg"
+                className="gap-2"
+                onClick={() => setSelectieModus(true)}
+              >
+                <Trash className="h-5 w-5" />
+                Verwijderen
+              </Button>
+              <Button onClick={onCreateDossier} size="lg" className="gap-2">
+                <Plus className="h-5 w-5" />
+                Nieuw Dossier
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -136,14 +194,30 @@ export function Dashboard({
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {dossiers.map((dossier) => (
+            {dossiers.map((dossier) => {
+              const isGeselecteerd = geselecteerdeIds.has(dossier.id)
+              return (
               <Card
                 key={dossier.id}
-                className="cursor-pointer hover:shadow-lg transition-shadow"
-                onClick={() => onOpenDossier(dossier.id)}
+                className={cn('cursor-pointer hover:shadow-lg transition-shadow', selectieModus && isGeselecteerd && 'ring-2 ring-destructive')}
+                onClick={() => {
+                  if (selectieModus) {
+                    toggleSelectie(dossier.id)
+                  } else {
+                    onOpenDossier(dossier.id)
+                  }
+                }}
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">
+                    {selectieModus && (
+                      <Checkbox
+                        checked={isGeselecteerd}
+                        onCheckedChange={() => toggleSelectie(dossier.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 mr-2"
+                      />
+                    )}
                     <div className="flex-1">
                       <CardTitle className="text-base">
                         {dossier.stap1?.objectnaam || 'Naamloos object'}
@@ -179,53 +253,34 @@ export function Dashboard({
                     <div className="text-xs text-muted-foreground pt-2 border-t">
                       Bijgewerkt: {formatDatum(dossier.updatedAt)}
                     </div>
-                    <div className="flex justify-end pt-1">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setTeVerwijderenId(dossier.id)
-                        }}
-                      >
-                        <Trash className="h-4 w-4" />
-                        Verwijderen
-                      </Button>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
 
       <Dialog
-        open={teVerwijderenId !== null}
-        onOpenChange={(open) => !open && setTeVerwijderenId(null)}
+        open={toonBevestigDialog}
+        onOpenChange={(open) => !open && setToonBevestigDialog(false)}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Dossier verwijderen?</DialogTitle>
+            <DialogTitle>Dossier(s) verwijderen?</DialogTitle>
             <DialogDescription>
-              Weet je zeker dat je dossier{' '}
-              <strong>{teVerwijderenDossier?.dossiernummer}</strong> wilt verwijderen?
+              Weet je zeker dat je {geselecteerdeIds.size} dossier{geselecteerdeIds.size !== 1 ? 's' : ''} wilt verwijderen?
               Dit kan niet ongedaan worden gemaakt.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTeVerwijderenId(null)}>
+            <Button variant="outline" onClick={() => setToonBevestigDialog(false)}>
               Annuleren
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                if (teVerwijderenId) {
-                  onDeleteDossier(teVerwijderenId)
-                }
-                setTeVerwijderenId(null)
-              }}
+              onClick={bevestigVerwijderen}
             >
               Verwijderen
             </Button>

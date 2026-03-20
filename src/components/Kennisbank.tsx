@@ -283,7 +283,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       </div>
 
       <Dialog open={showUploadDialog} onOpenChange={(open) => { if (!open) handleCloseDialog() }}>
-        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col">
+        <DialogContent className="sm:max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle>Taxatierapport uploaden als PDF</DialogTitle>
           </DialogHeader>
@@ -964,7 +964,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       </Dialog>
 
       <Dialog open={!!bewerkRapport} onOpenChange={(open) => { if (!open) handleCloseBewerkDialog() }}>
-        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col">
+        <DialogContent className="sm:max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle>Rapport bewerken</DialogTitle>
           </DialogHeader>

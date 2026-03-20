@@ -61,6 +61,7 @@ export interface Oppervlaktes {
   perceeloppervlak: number
   aantalBouwlagen: number
   bouwjaar: number
+  renovatiejaar?: number
   aanbouwen: string
 }
 
@@ -204,6 +205,13 @@ export interface HistorischRapport {
   waardepeildatum: string
   rapportTeksten: Record<string, string>
   wizardData: Partial<Dossier>
+  extractionDebug?: Record<string, {
+    value: unknown
+    confidence: 'high' | 'medium' | 'low'
+    sourceLabel: string
+    sourceSnippet: string
+    sourceSection?: string
+  }>
 }
 
 export interface SimilarityInstellingen {

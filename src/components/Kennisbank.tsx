@@ -14,6 +14,7 @@ import { Textarea } from './ui/textarea'
 import { Separator } from './ui/separator'
 import { toast } from 'sonner'
 import { parsePdfToRapport } from '../lib/pdfParser'
+import type { ExtractionDebugRecord } from '../lib/pdfFieldExtractors'
 
 interface KennisbankProps {
   historischeRapporten: HistorischRapport[]
@@ -31,6 +32,8 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [preview, setPreview] = useState<Partial<HistorischRapport> | null>(null)
+  const [extractionDebug, setExtractionDebug] = useState<ExtractionDebugRecord>({})
+  const [fieldSuggestions, setFieldSuggestions] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Selectie-modus state
@@ -82,7 +85,60 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     setIsLoading(true)
     try {
       const parsed = await parsePdfToRapport(file)
-      setPreview(parsed)
+      const debug = (parsed.extractionDebug ?? {}) as ExtractionDebugRecord
+      setExtractionDebug(debug)
+
+      // For low-confidence fields: clear the value and store as placeholder suggestion
+      const suggestions: Record<string, string> = {}
+      let mutable: Partial<HistorischRapport> = { ...parsed }
+
+      const clearIfLow = (
+        key: string,
+        getValue: () => unknown,
+        applyMutation: (p: Partial<HistorischRapport>) => Partial<HistorischRapport>
+      ) => {
+        if (debug[key]?.confidence === 'low') {
+          const raw = getValue()
+          if (raw !== undefined && raw !== null && raw !== '') {
+            suggestions[key] = String(raw)
+            mutable = applyMutation(mutable)
+          }
+        }
+      }
+
+      clearIfLow(
+        'naamTaxateur',
+        () => parsed.wizardData?.stap1?.naamTaxateur,
+        (p) => ({ ...p, wizardData: { ...p.wizardData, stap1: { ...p.wizardData?.stap1, naamTaxateur: '' } as AlgemeneGegevens } })
+      )
+      clearIfLow(
+        'gemeente',
+        () => parsed.wizardData?.stap2?.gemeente,
+        (p) => ({ ...p, wizardData: { ...p.wizardData, stap2: { ...p.wizardData?.stap2, gemeente: '' } as AdresLocatie } })
+      )
+      clearIfLow(
+        'provincie',
+        () => parsed.wizardData?.stap2?.provincie,
+        (p) => ({ ...p, wizardData: { ...p.wizardData, stap2: { ...p.wizardData?.stap2, provincie: '' } as AdresLocatie } })
+      )
+      clearIfLow(
+        'marktwaarde',
+        () => parsed.marktwaarde,
+        (p) => ({ ...p, marktwaarde: 0 })
+      )
+      clearIfLow(
+        'bar',
+        () => parsed.bar,
+        (p) => ({ ...p, bar: undefined })
+      )
+      clearIfLow(
+        'nar',
+        () => parsed.nar,
+        (p) => ({ ...p, nar: undefined })
+      )
+
+      setFieldSuggestions(suggestions)
+      setPreview(mutable)
     } catch {
       toast.error('Kon de PDF niet uitlezen. Probeer een ander bestand.')
     } finally {
@@ -161,6 +217,8 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   const handleCloseDialog = () => {
     setShowUploadDialog(false)
     setPreview(null)
+    setExtractionDebug({})
+    setFieldSuggestions({})
     setIsLoading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -247,6 +305,48 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     })
   }
 
+  // Confidence indicator helpers
+  const confidenceDot = (fieldKey: string) => {
+    const entry = extractionDebug[fieldKey]
+    if (!entry) return null
+    if (entry.confidence === 'high') {
+      return (
+        <span
+          className="inline-block w-2 h-2 rounded-full bg-green-500 ml-1 shrink-0"
+          title="Hoog vertrouwen — automatisch ingevuld"
+        />
+      )
+    }
+    if (entry.confidence === 'medium') {
+      return (
+        <span
+          className="inline-block w-2 h-2 rounded-full bg-yellow-400 ml-1 shrink-0"
+          title="Gemiddeld vertrouwen — automatisch ingevuld, controleer"
+        />
+      )
+    }
+    return (
+      <span
+        className="inline-block w-2 h-2 rounded-full bg-red-400 ml-1 shrink-0"
+        title="Niet zeker — controleer handmatig"
+      />
+    )
+  }
+
+  const inputClass = (fieldKey: string) => {
+    const conf = extractionDebug[fieldKey]?.confidence
+    if (conf === 'medium') return 'border-dashed'
+    if (conf === 'low') return 'border-dashed border-red-300 text-muted-foreground'
+    return ''
+  }
+
+  const labelWithDot = (text: string, fieldKey: string) => (
+    <div className="flex items-center">
+      <span>{text}</span>
+      {confidenceDot(fieldKey)}
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -320,23 +420,27 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="prev-objectnaam">Objectnaam</Label>
+                      <Label htmlFor="prev-objectnaam">{labelWithDot('Objectnaam', 'objectnaam')}</Label>
                       <Input
                         id="prev-objectnaam"
                         value={preview.wizardData?.stap1?.objectnaam ?? ''}
+                        placeholder={fieldSuggestions['objectnaam'] ?? ''}
+                        className={inputClass('objectnaam')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap1: { ...p?.wizardData?.stap1, objectnaam: e.target.value } as AlgemeneGegevens } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-taxateur">Naam taxateur</Label>
+                      <Label htmlFor="prev-taxateur">{labelWithDot('Naam taxateur', 'naamTaxateur')}</Label>
                       <Input
                         id="prev-taxateur"
                         value={preview.wizardData?.stap1?.naamTaxateur ?? ''}
+                        placeholder={fieldSuggestions['naamTaxateur'] ?? ''}
+                        className={inputClass('naamTaxateur')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap1: { ...p?.wizardData?.stap1, naamTaxateur: e.target.value } as AlgemeneGegevens } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-type">Type object</Label>
+                      <Label htmlFor="prev-type">{labelWithDot('Type object', 'typeObject')}</Label>
                       <Select
                         value={preview.typeObject ?? 'overig'}
                         onValueChange={(v) => setPreview((p) => ({ ...p, typeObject: v as ObjectType }))}
@@ -356,7 +460,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-gebruiksdoel">Gebruiksdoel</Label>
+                      <Label htmlFor="prev-gebruiksdoel">{labelWithDot('Gebruiksdoel', 'gebruiksdoel')}</Label>
                       <Select
                         value={preview.gebruiksdoel ?? 'overig'}
                         onValueChange={(v) => setPreview((p) => ({ ...p, gebruiksdoel: v as Gebruiksdoel }))}
@@ -373,20 +477,22 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-peildatum">Waardepeildatum</Label>
+                      <Label htmlFor="prev-peildatum">{labelWithDot('Waardepeildatum', 'waardepeildatum')}</Label>
                       <Input
                         id="prev-peildatum"
                         type="date"
                         value={preview.waardepeildatum ?? ''}
+                        className={inputClass('waardepeildatum')}
                         onChange={(e) => setPreview((p) => ({ ...p, waardepeildatum: e.target.value }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-inspectiedatum">Inspectiedatum</Label>
+                      <Label htmlFor="prev-inspectiedatum">{labelWithDot('Inspectiedatum', 'inspectiedatum')}</Label>
                       <Input
                         id="prev-inspectiedatum"
                         type="date"
                         value={preview.wizardData?.stap1?.inspectiedatum ?? ''}
+                        className={inputClass('inspectiedatum')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap1: { ...p?.wizardData?.stap1, inspectiedatum: e.target.value } as AlgemeneGegevens } }))}
                       />
                     </div>
@@ -399,55 +505,63 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="prev-straat">Straatnaam</Label>
+                      <Label htmlFor="prev-straat">{labelWithDot('Straatnaam', 'adres')}</Label>
                       <Input
                         id="prev-straat"
                         value={preview.adres?.straat ?? ''}
+                        className={inputClass('adres')}
                         onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, straat: e.target.value } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-huisnummer">Huisnummer</Label>
+                      <Label htmlFor="prev-huisnummer">{labelWithDot('Huisnummer', 'adres')}</Label>
                       <Input
                         id="prev-huisnummer"
                         value={preview.adres?.huisnummer ?? ''}
+                        className={inputClass('adres')}
                         onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, huisnummer: e.target.value } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-postcode">Postcode</Label>
+                      <Label htmlFor="prev-postcode">{labelWithDot('Postcode', 'adres')}</Label>
                       <Input
                         id="prev-postcode"
                         value={preview.adres?.postcode ?? ''}
+                        className={inputClass('adres')}
                         onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, postcode: e.target.value } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-plaats">Plaats</Label>
+                      <Label htmlFor="prev-plaats">{labelWithDot('Plaats', 'adres')}</Label>
                       <Input
                         id="prev-plaats"
                         value={preview.adres?.plaats ?? ''}
+                        className={inputClass('adres')}
                         onChange={(e) => setPreview((p) => ({ ...p, adres: { ...p?.adres!, plaats: e.target.value } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-gemeente">Gemeente</Label>
+                      <Label htmlFor="prev-gemeente">{labelWithDot('Gemeente', 'gemeente')}</Label>
                       <Input
                         id="prev-gemeente"
                         value={preview.wizardData?.stap2?.gemeente ?? ''}
+                        placeholder={fieldSuggestions['gemeente'] ?? ''}
+                        className={inputClass('gemeente')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, gemeente: e.target.value } as AdresLocatie } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-provincie">Provincie</Label>
+                      <Label htmlFor="prev-provincie">{labelWithDot('Provincie', 'provincie')}</Label>
                       <Input
                         id="prev-provincie"
                         value={preview.wizardData?.stap2?.provincie ?? ''}
+                        placeholder={fieldSuggestions['provincie'] ?? ''}
+                        className={inputClass('provincie')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, provincie: e.target.value } as AdresLocatie } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-ligging">Ligging</Label>
+                      <Label htmlFor="prev-ligging">{labelWithDot('Ligging', 'ligging')}</Label>
                       <Select
                         value={preview.wizardData?.stap2?.ligging ?? ''}
                         onValueChange={(v) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, ligging: v as Ligging } as AdresLocatie } }))}
@@ -501,29 +615,35 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="prev-bvo">BVO (m²)</Label>
+                      <Label htmlFor="prev-bvo">{labelWithDot('BVO (m²)', 'bvo')}</Label>
                       <Input
                         id="prev-bvo"
                         type="number"
                         value={preview.bvo ?? ''}
+                        placeholder={fieldSuggestions['bvo'] ?? ''}
+                        className={inputClass('bvo')}
                         onChange={(e) => setPreview((p) => ({ ...p, bvo: parseFloat(e.target.value) || 0 }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-vvo">VVO (m²)</Label>
+                      <Label htmlFor="prev-vvo">{labelWithDot('VVO (m²)', 'vvo')}</Label>
                       <Input
                         id="prev-vvo"
                         type="number"
                         value={preview.wizardData?.stap3?.vvo ?? ''}
+                        placeholder={fieldSuggestions['vvo'] ?? ''}
+                        className={inputClass('vvo')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, vvo: parseFloat(e.target.value) || 0 } as Oppervlaktes } }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-perceel">Perceeloppervlak (m²)</Label>
+                      <Label htmlFor="prev-perceel">{labelWithDot('Perceeloppervlak (m²)', 'perceeloppervlak')}</Label>
                       <Input
                         id="prev-perceel"
                         type="number"
                         value={preview.wizardData?.stap3?.perceeloppervlak ?? ''}
+                        placeholder={fieldSuggestions['perceeloppervlak'] ?? ''}
+                        className={inputClass('perceeloppervlak')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, perceeloppervlak: parseFloat(e.target.value) || 0 } as Oppervlaktes } }))}
                       />
                     </div>
@@ -537,12 +657,23 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-bouwjaar">Bouwjaar</Label>
+                      <Label htmlFor="prev-bouwjaar">{labelWithDot('Bouwjaar', 'bouwjaar')}</Label>
                       <Input
                         id="prev-bouwjaar"
                         type="number"
                         value={preview.wizardData?.stap3?.bouwjaar ?? ''}
+                        className={inputClass('bouwjaar')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, bouwjaar: parseInt(e.target.value) || 0 } as Oppervlaktes } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-renovatiejaar">{labelWithDot('Renovatiejaar', 'renovatiejaar')}</Label>
+                      <Input
+                        id="prev-renovatiejaar"
+                        type="number"
+                        value={preview.wizardData?.stap3?.renovatiejaar ?? ''}
+                        className={inputClass('renovatiejaar')}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap3: { ...p?.wizardData?.stap3, renovatiejaar: parseInt(e.target.value) || undefined } as Oppervlaktes } }))}
                       />
                     </div>
                     <div className="space-y-2">
@@ -587,11 +718,13 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-markthuur">Markthuur per jaar (€)</Label>
+                      <Label htmlFor="prev-markthuur">{labelWithDot('Markthuur per jaar (€)', 'markthuurPerJaar')}</Label>
                       <Input
                         id="prev-markthuur"
                         type="number"
                         value={preview.wizardData?.stap4?.markthuurPerJaar ?? ''}
+                        placeholder={fieldSuggestions['markthuurPerJaar'] ?? ''}
+                        className={inputClass('markthuurPerJaar')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap4: { ...p?.wizardData?.stap4, markthuurPerJaar: parseFloat(e.target.value) || undefined } as Huurgegevens } }))}
                       />
                     </div>
@@ -835,11 +968,13 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-marktwaarde">Marktwaarde (€)</Label>
+                      <Label htmlFor="prev-marktwaarde">{labelWithDot('Marktwaarde (€)', 'marktwaarde')}</Label>
                       <Input
                         id="prev-marktwaarde"
                         type="number"
                         value={preview.marktwaarde ?? ''}
+                        placeholder={fieldSuggestions['marktwaarde'] ?? ''}
+                        className={inputClass('marktwaarde')}
                         onChange={(e) => setPreview((p) => ({ ...p, marktwaarde: parseFloat(e.target.value) || 0 }))}
                       />
                     </div>
@@ -853,32 +988,38 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-bar">BAR % (optioneel)</Label>
+                      <Label htmlFor="prev-bar">{labelWithDot('BAR % (optioneel)', 'bar')}</Label>
                       <Input
                         id="prev-bar"
                         type="number"
                         step="0.01"
                         value={preview.bar ?? ''}
+                        placeholder={fieldSuggestions['bar'] ?? ''}
+                        className={inputClass('bar')}
                         onChange={(e) => setPreview((p) => ({ ...p, bar: e.target.value ? parseFloat(e.target.value) : undefined }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-nar">NAR % (optioneel)</Label>
+                      <Label htmlFor="prev-nar">{labelWithDot('NAR % (optioneel)', 'nar')}</Label>
                       <Input
                         id="prev-nar"
                         type="number"
                         step="0.01"
                         value={preview.nar ?? ''}
+                        placeholder={fieldSuggestions['nar'] ?? ''}
+                        className={inputClass('nar')}
                         onChange={(e) => setPreview((p) => ({ ...p, nar: e.target.value ? parseFloat(e.target.value) : undefined }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="prev-kapfac">Kapitalisatiefactor</Label>
+                      <Label htmlFor="prev-kapfac">{labelWithDot('Kapitalisatiefactor', 'kapitalisatiefactor')}</Label>
                       <Input
                         id="prev-kapfac"
                         type="number"
                         step="0.01"
                         value={preview.wizardData?.stap8?.kapitalisatiefactor ?? ''}
+                        placeholder={fieldSuggestions['kapitalisatiefactor'] ?? ''}
+                        className={inputClass('kapitalisatiefactor')}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap8: { ...p?.wizardData?.stap8, kapitalisatiefactor: e.target.value ? parseFloat(e.target.value) : undefined } as Waardering } }))}
                       />
                     </div>

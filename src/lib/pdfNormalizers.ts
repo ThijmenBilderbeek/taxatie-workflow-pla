@@ -140,6 +140,46 @@ export function cleanupLongFieldText(text: string, maxLength: number): string {
 }
 
 /**
+ * Interprets Dutch boolean-like strings.
+ * Returns:
+ *   true  — "Ja", "Aanwezig", "Ja, ..."
+ *   false — "Nee", "Geen", "Niet aanwezig"
+ *   'unknown' — "Onbekend", "N.v.t.", "Niet van toepassing", "Niet onderzocht"
+ */
+export function normalizeBooleanLike(raw: string): boolean | 'unknown' {
+  const s = raw.trim().toLowerCase()
+  if (s === 'ja' || s.startsWith('ja,') || s === 'aanwezig' || s.startsWith('aanwezig')) return true
+  if (
+    s === 'nee' ||
+    s.startsWith('nee,') ||
+    s === 'geen' ||
+    s === 'niet aanwezig' ||
+    s.startsWith('niet aanwezig')
+  )
+    return false
+  if (
+    s === 'onbekend' ||
+    s === 'n.v.t.' ||
+    s === 'nvt' ||
+    s === 'niet van toepassing' ||
+    s === 'niet onderzocht'
+  )
+    return 'unknown'
+  return 'unknown'
+}
+
+/**
+ * Normalizes Dutch decimal strings (like 12,30) to a JavaScript number.
+ * Use this for values that are not percentages, e.g. kapitalisatiefactor.
+ * Handles: "12,30" → 12.3, "12.30" → 12.3
+ */
+export function normalizeDecimalNumber(raw: string): number | undefined {
+  const s = raw.trim().replace(',', '.')
+  const v = parseFloat(s)
+  return isNaN(v) ? undefined : v
+}
+
+/**
  * Parses a Dutch address string into its components.
  * Supports:
  *   "Columbusweg 13, 5928LA Venlo"

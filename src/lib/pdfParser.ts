@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
-import type { HistorischRapport, ObjectType, Gebruiksdoel } from '../types'
+import type { Dossier, HistorischRapport, ObjectType, Gebruiksdoel } from '../types'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -59,6 +59,175 @@ function parseDatum(raw: string): string | undefined {
   }
 
   return undefined
+}
+
+/**
+ * Finds a keyword/heading in the text and extracts the paragraph following it.
+ * Returns up to maxChars characters or until the next heading-like line is found.
+ */
+function extractSectionAfterKeyword(
+  text: string,
+  keywords: string[],
+  maxChars = 500
+): string | undefined {
+  const lowerText = text.toLowerCase()
+  for (const keyword of keywords) {
+    const idx = lowerText.indexOf(keyword.toLowerCase())
+    if (idx === -1) continue
+    // Start after the keyword
+    const afterKeyword = text.slice(idx + keyword.length)
+    // Skip any leading colon/whitespace
+    const trimmed = afterKeyword.replace(/^[\s:\-–]+/, '')
+    if (!trimmed) continue
+    // Cut at next heading-like boundary (a short ALL-CAPS word or a blank line followed by capitalised word)
+    // Use a simple heuristic: cut at double newline or at maxChars
+    const cutAtDoubleNewline = trimmed.indexOf('\n\n')
+    const cutAt = cutAtDoubleNewline !== -1 && cutAtDoubleNewline < maxChars
+      ? cutAtDoubleNewline
+      : maxChars
+    const extracted = trimmed.slice(0, cutAt).trim()
+    if (extracted.length > 5) return extracted
+  }
+  return undefined
+}
+
+/**
+ * Extracts wizard-relevant fields from raw PDF text.
+ * Returns a partial Dossier with the sections found.
+ * This is best-effort: missing sections simply return undefined.
+ */
+export function extractWizardDataFromText(text: string): Partial<Dossier> {
+  const stap2bereikbaarheid = extractSectionAfterKeyword(text, [
+    'bereikbaarheid',
+    'ontsluiting',
+    'infrastructuur',
+    'ov-verbinding',
+    'openbaar vervoer',
+    'snelweg',
+  ])
+
+  const stap5eigendomssituatie = extractSectionAfterKeyword(text, [
+    'eigendomssituatie',
+    'eigendomsvorm',
+    'eigendom:',
+  ])
+
+  const stap5erfpacht = extractSectionAfterKeyword(text, [
+    'erfpacht',
+    'erfpachtsituatie',
+    'canonverplichting',
+  ])
+
+  const stap5zakelijkeRechten = extractSectionAfterKeyword(text, [
+    'zakelijke rechten',
+    'zakelijkerechten',
+    'recht van opstal',
+    'erfdienstbaarheid',
+  ])
+
+  const stap5kwalitatieveVerplichtingen = extractSectionAfterKeyword(text, [
+    'kwalitatieve verplichting',
+    'kwalitatieve verplichtingen',
+    'kettingbeding',
+  ])
+
+  const stap5bestemmingsplan = extractSectionAfterKeyword(text, [
+    'bestemmingsplan',
+    'bestemming:',
+    'planologische bestemming',
+  ])
+
+  const stap6fundering = extractSectionAfterKeyword(text, [
+    'fundering',
+    'funderingstype',
+    'funderingssituatie',
+  ])
+
+  const stap6dakbedekking = extractSectionAfterKeyword(text, [
+    'dakbedekking',
+    'daktype',
+    'dak:',
+    'dakconstruct',
+  ])
+
+  const stap6installaties = extractSectionAfterKeyword(text, [
+    'installaties',
+    'installatie:',
+    'klimaatinstallatie',
+    'verwarmingssysteem',
+    'technische installaties',
+  ])
+
+  const stap6achterstallig = extractSectionAfterKeyword(text, [
+    'achterstallig onderhoud',
+    'achterstalligonderhoud',
+    'onderhoudstoestand',
+  ])
+
+  const stap7toelichting = extractSectionAfterKeyword(text, [
+    'toelichting vergunningen',
+    'vergunningen toelichting',
+    'omgevingsvergunning toelichting',
+    'energielabel toelichting',
+    'asbest toelichting',
+  ])
+
+  const stap9aannames = extractSectionAfterKeyword(text, [
+    'aannames',
+    'aanname:',
+    'uitgangspunten',
+  ])
+
+  const stap9voorbehouden = extractSectionAfterKeyword(text, [
+    'voorbehouden',
+    'voorbehoud:',
+    'voorbehoud,',
+  ])
+
+  const stap9bijzondereOmstandigheden = extractSectionAfterKeyword(text, [
+    'bijzondere omstandigheden',
+    'bijzonderomstandigheid',
+    'bijzonderheden',
+  ])
+
+  const wizardData: Partial<Dossier> = {}
+
+  if (stap2bereikbaarheid) {
+    wizardData.stap2 = { bereikbaarheid: stap2bereikbaarheid } as Dossier['stap2']
+  }
+
+  const stap5Fields: Partial<NonNullable<Dossier['stap5']>> = {}
+  if (stap5eigendomssituatie) stap5Fields.eigendomssituatie = stap5eigendomssituatie
+  if (stap5erfpacht) stap5Fields.erfpacht = stap5erfpacht
+  if (stap5zakelijkeRechten) stap5Fields.zakelijkeRechten = stap5zakelijkeRechten
+  if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = stap5kwalitatieveVerplichtingen
+  if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = stap5bestemmingsplan
+  if (Object.keys(stap5Fields).length > 0) {
+    wizardData.stap5 = stap5Fields as Dossier['stap5']
+  }
+
+  const stap6Fields: Partial<NonNullable<Dossier['stap6']>> = {}
+  if (stap6fundering) stap6Fields.fundering = stap6fundering
+  if (stap6dakbedekking) stap6Fields.dakbedekking = stap6dakbedekking
+  if (stap6installaties) stap6Fields.installaties = stap6installaties
+  if (stap6achterstallig) stap6Fields.achterstalligOnderhoudBeschrijving = stap6achterstallig
+  if (Object.keys(stap6Fields).length > 0) {
+    wizardData.stap6 = stap6Fields as Dossier['stap6']
+  }
+
+  if (stap7toelichting) {
+    wizardData.stap7 = { toelichting: stap7toelichting } as Dossier['stap7']
+  }
+
+  const stap9Fields: Partial<NonNullable<Dossier['stap9']>> = {}
+  if (stap9aannames) stap9Fields.aannames = stap9aannames
+  if (stap9voorbehouden) stap9Fields.voorbehouden = stap9voorbehouden
+  if (stap9bijzondereOmstandigheden) stap9Fields.bijzondereOmstandigheden = stap9bijzondereOmstandigheden
+  if (Object.keys(stap9Fields).length > 0) {
+    wizardData.stap9 = stap9Fields as Dossier['stap9']
+  }
+
+  return wizardData
 }
 
 export async function parsePdfToRapport(file: File): Promise<Partial<HistorischRapport>> {
@@ -174,6 +343,9 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
       break
     }
   }
+
+  // --- WizardData extracted from text ---
+  result.wizardData = extractWizardDataFromText(text)
 
   return result
 }

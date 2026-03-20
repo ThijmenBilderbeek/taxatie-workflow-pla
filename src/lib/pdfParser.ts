@@ -4,11 +4,13 @@ import {
   normalizeDutchDate,
   normalizeEuro,
   normalizePercent,
+  normalizeDecimalNumber,
   normalizeArea,
   cleanupLongFieldText,
   compactWhitespace,
   parseAddress,
 } from './pdfNormalizers'
+import { extractAllFieldsWithConfidence } from './pdfFieldExtractors'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -139,6 +141,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     text,
     [
       'uitvoerend taxateur:',
+      'uitvoerend taxateur',
       'naam taxateur:',
       'taxateur:',
       'beëdigd taxateur:',
@@ -175,7 +178,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   const stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 30, { singleLine: true })
 
-  const LIGGING_VALUES: Ligging[] = ['binnenstad', 'woonwijk', 'bedrijventerrein', 'buitengebied', 'gemengd']
+  const LIGGING_VALUES: Ligging[] = ['bedrijventerrein', 'binnenstad', 'woonwijk', 'buitengebied', 'gemengd']
   let stap2ligging: Ligging | undefined
   // Prefer explicit ligging label context over bare keyword match
   const liggingRaw = extractSectionAfterKeyword(
@@ -193,8 +196,24 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       }
     }
   }
+  // Context-aware fallback: search within 200 chars of "ligging"/"locatie"/"omgeving" keywords
   if (!stap2ligging) {
-    // Fallback: keyword in full text
+    for (const keyword of ['ligging', 'locatie', 'omgeving']) {
+      const idx = lowerText.indexOf(keyword)
+      if (idx === -1) continue
+      const context = lowerText.slice(Math.max(0, idx - 20), idx + 200)
+      // Prioritize specific values over generic ones (order matters)
+      for (const val of LIGGING_VALUES) {
+        if (context.includes(val)) {
+          stap2ligging = val
+          break
+        }
+      }
+      if (stap2ligging) break
+    }
+  }
+  if (!stap2ligging) {
+    // Final fallback: full-text scan (prioritize specific over generic)
     for (const val of LIGGING_VALUES) {
       if (lowerText.includes(val)) {
         stap2ligging = val
@@ -241,6 +260,12 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   const bouwjaarMatch = text.match(/(?:bouwjaar|gebouwd\s+in|jaar\s+van\s+oplevering)[:\s]+([0-9]{4})/i)
   const stap3bouwjaar = bouwjaarMatch ? parseInt(bouwjaarMatch[1], 10) : undefined
+
+  // Renovatiejaar
+  const renovatiejaarMatch = text.match(
+    /(?:renovatiejaar|gerenoveerd\s+in|meest\s+recente\s+renovatie|jaar\s+renovatie|laatst\s+gerenoveerd)[:\s]+([0-9]{4})/i
+  )
+  const stap3renovatiejaar = renovatiejaarMatch ? parseInt(renovatiejaarMatch[1], 10) : undefined
 
   // Aanbouwen: strict labels only, limited length, single line
   const stap3aanbouwen = extractSectionAfterKeyword(
@@ -289,6 +314,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     [
       'staat van onderhoud buiten:',
       'bouwkundige staat exterieur:',
+      'bouwkundige staat:',
       'exterieur staat:',
       'exterieur:',
     ],
@@ -392,6 +418,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'eigendomssituatie:',
     'eigendomsvorm:',
     'eigendom:',
+    'type eigendom:',
+    'te taxeren belang:',
   ], 80, { singleLine: true })
 
   const stap5erfpacht = extractSectionAfterKeyword(text, [
@@ -526,9 +554,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   )
   const stap8onderhandseVerkoopwaarde = ovwMatch ? normalizeEuro(ovwMatch[1]) : undefined
 
-  // Kapitalisatiefactor: multiple label synonyms
-  const kapFacMatch = text.match(/(?:kapitalisatiefactor|kap\.?factor)[:\s|]+([0-9]{1,2}[.,][0-9]{1,2})/i)
-  const stap8kapitalisatiefactor = kapFacMatch ? normalizePercent(kapFacMatch[1]) : undefined
+  // Kapitalisatiefactor: multiple label synonyms including "kap. factor"
+  const kapFacMatch = text.match(/(?:kapitalisatiefactor|kap\.?\s*factor)[:\s|]+([0-9]{1,2}[.,][0-9]{1,2})/i)
+  const stap8kapitalisatiefactor = kapFacMatch ? normalizeDecimalNumber(kapFacMatch[1]) : undefined
 
   // --- Stap 9: Aannames ---
   const stap9aannames = extractSectionAfterKeyword(text, [
@@ -572,6 +600,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap3perceeloppervlak !== undefined) stap3Fields.perceeloppervlak = stap3perceeloppervlak
   if (stap3aantalBouwlagen !== undefined) stap3Fields.aantalBouwlagen = stap3aantalBouwlagen
   if (stap3bouwjaar !== undefined) stap3Fields.bouwjaar = stap3bouwjaar
+  if (stap3renovatiejaar !== undefined) stap3Fields.renovatiejaar = stap3renovatiejaar
   if (stap3aanbouwen) stap3Fields.aanbouwen = stap3aanbouwen
   if (Object.keys(stap3Fields).length > 0) {
     wizardData.stap3 = stap3Fields as Dossier['stap3']
@@ -665,9 +694,9 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   }
 
   // --- Marktwaarde ---
-  // Prefer explicit "marktwaarde" keyword label
+  // Prefer extended "marktwaarde kosten koper" / "marktwaarde k.k." / "marktwaarde kk" synonyms first
   const marktwaardeKeyMatch = text.match(
-    /marktwaarde[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
+    /(?:marktwaarde\s+kosten\s+koper|marktwaarde\s+k[.\s]?k[.]?|marktwaarde)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
   )
   const marktwaardeEuroMatch = text.match(/€\s*([0-9]{1,3}(?:\.[0-9]{3})+(?:,[0-9]{1,2})?)\b/)
   const marktwaardeMatch = marktwaardeKeyMatch ?? marktwaardeEuroMatch
@@ -677,10 +706,10 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   }
 
   // --- BAR ---
-  // Handle "BAR: 8,15 %", "BAR | Kap. markt/herz. huur kk: 8,15 %" formats.
-  // Limit lookahead to 30 chars to avoid capturing unrelated content.
+  // Handle "BAR: 8,15 %", "BAR | Kap. markt/herz. huur kk: 8,15 %", "bar | kap." formats.
+  // Limit lookahead to 40 chars to cover longer label variants.
   const barMatch = text.match(
-    /\bBAR\b[^:\n]{0,30}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
+    /\bBAR\b[^:\n]{0,40}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
   )
   if (barMatch) {
     const val = normalizePercent(barMatch[1])
@@ -688,8 +717,9 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   }
 
   // --- NAR ---
+  // Handle "NAR: 6,75 %", "NAR % von: 6,75 %", "nar von: 6,75 %" formats.
   const narMatch = text.match(
-    /\bNAR\b[^:\n]{0,30}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
+    /\bNAR\b[^:\n]{0,40}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
   )
   if (narMatch) {
     const val = normalizePercent(narMatch[1])
@@ -834,6 +864,9 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   if (result.bvo === undefined && result.wizardData?.stap3?.bvo !== undefined) {
     result.bvo = result.wizardData.stap3.bvo
   }
+
+  // --- extractionDebug: confidence info for each field ---
+  result.extractionDebug = extractAllFieldsWithConfidence(text)
 
   return result
 }

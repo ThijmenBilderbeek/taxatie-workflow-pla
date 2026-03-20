@@ -61,31 +61,71 @@ function parseDatum(raw: string): string | undefined {
   return undefined
 }
 
+const NOISE_WORDS = ['taxatierapport', 'rapport', 'inhoud', 'pagina', 'inhoudsopgave', 'samenvatting']
+/** Minimum text length before a sudden ALL-CAPS section header triggers truncation in cleanExtracted */
+const MIN_TEXT_BEFORE_CAPS_HEADER = 10
+
 /**
- * Finds a keyword/heading in the text and extracts the paragraph following it.
- * Returns up to maxChars characters or until the next heading-like line is found.
+ * Strips leading/trailing punctuation and whitespace, removes content after noise markers.
+ */
+function cleanExtracted(text: string): string {
+  // Remove leading punctuation/whitespace
+  let result = text.replace(/^[\s:\-–,\.]+/, '').replace(/[\s:\-–,\.]+$/, '')
+  // Truncate at "Pagina", "©", or sudden page number markers
+  result = result.replace(/\s*(Pagina|©|\bPg\.?\s*\d+\b).*$/i, '')
+  // Truncate at sudden ALL-CAPS section headers (3+ uppercase chars at word boundary)
+  const capsMatch = result.match(/\s{2,}[A-Z]{3,}/)
+  if (capsMatch && capsMatch.index !== undefined && capsMatch.index > MIN_TEXT_BEFORE_CAPS_HEADER) {
+    result = result.slice(0, capsMatch.index)
+  }
+  return result.trim()
+}
+
+/**
+ * Finds a keyword/heading in the text and extracts the section following it.
+ * More conservative than the naive approach: stops at newlines, next labels, etc.
  */
 function extractSectionAfterKeyword(
   text: string,
   keywords: string[],
-  maxChars = 500
+  maxChars = 120,
+  options: { singleLine?: boolean; stopAtLabel?: boolean } = {}
 ): string | undefined {
+  const { singleLine = false, stopAtLabel = true } = options
   const lowerText = text.toLowerCase()
   for (const keyword of keywords) {
     const idx = lowerText.indexOf(keyword.toLowerCase())
     if (idx === -1) continue
     // Start after the keyword
     const afterKeyword = text.slice(idx + keyword.length)
-    // Skip any leading colon/whitespace
+    // Skip any leading colon/whitespace/dash
     const trimmed = afterKeyword.replace(/^[\s:\-–]+/, '')
     if (!trimmed) continue
-    // Cut at next heading-like boundary (a short ALL-CAPS word or a blank line followed by capitalised word)
-    // Use a simple heuristic: cut at double newline or at maxChars
-    const cutAtDoubleNewline = trimmed.indexOf('\n\n')
-    const cutAt = cutAtDoubleNewline !== -1 && cutAtDoubleNewline < maxChars
-      ? cutAtDoubleNewline
-      : maxChars
-    const extracted = trimmed.slice(0, cutAt).trim()
+
+    let endIdx = maxChars
+
+    // Stop at first newline if singleLine mode
+    if (singleLine) {
+      const nlIdx = trimmed.indexOf('\n')
+      if (nlIdx !== -1 && nlIdx < endIdx) endIdx = nlIdx
+    }
+
+    // Stop at next label-like pattern (word + colon) on its own line
+    if (stopAtLabel) {
+      const labelMatch = trimmed.match(/\n\s*[A-Za-zÀ-öø-ÿ][A-Za-zÀ-öø-ÿ\s]{1,25}:/)
+      if (labelMatch && labelMatch.index !== undefined && labelMatch.index < endIdx) {
+        endIdx = labelMatch.index
+      }
+    }
+
+    // Also stop at double newline
+    const dnl = trimmed.indexOf('\n\n')
+    if (dnl !== -1 && dnl < endIdx) endIdx = dnl
+
+    const extracted = cleanExtracted(trimmed.slice(0, endIdx))
+    // Filter noise: too short or starts with a noise word
+    if (extracted.length < 2) continue
+    if (NOISE_WORDS.some(w => extracted.toLowerCase().startsWith(w))) continue
     if (extracted.length > 5) return extracted
   }
   return undefined
@@ -100,14 +140,19 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const lowerText = text.toLowerCase()
 
   // --- Stap 1: Algemene Gegevens ---
-  const stap1objectnaam = extractSectionAfterKeyword(text, ['objectnaam', 'object:', 'pand:'], 100)
+  const stap1objectnaam = extractSectionAfterKeyword(
+    text,
+    ['objectnaam:', 'naam object:', 'pand:'],
+    80,
+    { singleLine: true }
+  )
 
-  const stap1naamTaxateur = extractSectionAfterKeyword(text, [
-    'taxateur:',
-    'beëdigd taxateur',
-    'getaxeerd door',
-    'naam taxateur',
-  ], 100)
+  const stap1naamTaxateur = extractSectionAfterKeyword(
+    text,
+    ['taxateur:', 'beëdigd taxateur:', 'getaxeerd door:', 'naam taxateur:'],
+    60,
+    { singleLine: true }
+  )
 
   const stap1inspectiedatumRaw = extractSectionAfterKeyword(text, [
     'inspectiedatum',
@@ -117,9 +162,14 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap1inspectiedatum = stap1inspectiedatumRaw ? parseDatum(stap1inspectiedatumRaw) : undefined
 
   // --- Stap 2: Adres & Locatie ---
-  const stap2gemeente = extractSectionAfterKeyword(text, ['gemeente:'], 80)
+  // Use more specific gemeente extraction to avoid matching "gemeente" inside bestemmingsplan context
+  let stap2gemeente = extractSectionAfterKeyword(text, ['gemeente:'], 50, { singleLine: true })
+  // Filter out gemeente values that contain bestemmingsplan/omgevingsplan context
+  if (stap2gemeente && /omgevingsplan|bestemmingsplan|raadsbesluit/i.test(stap2gemeente)) {
+    stap2gemeente = undefined
+  }
 
-  const stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 80)
+  const stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 30, { singleLine: true })
 
   const LIGGING_VALUES: Ligging[] = ['binnenstad', 'woonwijk', 'bedrijventerrein', 'buitengebied', 'gemengd']
   let stap2ligging: Ligging | undefined
@@ -137,7 +187,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'ov-verbinding',
     'openbaar vervoer',
     'snelweg',
-  ])
+  ], 200)
 
   // --- Stap 3: Oppervlaktes ---
   const vvoMatch = text.match(/(?:VVO|verhuurbaar vloeroppervlak)[:\s]+([0-9]{1,6}[.,]?[0-9]*)\s*m[²2]?/i)
@@ -152,7 +202,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const bouwjaarMatch = text.match(/(?:bouwjaar|gebouwd in|jaar van oplevering)[:\s]+([0-9]{4})/i)
   const stap3bouwjaar = bouwjaarMatch ? parseInt(bouwjaarMatch[1], 10) : undefined
 
-  const stap3aanbouwen = extractSectionAfterKeyword(text, ['aanbouw', 'uitbreiding', 'bijgebouw'], 200)
+  const stap3aanbouwen = extractSectionAfterKeyword(text, ['aanbouw', 'uitbreiding', 'bijgebouw'], 80, { singleLine: true })
 
   // --- Stap 4: Huurgegevens ---
   const huurprijsMatch = text.match(/(?:huurprijs|jaarhuur|huur per jaar)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i)
@@ -440,31 +490,51 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   }
 
   // --- Adres ---
-  // Look for pattern like "Keizersgracht 123" (street + housenumber)
-  const straatMatch = text.match(/([A-Za-zÀ-öø-ÿ][A-Za-zÀ-öø-ÿ\s\-'\.]+?)\s+(\d+[\w\-]*)\b/)
-  if (straatMatch) {
-    result.adres = {
-      straat: straatMatch[1].trim(),
-      huisnummer: straatMatch[2].trim(),
-      postcode: '',
-      plaats: '',
-    }
-  } else {
-    result.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
-  }
-
-  // Postcode: 1234 AB
+  // Strategy: find postcode first, then look backwards for street+housenumber
   const postcodeMatch = text.match(/\b(\d{4}\s?[A-Z]{2})\b/)
   if (postcodeMatch) {
-    result.adres!.postcode = postcodeMatch[1].replace(/\s/, '')
-  }
+    const postcodeIdx = text.indexOf(postcodeMatch[0])
+    const normalizedPostcode = postcodeMatch[1].replace(/\s/, '')
+    // Look up to 200 chars before the postcode for "Streetname Number"
+    const beforePostcode = text.slice(Math.max(0, postcodeIdx - 200), postcodeIdx)
+    // Match last occurrence of "Streetname Number" before the postcode (greedy from end)
+    const adresMatch = beforePostcode.match(/([A-Za-zÀ-öø-ÿ][A-Za-zÀ-öø-ÿ\s\-'\.]{2,40}?)\s+(\d+[\w\-]*)\s*[,\s]*$/)
+    if (adresMatch) {
+      const straat = adresMatch[1].trim()
+      const huisnummer = adresMatch[2].trim()
+      // Filter out noise words (document headers) from the street name
+      if (!NOISE_WORDS.some(w => straat.toLowerCase().includes(w))) {
+        result.adres = {
+          straat,
+          huisnummer,
+          postcode: normalizedPostcode,
+          plaats: '',
+        }
+      }
+    }
+    if (!result.adres) {
+      result.adres = { straat: '', huisnummer: '', postcode: normalizedPostcode, plaats: '' }
+    }
 
-  // Plaats: word(s) after postcode
-  if (postcodeMatch) {
-    const afterPostcode = text.slice(text.indexOf(postcodeMatch[0]) + postcodeMatch[0].length)
+    // Plaats: word(s) after postcode
+    const afterPostcode = text.slice(postcodeIdx + postcodeMatch[0].length)
     const plaatsMatch = afterPostcode.match(/^\s*([A-Za-zÀ-öø-ÿ][A-Za-zÀ-öø-ÿ\s\-']{1,30}?)\s*[\n,]/)
     if (plaatsMatch) {
-      result.adres!.plaats = plaatsMatch[1].trim()
+      result.adres.plaats = plaatsMatch[1].trim()
+    }
+  } else {
+    // Fallback: try matching "Streetname Number" anywhere but skip noise-word streets
+    const straatMatch = text.match(/([A-Za-zÀ-öø-ÿ][A-Za-zÀ-öø-ÿ\s\-'\.]+?)\s+(\d+[\w\-]*)\b/)
+    const straat = straatMatch ? straatMatch[1].trim() : ''
+    if (straat && !NOISE_WORDS.some(w => straat.toLowerCase().includes(w))) {
+      result.adres = {
+        straat,
+        huisnummer: straatMatch![2].trim(),
+        postcode: '',
+        plaats: '',
+      }
+    } else {
+      result.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
     }
   }
 

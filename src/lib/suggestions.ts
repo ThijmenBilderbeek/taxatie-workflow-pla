@@ -1,5 +1,6 @@
 import type { Dossier, HistorischRapport, SimilarityInstellingen } from '@/types'
 import { calculateSimilarity } from './similarity'
+import { extractWizardDataFromText } from './pdfParser'
 
 export interface VeldSuggestie {
   veldNaam: string
@@ -160,6 +161,19 @@ export function getSuggestiesVoorStap(
 
   const suggesties: VeldSuggestie[] = []
 
+  // Cache for extracted wizard data from rapportTeksten to avoid re-extracting per field
+  const extractedWizardDataCache = new Map<string, Partial<Dossier>>()
+
+  const getExtractedWizardData = (rapport: HistorischRapport): Partial<Dossier> => {
+    if (extractedWizardDataCache.has(rapport.id)) {
+      return extractedWizardDataCache.get(rapport.id)!
+    }
+    const volledig = rapport.rapportTeksten?.volledig
+    const extracted = volledig ? extractWizardDataFromText(volledig) : {}
+    extractedWizardDataCache.set(rapport.id, extracted)
+    return extracted
+  }
+
   for (const config of veldConfigs) {
     // Only suggest when the current field is empty
     const huidigeWaarde = config.getHuidigeWaarde(huidigeDossier)
@@ -167,7 +181,14 @@ export function getSuggestiesVoorStap(
 
     // Find the best-ranked rapport that has this field filled
     for (const { rapport, score } of gesorteerd) {
-      const suggestieTekst = config.getUitHistorisch(rapport)
+      let suggestieTekst = config.getUitHistorisch(rapport)
+      // Fallback: if wizardData is empty, try extracting from rapportTeksten
+      if ((!suggestieTekst || suggestieTekst.trim() === '') && rapport.rapportTeksten?.volledig) {
+        const extracted = getExtractedWizardData(rapport)
+        // Use extracted data directly with the getter by creating a minimal proxy object
+        const rapportMetExtractedData: HistorischRapport = { ...rapport, wizardData: extracted }
+        suggestieTekst = config.getUitHistorisch(rapportMetExtractedData)
+      }
       if (suggestieTekst && suggestieTekst.trim() !== '') {
         const bronAdres = `${rapport.adres.straat} ${rapport.adres.huisnummer}, ${rapport.adres.plaats}`
         suggesties.push({

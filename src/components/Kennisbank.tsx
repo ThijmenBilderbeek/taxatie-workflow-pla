@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
-import type { HistorischRapport, ObjectType, Gebruiksdoel } from '../types'
+import type { HistorischRapport, ObjectType, Gebruiksdoel, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Waardering } from '../types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -107,7 +107,49 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       nar: preview.nar,
       waardepeildatum: preview.waardepeildatum ?? new Date().toISOString().slice(0, 10),
       rapportTeksten: preview.rapportTeksten ?? {},
-      wizardData: {},
+      wizardData: {
+        ...(preview.typeObject || preview.gebruiksdoel
+          ? {
+              stap1: {
+                typeObject: preview.typeObject,
+                gebruiksdoel: preview.gebruiksdoel,
+              } as AlgemeneGegevens,
+            }
+          : {}),
+        ...(preview.adres
+          ? {
+              stap2: {
+                straatnaam: preview.adres.straat,
+                huisnummer: preview.adres.huisnummer,
+                postcode: preview.adres.postcode,
+                plaats: preview.adres.plaats,
+                ...preview.wizardData?.stap2,
+              } as AdresLocatie,
+            }
+          : preview.wizardData?.stap2
+            ? { stap2: preview.wizardData.stap2 }
+            : {}),
+        ...(preview.bvo
+          ? {
+              stap3: {
+                bvo: preview.bvo,
+              } as Oppervlaktes,
+            }
+          : {}),
+        ...(preview.wizardData?.stap5 ? { stap5: preview.wizardData.stap5 } : {}),
+        ...(preview.wizardData?.stap6 ? { stap6: preview.wizardData.stap6 } : {}),
+        ...(preview.wizardData?.stap7 ? { stap7: preview.wizardData.stap7 } : {}),
+        ...(preview.marktwaarde || preview.bar || preview.nar
+          ? {
+              stap8: {
+                marktwaarde: preview.marktwaarde,
+                bar: preview.bar,
+                nar: preview.nar,
+              } as Waardering,
+            }
+          : {}),
+        ...(preview.wizardData?.stap9 ? { stap9: preview.wizardData.stap9 } : {}),
+      },
     }
     onAddRapport(rapport)
     toast.success('Rapport toegevoegd aan kennisbank')

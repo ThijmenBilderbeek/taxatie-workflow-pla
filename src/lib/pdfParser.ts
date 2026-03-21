@@ -11,6 +11,7 @@ import {
   parseAddress,
   dutchNumberWordToDigit,
   cleanGemeente,
+  truncateField,
 } from './pdfNormalizers'
 import { extractAllFieldsWithConfidence } from './pdfFieldExtractors'
 
@@ -319,8 +320,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap4huurder = extractSectionAfterKeyword(text, ['huurder:'], 60, { singleLine: true })
 
   // verhuurd: only set true for current/active rental evidence; ignore past-tense rental
-  // Past: "verhuurd geweest", "voormalige huurder", "tot <year> verhuurd geweest", "voorheen verhuurd"
-  const hasPastRental = /verhuurd\s+geweest|voormalige?\s+huurder|voorheen\s+verhuurd|tot\s+\d{1,2}\s+\w+\s+\d{4}\s+verhuurd/.test(lowerText)
+  // Past: "verhuurd geweest", "voormalige huurder", "tot <year> verhuurd geweest", "voorheen verhuurd", "was verhuurd", "niet meer verhuurd"
+  const hasPastRental = /verhuurd\s+geweest|voormalige?\s+huurder|voorheen\s+verhuurd|tot\s+\d{1,2}\s+\w+\s+\d{4}\s+verhuurd|was\s+verhuurd|niet\s+meer\s+verhuurd/.test(lowerText)
   // Active: huurder known, huurprijs present, contracttype present, or "thans verhuurd" / "lopende huurovereenkomst"
   const hasActiveRental =
     stap4huurder !== undefined ||
@@ -422,6 +423,11 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'daktype:',
     'dak:',
     'dakconstruct',
+    'plat dak',
+    'bitumineus',
+    'bitumen',
+    'dakpannen',
+    'sedumdak',
   ], 120)
 
   const stap6installaties = extractSectionAfterKeyword(text, [
@@ -430,6 +436,12 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'klimaatinstallatie:',
     'verwarmingssysteem:',
     'technische installaties:',
+    'cv-ketel',
+    'airconditioning',
+    'mechanische ventilatie',
+    'radiatoren',
+    'warmtepomp',
+    'zonnepanelen',
   ], 120)
 
   const stap6achterstallig = extractSectionAfterKeyword(text, [
@@ -456,7 +468,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     if (stap5eigendomssituatie.length === 0) stap5eigendomssituatie = undefined
   }
 
-  // Erfpacht: only set when explicitly present; clear if text says "geen erfpacht" / "n.v.t."
+  // Erfpacht: only set when explicitly present; clear if text says "geen erfpacht" / "n.v.t." / "vol eigendom"
   const stap5erfpachtRaw = extractSectionAfterKeyword(text, [
     'erfpacht:',
     'erfpachtsituatie:',
@@ -465,21 +477,25 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   let stap5erfpacht = stap5erfpachtRaw
   if (stap5erfpacht) {
     const lower5 = stap5erfpacht.toLowerCase()
-    if (/geen\s+erfpacht|niet\s+van\s+toepassing|n\.v\.t\.|nvt|geen/.test(lower5)) {
+    if (/geen\s+erfpacht|niet\s+van\s+toepassing|n\.v\.t\.|nvt|geen|vol\s+eigendom/.test(lower5)) {
       stap5erfpacht = undefined
     }
   }
-  // Also check if "geen erfpacht" appears near an erfpacht keyword in the full text
-  if (!stap5erfpacht && /geen\s+erfpacht/i.test(text)) {
+  // Also check if "geen erfpacht" or "vol eigendom" appears near an erfpacht keyword in the full text
+  if (!stap5erfpacht && /geen\s+erfpacht|vol\s+eigendom/i.test(text)) {
     stap5erfpacht = undefined
   }
 
   const stap5zakelijkeRechten = extractSectionAfterKeyword(text, [
     'zakelijke rechten:',
     'zakelijkerechten:',
+    'zakelijk recht:',
+    'belemmeringenwet',
+    'recht van overpad:',
+    'opstalrecht:',
     'recht van opstal:',
     'erfdienstbaarheid:',
-  ], 120)
+  ], 300)
 
   const stap5kwalitatieveVerplichtingen = extractSectionAfterKeyword(text, [
     'kwalitatieve verplichting:',
@@ -487,13 +503,21 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'kettingbeding:',
   ], 120)
 
-  const stap5bestemmingsplan = extractSectionAfterKeyword(text, [
+  const stap5bestemmingsplanRaw = extractSectionAfterKeyword(text, [
     'vigerend bestemmingsplan:',
     'omgevingsplan:',
+    'bestemmingsplan naam:',
     'bestemmingsplan:',
     'bestemming:',
     'planologische bestemming:',
   ], 300)
+  // Apply stop-word truncation (Bug 12)
+  let stap5bestemmingsplan = stap5bestemmingsplanRaw
+  if (stap5bestemmingsplan) {
+    const stopIdx = stap5bestemmingsplan.search(/raadsbesluit|vastgesteld\s+op/i)
+    if (stopIdx !== -1) stap5bestemmingsplan = stap5bestemmingsplan.slice(0, stopIdx).trim()
+    stap5bestemmingsplan = cleanupLongFieldText(stap5bestemmingsplan, 300) || undefined
+  }
 
   // --- Stap 7: Vergunningen ---
   // Energielabel: check for "Geen"/"-"/undefined values first
@@ -564,7 +588,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     const bodemContext = lowerText.slice(bodemIdx, bodemIdx + 400)
     // Check NEGATIVE patterns FIRST — these override positive matches
     if (
-      /niet\s+geregistreerd\s+als\s+mogelijk\s+verontreinigd|geen\s+informatie\s+bekend\s+die\s+duidt\s+op\s+bodemverontreiniging|geen\s+visuele\s+waarnemingen|geen\s+aanwijzingen\s+voor\s+bodemverontreiniging/.test(bodemContext) ||
+      /niet\s+geregistreerd\s+als\s+mogelijk\s+verontreinigd|geen\s+informatie\s+bekend\s+die\s+duidt\s+op\s+bodemverontreiniging|geen\s+visuele\s+waarnemingen|geen\s+aanwijzingen\s+voor\s+bodemverontreiniging|geen\s+verontreiniging/.test(bodemContext) ||
       bodemContext.includes('niet aanwezig') ||
       bodemContext.includes('schoon') ||
       /\bnee\b/.test(bodemContext)
@@ -595,6 +619,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'toelichting duurzaamheid:',
     'duurzaamheid:',
     'duurzaamheidstoelichting:',
+    'duurzaamheidsmaatregelen:',
+    'energetische maatregelen:',
+    'verduurzaming:',
     'energieprestatie toelichting:',
   ], 300)
 
@@ -639,6 +666,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap9aannames = extractSectionAfterKeyword(text, [
     'aannames:',
     'aanname:',
+    'uitgangspunten en aannames:',
+    'algemene uitgangspunten:',
     'uitgangspunten:',
     'taxatie onnauwkeurigheid:',
   ], 500)
@@ -647,6 +676,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'voorbehouden:',
     'voorbehoud:',
     'voorbehoud en bijzondere omstandigheden:',
+    'onzekerheidsmarge:',
+    'disclaimer:',
   ], 500)
 
   const stap9bijzondereOmstandigheden = extractSectionAfterKeyword(text, [
@@ -655,20 +686,25 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   ], 200)
 
   // --- Build wizardData ---
+  // Field-length constants (Bug 24)
+  const MAX_FIELD_LENGTH_SHORT = 120    // objectnaam, gemeente, provincie, huurder, contracttype
+  const MAX_FIELD_LENGTH_MEDIUM = 300   // bereikbaarheid, eigendomssituatie, erfpacht, zakelijkeRechten, bestemmingsplan
+  const MAX_FIELD_LENGTH_TEXTAREA = 800 // fundering, dakbedekking, installaties, achterstalligOnderhoud, aannames, voorbehouden, bijzondereOmstandigheden, toelichting
+
   const wizardData: Partial<Dossier> = {}
 
   const stap1Fields: Partial<NonNullable<Dossier['stap1']>> = {}
-  if (stap1objectnaam) stap1Fields.objectnaam = stap1objectnaam
-  if (stap1naamTaxateur) stap1Fields.naamTaxateur = stap1naamTaxateur
+  if (stap1objectnaam) stap1Fields.objectnaam = truncateField(stap1objectnaam, MAX_FIELD_LENGTH_SHORT)
+  if (stap1naamTaxateur) stap1Fields.naamTaxateur = truncateField(stap1naamTaxateur, MAX_FIELD_LENGTH_SHORT)
   if (stap1inspectiedatum) stap1Fields.inspectiedatum = stap1inspectiedatum
   if (Object.keys(stap1Fields).length > 0) {
     wizardData.stap1 = stap1Fields as Dossier['stap1']
   }
 
   const stap2Fields: Partial<NonNullable<Dossier['stap2']>> = {}
-  if (stap2bereikbaarheid) stap2Fields.bereikbaarheid = stap2bereikbaarheid
-  if (stap2gemeente) stap2Fields.gemeente = stap2gemeente
-  if (stap2provincie) stap2Fields.provincie = stap2provincie
+  if (stap2bereikbaarheid) stap2Fields.bereikbaarheid = truncateField(stap2bereikbaarheid, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap2gemeente) stap2Fields.gemeente = truncateField(stap2gemeente, MAX_FIELD_LENGTH_SHORT)
+  if (stap2provincie) stap2Fields.provincie = truncateField(stap2provincie, MAX_FIELD_LENGTH_SHORT)
   if (stap2ligging) stap2Fields.ligging = stap2ligging
   if (Object.keys(stap2Fields).length > 0) {
     wizardData.stap2 = stap2Fields as Dossier['stap2']
@@ -688,27 +724,27 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   const stap4Fields: Partial<NonNullable<Dossier['stap4']>> = {}
   stap4Fields.verhuurd = stap4verhuurd
-  if (stap4huurder) stap4Fields.huurder = stap4huurder
+  if (stap4huurder) stap4Fields.huurder = truncateField(stap4huurder, MAX_FIELD_LENGTH_SHORT)
   if (stap4huurprijsPerJaar !== undefined) stap4Fields.huurprijsPerJaar = stap4huurprijsPerJaar
   if (stap4markthuurPerJaar !== undefined) stap4Fields.markthuurPerJaar = stap4markthuurPerJaar
-  if (stap4contracttype) stap4Fields.contracttype = stap4contracttype
+  if (stap4contracttype) stap4Fields.contracttype = truncateField(stap4contracttype, MAX_FIELD_LENGTH_SHORT)
   wizardData.stap4 = stap4Fields as Dossier['stap4']
 
   const stap5Fields: Partial<NonNullable<Dossier['stap5']>> = {}
-  if (stap5eigendomssituatie) stap5Fields.eigendomssituatie = stap5eigendomssituatie
-  if (stap5erfpacht) stap5Fields.erfpacht = stap5erfpacht
-  if (stap5zakelijkeRechten) stap5Fields.zakelijkeRechten = stap5zakelijkeRechten
-  if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = stap5kwalitatieveVerplichtingen
-  if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = stap5bestemmingsplan
+  if (stap5eigendomssituatie) stap5Fields.eigendomssituatie = truncateField(stap5eigendomssituatie, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5erfpacht) stap5Fields.erfpacht = truncateField(stap5erfpacht, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5zakelijkeRechten) stap5Fields.zakelijkeRechten = truncateField(stap5zakelijkeRechten, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = truncateField(stap5kwalitatieveVerplichtingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = truncateField(stap5bestemmingsplan, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap5Fields).length > 0) {
     wizardData.stap5 = stap5Fields as Dossier['stap5']
   }
 
   const stap6Fields: Partial<NonNullable<Dossier['stap6']>> = {}
-  if (stap6fundering) stap6Fields.fundering = stap6fundering
-  if (stap6dakbedekking) stap6Fields.dakbedekking = stap6dakbedekking
-  if (stap6installaties) stap6Fields.installaties = stap6installaties
-  if (stap6achterstallig) stap6Fields.achterstalligOnderhoudBeschrijving = stap6achterstallig
+  if (stap6fundering) stap6Fields.fundering = truncateField(stap6fundering, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6dakbedekking) stap6Fields.dakbedekking = truncateField(stap6dakbedekking, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6installaties) stap6Fields.installaties = truncateField(stap6installaties, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6achterstallig) stap6Fields.achterstalligOnderhoudBeschrijving = truncateField(stap6achterstallig, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap6exterieurStaat) stap6Fields.exterieurStaat = stap6exterieurStaat
   if (stap6interieurStaat) stap6Fields.interieurStaat = stap6interieurStaat
   if (stap6onderhoudskosten !== undefined) stap6Fields.onderhoudskosten = stap6onderhoudskosten
@@ -722,7 +758,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   // toelichting topics in a single text field.
   const TOELICHTING_SEPARATOR = ' | '
   const stap7toelichtingCombined = [stap7toelichting, stap7toelichtingDuurzaamheid].filter(Boolean).join(TOELICHTING_SEPARATOR)
-  if (stap7toelichtingCombined) stap7Fields.toelichting = stap7toelichtingCombined
+  if (stap7toelichtingCombined) stap7Fields.toelichting = truncateField(stap7toelichtingCombined, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap7energielabel) stap7Fields.energielabel = stap7energielabel
   if (stap7asbest) stap7Fields.asbest = stap7asbest
   if (stap7bodemverontreiniging) stap7Fields.bodemverontreiniging = stap7bodemverontreiniging
@@ -739,9 +775,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   }
 
   const stap9Fields: Partial<NonNullable<Dossier['stap9']>> = {}
-  if (stap9aannames) stap9Fields.aannames = stap9aannames
-  if (stap9voorbehouden) stap9Fields.voorbehouden = stap9voorbehouden
-  if (stap9bijzondereOmstandigheden) stap9Fields.bijzondereOmstandigheden = stap9bijzondereOmstandigheden
+  if (stap9aannames) stap9Fields.aannames = truncateField(stap9aannames, MAX_TEXTAREA)
+  if (stap9voorbehouden) stap9Fields.voorbehouden = truncateField(stap9voorbehouden, MAX_TEXTAREA)
+  if (stap9bijzondereOmstandigheden) stap9Fields.bijzondereOmstandigheden = truncateField(stap9bijzondereOmstandigheden, MAX_TEXTAREA)
   if (Object.keys(stap9Fields).length > 0) {
     wizardData.stap9 = stap9Fields as Dossier['stap9']
   }

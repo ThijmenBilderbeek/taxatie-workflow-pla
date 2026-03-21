@@ -775,9 +775,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   }
 
   const stap9Fields: Partial<NonNullable<Dossier['stap9']>> = {}
-  if (stap9aannames) stap9Fields.aannames = truncateField(stap9aannames, MAX_TEXTAREA)
-  if (stap9voorbehouden) stap9Fields.voorbehouden = truncateField(stap9voorbehouden, MAX_TEXTAREA)
-  if (stap9bijzondereOmstandigheden) stap9Fields.bijzondereOmstandigheden = truncateField(stap9bijzondereOmstandigheden, MAX_TEXTAREA)
+  if (stap9aannames) stap9Fields.aannames = truncateField(stap9aannames, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9voorbehouden) stap9Fields.voorbehouden = truncateField(stap9voorbehouden, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9bijzondereOmstandigheden) stap9Fields.bijzondereOmstandigheden = truncateField(stap9bijzondereOmstandigheden, MAX_FIELD_LENGTH_TEXTAREA)
   if (Object.keys(stap9Fields).length > 0) {
     wizardData.stap9 = stap9Fields as Dossier['stap9']
   }

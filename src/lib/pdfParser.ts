@@ -687,24 +687,24 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   // --- Build wizardData ---
   // Field-length constants (Bug 24)
-  const MAX_SHORT = 120    // objectnaam, gemeente, provincie, huurder, contracttype
-  const MAX_MEDIUM = 300   // bereikbaarheid, eigendomssituatie, erfpacht, zakelijkeRechten, bestemmingsplan
-  const MAX_TEXTAREA = 800 // fundering, dakbedekking, installaties, achterstalligOnderhoud, aannames, voorbehouden, bijzondereOmstandigheden, toelichting
+  const MAX_FIELD_LENGTH_SHORT = 120    // objectnaam, gemeente, provincie, huurder, contracttype
+  const MAX_FIELD_LENGTH_MEDIUM = 300   // bereikbaarheid, eigendomssituatie, erfpacht, zakelijkeRechten, bestemmingsplan
+  const MAX_FIELD_LENGTH_TEXTAREA = 800 // fundering, dakbedekking, installaties, achterstalligOnderhoud, aannames, voorbehouden, bijzondereOmstandigheden, toelichting
 
   const wizardData: Partial<Dossier> = {}
 
   const stap1Fields: Partial<NonNullable<Dossier['stap1']>> = {}
-  if (stap1objectnaam) stap1Fields.objectnaam = truncateField(stap1objectnaam, MAX_SHORT)
-  if (stap1naamTaxateur) stap1Fields.naamTaxateur = truncateField(stap1naamTaxateur, MAX_SHORT)
+  if (stap1objectnaam) stap1Fields.objectnaam = truncateField(stap1objectnaam, MAX_FIELD_LENGTH_SHORT)
+  if (stap1naamTaxateur) stap1Fields.naamTaxateur = truncateField(stap1naamTaxateur, MAX_FIELD_LENGTH_SHORT)
   if (stap1inspectiedatum) stap1Fields.inspectiedatum = stap1inspectiedatum
   if (Object.keys(stap1Fields).length > 0) {
     wizardData.stap1 = stap1Fields as Dossier['stap1']
   }
 
   const stap2Fields: Partial<NonNullable<Dossier['stap2']>> = {}
-  if (stap2bereikbaarheid) stap2Fields.bereikbaarheid = truncateField(stap2bereikbaarheid, MAX_MEDIUM)
-  if (stap2gemeente) stap2Fields.gemeente = truncateField(stap2gemeente, MAX_SHORT)
-  if (stap2provincie) stap2Fields.provincie = truncateField(stap2provincie, MAX_SHORT)
+  if (stap2bereikbaarheid) stap2Fields.bereikbaarheid = truncateField(stap2bereikbaarheid, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap2gemeente) stap2Fields.gemeente = truncateField(stap2gemeente, MAX_FIELD_LENGTH_SHORT)
+  if (stap2provincie) stap2Fields.provincie = truncateField(stap2provincie, MAX_FIELD_LENGTH_SHORT)
   if (stap2ligging) stap2Fields.ligging = stap2ligging
   if (Object.keys(stap2Fields).length > 0) {
     wizardData.stap2 = stap2Fields as Dossier['stap2']
@@ -724,27 +724,27 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   const stap4Fields: Partial<NonNullable<Dossier['stap4']>> = {}
   stap4Fields.verhuurd = stap4verhuurd
-  if (stap4huurder) stap4Fields.huurder = truncateField(stap4huurder, MAX_SHORT)
+  if (stap4huurder) stap4Fields.huurder = truncateField(stap4huurder, MAX_FIELD_LENGTH_SHORT)
   if (stap4huurprijsPerJaar !== undefined) stap4Fields.huurprijsPerJaar = stap4huurprijsPerJaar
   if (stap4markthuurPerJaar !== undefined) stap4Fields.markthuurPerJaar = stap4markthuurPerJaar
-  if (stap4contracttype) stap4Fields.contracttype = truncateField(stap4contracttype, MAX_SHORT)
+  if (stap4contracttype) stap4Fields.contracttype = truncateField(stap4contracttype, MAX_FIELD_LENGTH_SHORT)
   wizardData.stap4 = stap4Fields as Dossier['stap4']
 
   const stap5Fields: Partial<NonNullable<Dossier['stap5']>> = {}
-  if (stap5eigendomssituatie) stap5Fields.eigendomssituatie = truncateField(stap5eigendomssituatie, MAX_MEDIUM)
-  if (stap5erfpacht) stap5Fields.erfpacht = truncateField(stap5erfpacht, MAX_MEDIUM)
-  if (stap5zakelijkeRechten) stap5Fields.zakelijkeRechten = truncateField(stap5zakelijkeRechten, MAX_MEDIUM)
-  if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = truncateField(stap5kwalitatieveVerplichtingen, MAX_MEDIUM)
-  if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = truncateField(stap5bestemmingsplan, MAX_MEDIUM)
+  if (stap5eigendomssituatie) stap5Fields.eigendomssituatie = truncateField(stap5eigendomssituatie, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5erfpacht) stap5Fields.erfpacht = truncateField(stap5erfpacht, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5zakelijkeRechten) stap5Fields.zakelijkeRechten = truncateField(stap5zakelijkeRechten, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = truncateField(stap5kwalitatieveVerplichtingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = truncateField(stap5bestemmingsplan, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap5Fields).length > 0) {
     wizardData.stap5 = stap5Fields as Dossier['stap5']
   }
 
   const stap6Fields: Partial<NonNullable<Dossier['stap6']>> = {}
-  if (stap6fundering) stap6Fields.fundering = truncateField(stap6fundering, MAX_TEXTAREA)
-  if (stap6dakbedekking) stap6Fields.dakbedekking = truncateField(stap6dakbedekking, MAX_TEXTAREA)
-  if (stap6installaties) stap6Fields.installaties = truncateField(stap6installaties, MAX_TEXTAREA)
-  if (stap6achterstallig) stap6Fields.achterstalligOnderhoudBeschrijving = truncateField(stap6achterstallig, MAX_TEXTAREA)
+  if (stap6fundering) stap6Fields.fundering = truncateField(stap6fundering, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6dakbedekking) stap6Fields.dakbedekking = truncateField(stap6dakbedekking, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6installaties) stap6Fields.installaties = truncateField(stap6installaties, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6achterstallig) stap6Fields.achterstalligOnderhoudBeschrijving = truncateField(stap6achterstallig, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap6exterieurStaat) stap6Fields.exterieurStaat = stap6exterieurStaat
   if (stap6interieurStaat) stap6Fields.interieurStaat = stap6interieurStaat
   if (stap6onderhoudskosten !== undefined) stap6Fields.onderhoudskosten = stap6onderhoudskosten
@@ -758,7 +758,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   // toelichting topics in a single text field.
   const TOELICHTING_SEPARATOR = ' | '
   const stap7toelichtingCombined = [stap7toelichting, stap7toelichtingDuurzaamheid].filter(Boolean).join(TOELICHTING_SEPARATOR)
-  if (stap7toelichtingCombined) stap7Fields.toelichting = truncateField(stap7toelichtingCombined, MAX_TEXTAREA)
+  if (stap7toelichtingCombined) stap7Fields.toelichting = truncateField(stap7toelichtingCombined, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap7energielabel) stap7Fields.energielabel = stap7energielabel
   if (stap7asbest) stap7Fields.asbest = stap7asbest
   if (stap7bodemverontreiniging) stap7Fields.bodemverontreiniging = stap7bodemverontreiniging

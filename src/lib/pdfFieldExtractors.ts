@@ -388,6 +388,9 @@ export function extractMarkthuur(text: string): ExtractionResult<number> | undef
   return undefined
 }
 
+/** Maximum length for eigendomssituatie field (single-line, unambiguous value). */
+const MAX_EIGENDOMSSITUATIE_LENGTH = 80
+
 export function extractEigendomssituatie(text: string): ExtractionResult<string> | undefined {
   const exact = tryExactLabel(text, ['eigendomssituatie', 'eigendomsvorm', 'eigendom', 'type eigendom', 'te taxeren belang'])
   if (exact) {
@@ -395,8 +398,8 @@ export function extractEigendomssituatie(text: string): ExtractionResult<string>
     // Truncate at known unrelated-field stop-words (Bug 9)
     const stopIdx = value.search(/perceeloppervlak|energielabel|bvo|vvo|kadastrale|oppervlak/i)
     if (stopIdx !== -1) value = value.slice(0, stopIdx).replace(/[,;:\s]+$/, '').trim()
-    // Enforce max length of 80 chars
-    if (value.length > 80) value = truncateField(value, 80)
+    // Enforce max length
+    if (value.length > MAX_EIGENDOMSSITUATIE_LENGTH) value = truncateField(value, MAX_EIGENDOMSSITUATIE_LENGTH)
     if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 5', parserRule: 'eigendomssituatie-stop-words' }
   }
   return undefined

@@ -14,6 +14,7 @@ import {
   normalizeDecimalNumber,
   normalizeArea,
   parseAddress,
+  cleanGemeente,
 } from './pdfNormalizers'
 
 export interface ExtractionResult<T> {
@@ -25,6 +26,8 @@ export interface ExtractionResult<T> {
   sourceSnippet: string
   /** Logical section of the PDF where the match was found */
   sourceSection?: string
+  /** The parser rule / pattern that produced the match */
+  parserRule?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +76,41 @@ function tryKeyword(
     return { raw: line, label: kw, snippet }
   }
   return undefined
+}
+
+/** Section markers that indicate reference / comparable objects in a report. */
+const REFERENCE_SECTION_MARKERS = [
+  'H.2',
+  'H.3',
+  'huurreferentie',
+  'koopreferentie',
+  'referentieobject',
+  'vergelijkingsobject',
+  'huurref',
+  'koopref',
+]
+
+/**
+ * Maximum character distance (backwards from a match) within which a reference-
+ * section marker is still considered to have "opened" a reference section.
+ * Typical sections are 1–3 pages = ~2000–4000 chars; 4000 is a safe upper bound.
+ */
+const MAX_REFERENCE_SECTION_DISTANCE = 4000
+
+/**
+ * Returns true when the given character index in `text` falls inside a
+ * reference-objects section (e.g. H.2, H.3, koopreferentie, etc.).
+ * Used to prevent leakage of values from comparable-object sections into the
+ * main-object fields.
+ */
+function isInReferenceSection(text: string, idx: number): boolean {
+  const lower = text.toLowerCase()
+  for (const marker of REFERENCE_SECTION_MARKERS) {
+    const markerIdx = lower.lastIndexOf(marker.toLowerCase(), idx)
+    if (markerIdx === -1) continue
+    if (idx - markerIdx < MAX_REFERENCE_SECTION_DISTANCE) return true
+  }
+  return false
 }
 
 // ---------------------------------------------------------------------------
@@ -128,9 +166,10 @@ export function extractInspectiedatum(text: string): ExtractionResult<string> | 
 export function extractGemeente(text: string): ExtractionResult<string> | undefined {
   const exact = tryExactLabel(text, ['gemeente'])
   if (exact) {
-    const value = exact.raw.slice(0, 50).split('\n')[0].trim()
-    if (value && !/omgevingsplan|bestemmingsplan|raadsbesluit/i.test(value)) {
-      return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 2' }
+    const raw = exact.raw.split('\n')[0].trim()
+    const value = cleanGemeente(raw)
+    if (value && value.length > 0) {
+      return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 2', parserRule: 'cleanGemeente' }
     }
   }
   return undefined
@@ -145,21 +184,46 @@ export function extractProvincie(text: string): ExtractionResult<string> | undef
   return undefined
 }
 
-const LIGGING_VALUES = ['bedrijventerrein', 'binnenstad', 'woonwijk', 'buitengebied', 'gemengd'] as const
-type LiggingValue = typeof LIGGING_VALUES[number]
+const LIGGING_ENUM_VALUES = ['bedrijventerrein', 'binnenstad', 'woonwijk', 'buitengebied', 'gemengd'] as const
+const LIGGING_QUALITY_VALUES = ['uitstekend', 'goed', 'redelijk', 'matig', 'slecht'] as const
+type LiggingEnumValue = typeof LIGGING_ENUM_VALUES[number]
 
-export function extractLigging(text: string): ExtractionResult<LiggingValue> | undefined {
+export function extractLigging(text: string): ExtractionResult<string> | undefined {
   const lower = text.toLowerCase()
 
-  // High: explicit ligging label within 200 chars
-  for (const keyword of ['ligging:', 'ligging object:', 'type ligging:']) {
+  // High: explicit ligging label — check quality scores first (only in first line), then enum
+  for (const keyword of ['ligging:', 'omschrijving locatie, stand en ligging:', 'ligging object:', 'type ligging:']) {
     const idx = lower.indexOf(keyword)
     if (idx === -1) continue
+    // Only search the first line after the label for quality/enum values (avoids false positives from body text)
+    const afterLabel = lower.slice(idx + keyword.length).trimStart()
+    const firstLine = afterLabel.split('\n')[0].trim()
+
+    // Quality score has higher priority than enum value when found on the label's line
+    for (const val of LIGGING_QUALITY_VALUES) {
+      if (firstLine.includes(val)) {
+        const snippet = text.slice(idx, idx + keyword.length + firstLine.length + 5).replace(/\s+/g, ' ')
+        return { value: val, confidence: 'high', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2', parserRule: 'quality-score' }
+      }
+    }
+    for (const val of LIGGING_ENUM_VALUES) {
+      if (firstLine.includes(val)) {
+        const snippet = text.slice(idx, idx + keyword.length + firstLine.length + 5).replace(/\s+/g, ' ')
+        return { value: val, confidence: 'high', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2', parserRule: 'enum' }
+      }
+    }
+    // Fallback: also check up to 200 chars after label for quality/enum in multi-line context
     const context = lower.slice(idx, idx + 200)
-    for (const val of LIGGING_VALUES) {
+    for (const val of LIGGING_QUALITY_VALUES) {
       if (context.includes(val)) {
         const snippet = text.slice(idx, idx + 80).replace(/\s+/g, ' ')
-        return { value: val, confidence: 'high', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2' }
+        return { value: val, confidence: 'high', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2', parserRule: 'quality-score-multiline' }
+      }
+    }
+    for (const val of LIGGING_ENUM_VALUES) {
+      if (context.includes(val)) {
+        const snippet = text.slice(idx, idx + 80).replace(/\s+/g, ' ')
+        return { value: val, confidence: 'high', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2', parserRule: 'enum-multiline' }
       }
     }
   }
@@ -169,18 +233,26 @@ export function extractLigging(text: string): ExtractionResult<LiggingValue> | u
     const idx = lower.indexOf(keyword)
     if (idx === -1) continue
     const context = lower.slice(Math.max(0, idx - 20), idx + 200)
-    for (const val of LIGGING_VALUES) {
+
+    // Quality score preferred over enum even in contextual search
+    for (const val of LIGGING_QUALITY_VALUES) {
       if (context.includes(val)) {
         const snippet = text.slice(Math.max(0, idx - 20), idx + 80).replace(/\s+/g, ' ')
-        return { value: val, confidence: 'medium', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2' }
+        return { value: val, confidence: 'medium', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2', parserRule: 'quality-score-contextual' }
+      }
+    }
+    for (const val of LIGGING_ENUM_VALUES) {
+      if (context.includes(val)) {
+        const snippet = text.slice(Math.max(0, idx - 20), idx + 80).replace(/\s+/g, ' ')
+        return { value: val, confidence: 'medium', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 2', parserRule: 'enum-contextual' }
       }
     }
   }
 
-  // Low: full-text scan, prioritize specific over generic
-  for (const val of LIGGING_VALUES) {
+  // Low: full-text scan, enum values only (quality scores would be noise here)
+  for (const val of LIGGING_ENUM_VALUES) {
     if (lower.includes(val)) {
-      return { value: val, confidence: 'low', sourceLabel: '(full-text)', sourceSnippet: val, sourceSection: 'Stap 2' }
+      return { value: val, confidence: 'low', sourceLabel: '(full-text)', sourceSnippet: val, sourceSection: 'Stap 2', parserRule: 'enum-fulltext' }
     }
   }
 
@@ -204,14 +276,15 @@ export function extractBvo(text: string): ExtractionResult<number> | undefined {
 }
 
 export function extractVvo(text: string): ExtractionResult<number> | undefined {
-  const re = /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|VVO|verhuurbaar\s+vloeroppervlak)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
+  // Accept "VVO 870", "VVO: 870", "totaal VVO 870", "Totaal VVO m² of stuks: 870"
+  const re = /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|totaal\s+VVO|VVO|verhuurbaar\s+vloeroppervlak)[\s:]+([0-9]{1,6}[.,]?[0-9]*)\s*(?:m[²2])?/i
   const match = text.match(re)
   if (match) {
     const val = normalizeArea(match[1])
     if (val !== undefined) {
       const idx = text.indexOf(match[0])
       const snippet = text.slice(Math.max(0, idx), idx + match[0].length + 10).replace(/\s+/g, ' ')
-      return { value: val, confidence: 'high', sourceLabel: 'vvo:', sourceSnippet: snippet, sourceSection: 'Stap 3' }
+      return { value: val, confidence: 'high', sourceLabel: 'vvo:', sourceSnippet: snippet, sourceSection: 'Stap 3', parserRule: 'vvo-regex' }
     }
   }
   return undefined
@@ -246,14 +319,25 @@ export function extractBouwjaar(text: string): ExtractionResult<number> | undefi
 }
 
 export function extractRenovatiejaar(text: string): ExtractionResult<number> | undefined {
-  const re = /(?:renovatiejaar|gerenoveerd\s+in|meest\s+recente\s+renovatie|jaar\s+renovatie|laatst\s+gerenoveerd)[:\s]+([0-9]{4})/i
-  const match = text.match(re)
-  if (match) {
+  // Skip if context says no renovation happened
+  const lower = text.toLowerCase()
+  const noRenovation = /geen\s+aanzienlijke\s+wijzigingen|geen\s+renovatie|niet\s+gerenoveerd/.test(lower)
+
+  const re = /(?:renovatiejaar|gerenoveerd\s+in|meest\s+recente\s+renovatie|jaar\s+renovatie|laatst\s+gerenoveerd)[:\s]+([0-9]{4})/gi
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text)) !== null) {
+    const idx = match.index
+    // Skip matches in reference / comparables sections
+    if (isInReferenceSection(text, idx)) continue
+    // Skip if context (100 chars before match) contains reference-section words
+    const contextBefore = lower.slice(Math.max(0, idx - 150), idx)
+    if (/referentie|vergelijkingsobject|koopreferentie|huurreferentie/.test(contextBefore)) continue
+    // Skip if earlier in the document we found explicit "no renovation" language
+    if (noRenovation) continue
     const val = parseInt(match[1], 10)
-    const idx = text.indexOf(match[0])
     const snippet = text.slice(Math.max(0, idx), idx + match[0].length + 10).replace(/\s+/g, ' ')
     const label = match[0].split(/[\s:]/)[0].toLowerCase()
-    return { value: val, confidence: 'high', sourceLabel: label + ':', sourceSnippet: snippet, sourceSection: 'Stap 3' }
+    return { value: val, confidence: 'high', sourceLabel: label + ':', sourceSnippet: snippet, sourceSection: 'Stap 3', parserRule: 'renovatiejaar-scoped' }
   }
   return undefined
 }
@@ -323,21 +407,35 @@ export function extractBar(text: string): ExtractionResult<number> | undefined {
 }
 
 export function extractNar(text: string): ExtractionResult<number> | undefined {
-  const re = /\bNAR\b[^:\n]{0,40}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
-  const match = text.match(re)
-  if (match) {
-    const val = normalizePercent(match[1])
+  // Pattern 1: "NAR ..." with colon and value (handles "NAR % von: 6,75 %")
+  const re1 = /\bNAR\b[^:\n]{0,40}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
+  const m1 = text.match(re1)
+  if (m1) {
+    const val = normalizePercent(m1[1])
     if (val !== undefined) {
-      const idx = text.indexOf(match[0])
-      const snippet = text.slice(Math.max(0, idx), idx + match[0].length + 10).replace(/\s+/g, ' ')
-      return { value: val, confidence: 'high', sourceLabel: 'nar:', sourceSnippet: snippet, sourceSection: 'Stap 8' }
+      const idx = text.indexOf(m1[0])
+      const snippet = text.slice(Math.max(0, idx), idx + m1[0].length + 10).replace(/\s+/g, ' ')
+      return { value: val, confidence: 'high', sourceLabel: 'nar:', sourceSnippet: snippet, sourceSection: 'Stap 8', parserRule: 'nar-label' }
+    }
+  }
+  // Pattern 2: "netto aanvangsrendement: 6,75%"
+  const re2 = /netto\s+aanvangsrendement[:\s]+([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
+  const m2 = text.match(re2)
+  if (m2) {
+    const val = normalizePercent(m2[1])
+    if (val !== undefined) {
+      const idx = text.indexOf(m2[0])
+      const snippet = text.slice(Math.max(0, idx), idx + m2[0].length + 10).replace(/\s+/g, ' ')
+      return { value: val, confidence: 'high', sourceLabel: 'netto aanvangsrendement:', sourceSnippet: snippet, sourceSection: 'Stap 8', parserRule: 'nar-long-label' }
     }
   }
   return undefined
 }
 
 export function extractKapitalisatiefactor(text: string): ExtractionResult<number> | undefined {
-  const re = /(?:kapitalisatiefactor|kap\.?\s*factor)[:\s|]+([0-9]{1,2}[.,][0-9]{1,2})/i
+  // Matches: "kapitalisatiefactor: 12,30", "kap. factor: 12,30", "kap.factor: 12,30",
+  //          "Kap. factor von 13,4" (German-style "von" in Dutch IPD reports)
+  const re = /(?:kapitalisatiefactor|kap\.?\s*factor)[:\s|]+(?:von\s+)?([0-9]{1,2}[.,][0-9]{1,2})/i
   const match = text.match(re)
   if (match) {
     const val = normalizeDecimalNumber(match[1])
@@ -345,25 +443,39 @@ export function extractKapitalisatiefactor(text: string): ExtractionResult<numbe
       const idx = text.indexOf(match[0])
       const snippet = text.slice(Math.max(0, idx), idx + match[0].length + 10).replace(/\s+/g, ' ')
       const label = match[0].split(/[\s:|]/)[0].toLowerCase()
-      return { value: val, confidence: 'high', sourceLabel: label + ':', sourceSnippet: snippet, sourceSection: 'Stap 8' }
+      return { value: val, confidence: 'high', sourceLabel: label + ':', sourceSnippet: snippet, sourceSection: 'Stap 8', parserRule: 'kap-factor-label' }
     }
   }
   return undefined
 }
 
 export function extractEnergielabel(text: string): ExtractionResult<string> | undefined {
-  const exact = tryExactLabel(text, ['energielabel', 'energieklasse'])
-  if (exact) {
-    const raw = exact.raw.trim().slice(0, 20).split('\n')[0].trim()
-    const lower = raw.toLowerCase()
-    const INVALID = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'onbekend', 'niet']
-    if (INVALID.some((v) => lower === v || lower.startsWith(v))) {
-      // Known "geen" value – medium confidence so the UI can show it
-      return { value: 'geen', confidence: 'medium', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 7' }
-    }
-    const labelMatch = raw.match(/^([A-G][+]{0,4})/i)
-    if (labelMatch) {
-      return { value: labelMatch[1].toUpperCase(), confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 7' }
+  const lower = text.toLowerCase()
+  const labels = ['energielabel', 'energieklasse']
+  for (const label of labels) {
+    const needle = label + ':'
+    let searchFrom = 0
+    while (true) {
+      const idx = lower.indexOf(needle, searchFrom)
+      if (idx === -1) break
+      // Skip matches in reference sections
+      if (isInReferenceSection(text, idx)) {
+        searchFrom = idx + 1
+        continue
+      }
+      const after = text.slice(idx + needle.length).replace(/^[\s]+/, '')
+      const raw = after.trim().slice(0, 20).split('\n')[0].trim()
+      const rawLower = raw.toLowerCase()
+      const snippet = text.slice(Math.max(0, idx - 10), idx + needle.length + 40).replace(/\s+/g, ' ')
+      const INVALID = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'onbekend', 'niet']
+      if (INVALID.some((v) => rawLower === v || rawLower.startsWith(v))) {
+        return { value: 'geen', confidence: 'medium', sourceLabel: needle, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-geen' }
+      }
+      const labelMatch = raw.match(/^([A-G][+]{0,4})/i)
+      if (labelMatch) {
+        return { value: labelMatch[1].toUpperCase(), confidence: 'high', sourceLabel: needle, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-exact' }
+      }
+      break
     }
   }
   return undefined
@@ -380,25 +492,39 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
     { keyword: 'woning', value: 'woning' },
   ]
 
-  // Try explicit label first → high
-  const exact = tryExactLabel(text, ['type vastgoed', 'type object', 'soort object', 'object type'])
-  if (exact) {
-    const lower = exact.raw.toLowerCase()
+  // Priority 1: IPD-type labels (highest confidence, used in IPD/RICS-formatted reports)
+  const ipdExact = tryExactLabel(text, ['ipd-type', 'ipd type', 'type vastgoed', 'type object', 'soort object', 'object type'])
+  if (ipdExact) {
+    const lower = ipdExact.raw.toLowerCase()
+    // "eigen gebruik" is a gebruiksdoel, never a physical type — skip it
+    if (/eigen\s+gebruik/.test(lower)) return undefined
     for (const { keyword, value } of PHYSICAL_TYPES) {
-      if (lower.includes(keyword) && keyword !== 'eigen gebruik') {
-        return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
+      if (lower.includes(keyword)) {
+        return { value, confidence: 'high', sourceLabel: ipdExact.label, sourceSnippet: ipdExact.snippet, sourceSection: 'Stap 1', parserRule: 'ipd-label' }
       }
     }
   }
 
-  // Keyword in full text → medium
+  // Priority 2: "het object betreft een ..." / "betreft een kantoor(gebouw)"
+  const betrefMatch = text.match(/\bbetreft\s+een\s+(kantoorgebouw|kantoor|bedrijfshal|bedrijfscomplex|winkel|woning|appartement)\b/i)
+  if (betrefMatch) {
+    const lower = betrefMatch[1].toLowerCase()
+    for (const { keyword, value } of PHYSICAL_TYPES) {
+      if (lower.includes(keyword)) {
+        const idx = text.toLowerCase().indexOf(betrefMatch[0].toLowerCase())
+        const snippet = text.slice(Math.max(0, idx - 10), idx + betrefMatch[0].length + 20).replace(/\s+/g, ' ')
+        return { value, confidence: 'high', sourceLabel: 'betreft een', sourceSnippet: snippet, sourceSection: 'Stap 1', parserRule: 'betreft-een' }
+      }
+    }
+  }
+
+  // Priority 3: keyword in full text (medium confidence)
   const lower = text.toLowerCase()
   for (const { keyword, value } of PHYSICAL_TYPES) {
-    if (lower.includes(keyword)) {
-      const idx = lower.indexOf(keyword)
-      const snippet = text.slice(Math.max(0, idx - 10), idx + keyword.length + 20).replace(/\s+/g, ' ')
-      return { value, confidence: 'medium', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 1' }
-    }
+    const idx = lower.indexOf(keyword)
+    if (idx === -1) continue
+    const snippet = text.slice(Math.max(0, idx - 10), idx + keyword.length + 20).replace(/\s+/g, ' ')
+    return { value, confidence: 'medium', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 1', parserRule: 'fulltext-keyword' }
   }
   return undefined
 }

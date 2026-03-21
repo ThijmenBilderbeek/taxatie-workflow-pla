@@ -9,6 +9,8 @@ import {
   cleanupLongFieldText,
   compactWhitespace,
   parseAddress,
+  dutchNumberWordToDigit,
+  cleanGemeente,
 } from './pdfNormalizers'
 import { extractAllFieldsWithConfidence } from './pdfFieldExtractors'
 
@@ -170,11 +172,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     : undefined
 
   // --- Stap 2: Adres & Locatie ---
-  // Gemeente: strict label with colon only, filter bestemmingsplan context
-  let stap2gemeente = extractSectionAfterKeyword(text, ['gemeente:'], 50, { singleLine: true })
-  if (stap2gemeente && /omgevingsplan|bestemmingsplan|raadsbesluit/i.test(stap2gemeente)) {
-    stap2gemeente = undefined
-  }
+  // Gemeente: strict label with colon only, use cleanGemeente to strip bestemmingsplan text
+  const stap2gemeenteRaw = extractSectionAfterKeyword(text, ['gemeente:'], 80, { singleLine: true })
+  const stap2gemeente = stap2gemeenteRaw ? cleanGemeente(stap2gemeenteRaw) || undefined : undefined
 
   const stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 30, { singleLine: true })
 
@@ -225,7 +225,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   // Bereikbaarheid: use stopAtInlineLabel to prevent capturing sub-fields
   const stap2bereikbaarheidRaw = extractSectionAfterKeyword(
     text,
-    ['bereikbaarheid:', 'bereikbaarheid', 'ontsluiting:', 'infrastructuur:'],
+    ['toelichting bereikbaarheid:', 'bereikbaarheid:', 'bereikbaarheid', 'ontsluiting:', 'infrastructuur:'],
     300,
     { stopAtInlineLabel: true }
   )
@@ -240,9 +240,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   )
   const stap3bvo = bvoMatch ? normalizeArea(bvoMatch[1]) : undefined
 
-  // VVO: extended label synonyms including "Totaal VVO m² of stuks"
+  // VVO: extended label synonyms, handle "VVO 870" (space only, no colon)
   const vvoMatch = text.match(
-    /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|VVO|verhuurbaar\s+vloeroppervlak)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
+    /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|totaal\s+VVO|VVO|verhuurbaar\s+vloeroppervlak)[\s:]+([0-9]{1,6}[.,]?[0-9]*)\s*(?:m[²2])?/i
   )
   const stap3vvo = vvoMatch ? normalizeArea(vvoMatch[1]) : undefined
 
@@ -252,20 +252,40 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   )
   const stap3perceeloppervlak = perceelMatch ? normalizeArea(perceelMatch[1]) : undefined
 
-  // Bouwlagen
-  const bouwlagenMatch = text.match(
+  // Bouwlagen: match digit-based first, then Dutch word-numbers
+  const bouwlagenDigitMatch = text.match(
     /(?:aantal\s+bouwlagen|bouwlagen|verdiepingen(?:\s+incl\.?\s+begane\s+grond)?)[:\s]+([0-9]{1,2})/i
   )
-  const stap3aantalBouwlagen = bouwlagenMatch ? parseInt(bouwlagenMatch[1], 10) : undefined
+  let stap3aantalBouwlagen: number | undefined
+  if (bouwlagenDigitMatch) {
+    stap3aantalBouwlagen = parseInt(bouwlagenDigitMatch[1], 10)
+  } else {
+    // "kantoorgebouw in twee bouwlagen", "in drie bouwlagen"
+    const bouwlagenWordMatch = text.match(
+      /\b(?:in|van|met)\s+(een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)\s+(?:bouwlagen|verdiepingen|lagen)\b/i
+    )
+    if (bouwlagenWordMatch) {
+      stap3aantalBouwlagen = dutchNumberWordToDigit(bouwlagenWordMatch[1])
+    }
+  }
 
   const bouwjaarMatch = text.match(/(?:bouwjaar|gebouwd\s+in|jaar\s+van\s+oplevering)[:\s]+([0-9]{4})/i)
   const stap3bouwjaar = bouwjaarMatch ? parseInt(bouwjaarMatch[1], 10) : undefined
 
-  // Renovatiejaar
-  const renovatiejaarMatch = text.match(
-    /(?:renovatiejaar|gerenoveerd\s+in|meest\s+recente\s+renovatie|jaar\s+renovatie|laatst\s+gerenoveerd)[:\s]+([0-9]{4})/i
-  )
-  const stap3renovatiejaar = renovatiejaarMatch ? parseInt(renovatiejaarMatch[1], 10) : undefined
+  // Renovatiejaar: skip reference sections and negative context
+  let stap3renovatiejaar: number | undefined
+  if (!/geen\s+aanzienlijke\s+wijzigingen|geen\s+renovatie|niet\s+gerenoveerd/.test(lowerText)) {
+    const renovatieRe = /(?:renovatiejaar|gerenoveerd\s+in|meest\s+recente\s+renovatie|jaar\s+renovatie|laatst\s+gerenoveerd)[:\s]+([0-9]{4})/gi
+    let renovatieMatch: RegExpExecArray | null
+    while ((renovatieMatch = renovatieRe.exec(text)) !== null) {
+      const mIdx = renovatieMatch.index
+      // Skip if in reference/comparable section
+      const contextBefore = lowerText.slice(Math.max(0, mIdx - 150), mIdx)
+      if (/referentie|vergelijkingsobject|koopreferentie|huurreferentie/.test(contextBefore)) continue
+      stap3renovatiejaar = parseInt(renovatieMatch[1], 10)
+      break
+    }
+  }
 
   // Aanbouwen: strict labels only, limited length, single line
   const stap3aanbouwen = extractSectionAfterKeyword(
@@ -298,11 +318,16 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   const stap4huurder = extractSectionAfterKeyword(text, ['huurder:'], 60, { singleLine: true })
 
-  // verhuurd: only mark as verhuurd when there's actual rental evidence (not just the word "verhuurd" in descriptions)
-  const stap4verhuurd =
+  // verhuurd: only set true for current/active rental evidence; ignore past-tense rental
+  // Past: "verhuurd geweest", "voormalige huurder", "tot <year> verhuurd geweest", "voorheen verhuurd"
+  const hasPastRental = /verhuurd\s+geweest|voormalige?\s+huurder|voorheen\s+verhuurd|tot\s+\d{1,2}\s+\w+\s+\d{4}\s+verhuurd/.test(lowerText)
+  // Active: huurder known, huurprijs present, contracttype present, or "thans verhuurd" / "lopende huurovereenkomst"
+  const hasActiveRental =
     stap4huurder !== undefined ||
     stap4huurprijsPerJaar !== undefined ||
-    (stap4contracttype !== undefined && stap4contracttype.length < 60)
+    (stap4contracttype !== undefined && stap4contracttype.length < 60) ||
+    /thans\s+verhuurd|lopende\s+huurovereenkomst/.test(lowerText)
+  const stap4verhuurd = hasActiveRental && !hasPastRental
 
   // --- Stap 6: Technische Staat ---
   const ONDERHOUD_VALUES: Onderhoudsstaat[] = ['uitstekend', 'goed', 'redelijk', 'matig', 'slecht']
@@ -414,19 +439,40 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   ], 100)
 
   // --- Stap 5: Juridische Info ---
-  const stap5eigendomssituatie = extractSectionAfterKeyword(text, [
+  // Eigendomssituatie: limit to 100 chars, stop at unrelated field markers
+  const stap5eigendomssituatieRaw = extractSectionAfterKeyword(text, [
     'eigendomssituatie:',
     'eigendomsvorm:',
     'eigendom:',
     'type eigendom:',
     'te taxeren belang:',
-  ], 80, { singleLine: true })
+  ], 100, { singleLine: true })
+  // Strip junk: truncate at known unrelated-field stop-words
+  let stap5eigendomssituatie = stap5eigendomssituatieRaw
+  if (stap5eigendomssituatie) {
+    const EIGEN_STOP = /perceeloppervlak|energielabel|kadaster|oppervlak|bvo|vvo/i
+    const stopMatch = stap5eigendomssituatie.search(EIGEN_STOP)
+    if (stopMatch !== -1) stap5eigendomssituatie = stap5eigendomssituatie.slice(0, stopMatch).trim()
+    if (stap5eigendomssituatie.length === 0) stap5eigendomssituatie = undefined
+  }
 
-  const stap5erfpacht = extractSectionAfterKeyword(text, [
+  // Erfpacht: only set when explicitly present; clear if text says "geen erfpacht" / "n.v.t."
+  const stap5erfpachtRaw = extractSectionAfterKeyword(text, [
     'erfpacht:',
     'erfpachtsituatie:',
     'canonverplichting:',
   ], 80, { singleLine: true })
+  let stap5erfpacht = stap5erfpachtRaw
+  if (stap5erfpacht) {
+    const lower5 = stap5erfpacht.toLowerCase()
+    if (/geen\s+erfpacht|niet\s+van\s+toepassing|n\.v\.t\.|nvt|geen/.test(lower5)) {
+      stap5erfpacht = undefined
+    }
+  }
+  // Also check if "geen erfpacht" appears near an erfpacht keyword in the full text
+  if (!stap5erfpacht && /geen\s+erfpacht/i.test(text)) {
+    stap5erfpacht = undefined
+  }
 
   const stap5zakelijkeRechten = extractSectionAfterKeyword(text, [
     'zakelijke rechten:',
@@ -442,10 +488,12 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   ], 120)
 
   const stap5bestemmingsplan = extractSectionAfterKeyword(text, [
+    'vigerend bestemmingsplan:',
+    'omgevingsplan:',
     'bestemmingsplan:',
     'bestemming:',
     'planologische bestemming:',
-  ], 150)
+  ], 300)
 
   // --- Stap 7: Vergunningen ---
   // Energielabel: check for "Geen"/"-"/undefined values first
@@ -468,10 +516,10 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   }
 
   // Asbest: CRITICAL FIX — check for soil/environmental context and fix logical order
+  // Only set "ja" when asbest is explicitly found in building (not just mentioned)
   let stap7asbest: 'ja' | 'nee' | 'onbekend' | undefined
   const asbestIdx = lowerText.indexOf('asbest')
   if (asbestIdx !== -1) {
-    // Get context around "asbest" (50 chars before, 200 chars after)
     const contextBefore = lowerText.slice(Math.max(0, asbestIdx - 60), asbestIdx)
     const contextAfter = lowerText.slice(asbestIdx, asbestIdx + 200)
     const fullContext = contextBefore + contextAfter
@@ -480,39 +528,60 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     const isSoilContext = /bodem|grond|verontreiniging|milieu|omgeving/.test(contextBefore)
 
     if (!isSoilContext) {
-      // Check negation FIRST (before positive matches, to avoid "niet aanwezig" triggering "ja")
+      // Negation FIRST
       if (
-        /geen\s+asbest|asbestvrij|niet\s+aanwezig|niet\s+vastgesteld|vrij\s+van\s+asbest/.test(fullContext)
+        /geen\s+asbest|asbestvrij|niet\s+aanwezig|niet\s+vastgesteld|vrij\s+van\s+asbest|niet\s+bekend\s+met\s+asbesthoudende/.test(fullContext)
       ) {
         stap7asbest = 'nee'
       } else if (
-        /onbekend|niet\s+onderzocht|nader\s+onderzoek/.test(fullContext)
+        /asbestonderzoek[:\s]+nee|onbekend|niet\s+onderzocht|nader\s+onderzoek/.test(fullContext)
       ) {
         stap7asbest = 'onbekend'
       } else if (
-        /aanwezig|vastgesteld|aangetroffen/.test(contextAfter) &&
-        !/niet\s+aanwezig|niet\s+vastgesteld/.test(contextAfter)
+        // Only set "ja" for explicit confirmation of presence in the building
+        /asbest\s+aangetroffen|asbesthoudend\s+materiaal\s+aanwezig/.test(fullContext)
       ) {
         stap7asbest = 'ja'
       } else {
         stap7asbest = 'onbekend'
       }
     }
-    // If in soil context: don't set asbest at all (leave as undefined → will show as 'onbekend' in form)
   }
 
   let stap7bodemverontreiniging: 'ja' | 'nee' | 'onbekend' | undefined
+  // Presence of "bodeminformatie" or "bodemkwaliteit" header alone is NOT evidence of contamination
   let bodemIdx = lowerText.indexOf('bodemverontreiniging')
+  // If "bodeminformatie" appears, look further for actual contamination statements
+  if (bodemIdx === -1) {
+    const infoIdx = lowerText.indexOf('bodeminformatie')
+    if (infoIdx !== -1) {
+      // Scan up to 400 chars after bodeminformatie for actual verdict
+      bodemIdx = infoIdx
+    }
+  }
   if (bodemIdx === -1) bodemIdx = lowerText.indexOf('bodemkwaliteit')
   if (bodemIdx !== -1) {
-    const bodemContext = lowerText.slice(bodemIdx, bodemIdx + 150)
-    if (bodemContext.includes('niet aanwezig') || bodemContext.includes('schoon') || bodemContext.includes('nee')) {
+    const bodemContext = lowerText.slice(bodemIdx, bodemIdx + 400)
+    // Check NEGATIVE patterns FIRST — these override positive matches
+    if (
+      /niet\s+geregistreerd\s+als\s+mogelijk\s+verontreinigd|geen\s+informatie\s+bekend\s+die\s+duidt\s+op\s+bodemverontreiniging|geen\s+visuele\s+waarnemingen|geen\s+aanwijzingen\s+voor\s+bodemverontreiniging/.test(bodemContext) ||
+      bodemContext.includes('niet aanwezig') ||
+      bodemContext.includes('schoon') ||
+      /\bnee\b/.test(bodemContext)
+    ) {
       stap7bodemverontreiniging = 'nee'
-    } else if (bodemContext.includes('aanwezig') || bodemContext.includes('verontreinigd') || bodemContext.includes('ja')) {
+    } else if (
+      bodemContext.includes('verontreinigd') ||
+      bodemContext.includes('sanering nodig') ||
+      bodemContext.includes('vervuild')
+    ) {
+      stap7bodemverontreiniging = 'ja'
+    } else if (bodemContext.includes('aanwezig') && !bodemContext.includes('niet aanwezig')) {
       stap7bodemverontreiniging = 'ja'
     } else if (bodemContext.includes('onbekend') || bodemContext.includes('niet onderzocht')) {
       stap7bodemverontreiniging = 'onbekend'
     }
+    // If only header text found with no verdict keywords → leave undefined (not auto-set to 'ja')
   }
 
   const stap7toelichting = extractSectionAfterKeyword(text, [
@@ -520,6 +589,14 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'vergunningen toelichting:',
     'asbest toelichting:',
   ], 200)
+
+  // Toelichting duurzaamheid: extract from energielabel/duurzaamheid section
+  const stap7toelichtingDuurzaamheid = extractSectionAfterKeyword(text, [
+    'toelichting duurzaamheid:',
+    'duurzaamheid:',
+    'duurzaamheidstoelichting:',
+    'energieprestatie toelichting:',
+  ], 300)
 
   // --- Stap 8: Waardering ---
   const WAARDERINGSMETHODEN: { keyword: string; value: WaarderingsMethode }[] = [
@@ -554,20 +631,23 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   )
   const stap8onderhandseVerkoopwaarde = ovwMatch ? normalizeEuro(ovwMatch[1]) : undefined
 
-  // Kapitalisatiefactor: multiple label synonyms including "kap. factor"
-  const kapFacMatch = text.match(/(?:kapitalisatiefactor|kap\.?\s*factor)[:\s|]+([0-9]{1,2}[.,][0-9]{1,2})/i)
+  // Kapitalisatiefactor: multiple label synonyms including "kap. factor von"
+  const kapFacMatch = text.match(/(?:kapitalisatiefactor|kap\.?\s*factor)[:\s|]+(?:von\s+)?([0-9]{1,2}[.,][0-9]{1,2})/i)
   const stap8kapitalisatiefactor = kapFacMatch ? normalizeDecimalNumber(kapFacMatch[1]) : undefined
 
   // --- Stap 9: Aannames ---
   const stap9aannames = extractSectionAfterKeyword(text, [
     'aannames:',
     'aanname:',
-  ], 200)
+    'uitgangspunten:',
+    'taxatie onnauwkeurigheid:',
+  ], 500)
 
   const stap9voorbehouden = extractSectionAfterKeyword(text, [
     'voorbehouden:',
     'voorbehoud:',
-  ], 200)
+    'voorbehoud en bijzondere omstandigheden:',
+  ], 500)
 
   const stap9bijzondereOmstandigheden = extractSectionAfterKeyword(text, [
     'bijzondere omstandigheden:',
@@ -637,7 +717,12 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   }
 
   const stap7Fields: Partial<NonNullable<Dossier['stap7']>> = {}
-  if (stap7toelichting) stap7Fields.toelichting = stap7toelichting
+  // Merge vergunningen toelichting with duurzaamheid toelichting if present.
+  // The " | " separator is intentional: it visually separates the two distinct
+  // toelichting topics in a single text field.
+  const TOELICHTING_SEPARATOR = ' | '
+  const stap7toelichtingCombined = [stap7toelichting, stap7toelichtingDuurzaamheid].filter(Boolean).join(TOELICHTING_SEPARATOR)
+  if (stap7toelichtingCombined) stap7Fields.toelichting = stap7toelichtingCombined
   if (stap7energielabel) stap7Fields.energielabel = stap7energielabel
   if (stap7asbest) stap7Fields.asbest = stap7asbest
   if (stap7bodemverontreiniging) stap7Fields.bodemverontreiniging = stap7bodemverontreiniging
@@ -694,16 +779,27 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   }
 
   // --- Marktwaarde ---
-  // Prefer extended "marktwaarde kosten koper" / "marktwaarde k.k." / "marktwaarde kk" synonyms first
-  const marktwaardeKeyMatch = text.match(
-    /(?:marktwaarde\s+kosten\s+koper|marktwaarde\s+k[.\s]?k[.]?|marktwaarde)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
-  )
-  const marktwaardeEuroMatch = text.match(/€\s*([0-9]{1,3}(?:\.[0-9]{3})+(?:,[0-9]{1,2})?)\b/)
-  const marktwaardeMatch = marktwaardeKeyMatch ?? marktwaardeEuroMatch
-  if (marktwaardeMatch) {
-    const val = normalizeEuro(marktwaardeMatch[1])
-    if (val !== undefined) result.marktwaarde = val
+  // Prefer exact (non-rounded) value over rounded when both labeled matches exist
+  const marktwaardeRe = /(?:marktwaarde\s+kosten\s+koper|marktwaarde\s+k[.\s]?k[.]?|marktwaarde)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/gi
+  let marktwaardeExact: number | undefined
+  let marktwaardeRounded: number | undefined
+  let mwMatch: RegExpExecArray | null
+  while ((mwMatch = marktwaardeRe.exec(text)) !== null) {
+    const v = normalizeEuro(mwMatch[1])
+    if (v === undefined) continue
+    // "Exact" = last 3 digits are not all zeros (i.e. value is not rounded to nearest thousand)
+    if (v % 1000 !== 0) {
+      if (marktwaardeExact === undefined) marktwaardeExact = v
+    } else {
+      if (marktwaardeRounded === undefined) marktwaardeRounded = v
+    }
   }
+  // Fallback: bare euro sign match
+  const marktwaardeEuroMatch = text.match(/€\s*([0-9]{1,3}(?:\.[0-9]{3})+(?:,[0-9]{1,2})?)\b/)
+  const marktwaardeEuroVal = marktwaardeEuroMatch ? normalizeEuro(marktwaardeEuroMatch[1]) : undefined
+  // Prefer exact labeled > rounded labeled > bare euro
+  const marktwaardeFinal = marktwaardeExact ?? marktwaardeRounded ?? marktwaardeEuroVal
+  if (marktwaardeFinal !== undefined) result.marktwaarde = marktwaardeFinal
 
   // --- BAR ---
   // Handle "BAR: 8,15 %", "BAR | Kap. markt/herz. huur kk: 8,15 %", "bar | kap." formats.
@@ -717,10 +813,10 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   }
 
   // --- NAR ---
-  // Handle "NAR: 6,75 %", "NAR % von: 6,75 %", "nar von: 6,75 %" formats.
-  const narMatch = text.match(
-    /\bNAR\b[^:\n]{0,40}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
-  )
+  // Handle "NAR: 6,75 %", "NAR % von: 6,75 %", "netto aanvangsrendement: 6,75%"
+  const narMatch =
+    text.match(/\bNAR\b[^:\n]{0,40}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i) ??
+    text.match(/netto\s+aanvangsrendement[:\s]+([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i)
   if (narMatch) {
     const val = normalizePercent(narMatch[1])
     if (val !== undefined) result.nar = val

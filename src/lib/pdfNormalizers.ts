@@ -169,6 +169,56 @@ export function normalizeBooleanLike(raw: string): boolean | 'unknown' {
 }
 
 /**
+ * Converts a Dutch number word to its numeric equivalent.
+ * Handles: "een"/"één"→1, "twee"→2, "drie"→3, "vier"→4, "vijf"→5,
+ *          "zes"→6, "zeven"→7, "acht"→8, "negen"→9, "tien"→10.
+ * Returns undefined for unrecognized words.
+ */
+export function dutchNumberWordToDigit(word: string): number | undefined {
+  const map: Record<string, number> = {
+    een: 1,
+    één: 1,
+    twee: 2,
+    drie: 3,
+    vier: 4,
+    vijf: 5,
+    zes: 6,
+    zeven: 7,
+    acht: 8,
+    negen: 9,
+    tien: 10,
+  }
+  return map[word.toLowerCase().trim()]
+}
+
+/**
+ * Cleans a gemeente name by truncating at known stop-words such as
+ * "vigerende", "bestemming", "bestemmingsplan", "omgevingsplan", "plangebied".
+ * Also limits the result to at most 80 characters.
+ */
+export function cleanGemeente(raw: string): string {
+  const STOP_WORDS = ['vigerende', 'bestemming', 'bestemmingsplan', 'omgevingsplan', 'plangebied']
+  let result = raw.trim()
+  for (const stop of STOP_WORDS) {
+    const idx = result.toLowerCase().indexOf(stop)
+    if (idx !== -1) {
+      result = result.slice(0, idx)
+    }
+  }
+  if (result.length > 80) result = result.slice(0, 80)
+  return result.replace(/[,;:\s]+$/, '').trim()
+}
+
+/**
+ * Truncates text at a sentence boundary up to maxLen characters.
+ * Named alias for `cleanupLongFieldText` — provided so callers can express
+ * the intent of enforcing a per-field length limit explicitly.
+ */
+export function truncateField(text: string, maxLen: number): string {
+  return cleanupLongFieldText(text, maxLen)
+}
+
+/**
  * Normalizes Dutch decimal strings (like 12,30) to a JavaScript number.
  * Use this for values that are not percentages, e.g. kapitalisatiefactor.
  * Handles: "12,30" → 12.3, "12.30" → 12.3

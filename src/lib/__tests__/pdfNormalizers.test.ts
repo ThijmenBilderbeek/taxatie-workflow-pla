@@ -8,6 +8,9 @@ import {
   cleanupLongFieldText,
   parseAddress,
   normalizeBooleanLike,
+  dutchNumberWordToDigit,
+  cleanGemeente,
+  truncateField,
 } from '../pdfNormalizers'
 
 // ---------------------------------------------------------------------------
@@ -238,5 +241,103 @@ describe('normalizeBooleanLike', () => {
   it('is case-insensitive', () => {
     expect(normalizeBooleanLike('JA')).toBe(true)
     expect(normalizeBooleanLike('nee')).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// dutchNumberWordToDigit
+// ---------------------------------------------------------------------------
+describe('dutchNumberWordToDigit', () => {
+  it('converts "twee" to 2', () => {
+    expect(dutchNumberWordToDigit('twee')).toBe(2)
+  })
+
+  it('converts "één" to 1', () => {
+    expect(dutchNumberWordToDigit('één')).toBe(1)
+  })
+
+  it('converts "een" to 1', () => {
+    expect(dutchNumberWordToDigit('een')).toBe(1)
+  })
+
+  it('converts "drie" to 3', () => {
+    expect(dutchNumberWordToDigit('drie')).toBe(3)
+  })
+
+  it('converts "tien" to 10', () => {
+    expect(dutchNumberWordToDigit('tien')).toBe(10)
+  })
+
+  it('is case-insensitive', () => {
+    expect(dutchNumberWordToDigit('Twee')).toBe(2)
+    expect(dutchNumberWordToDigit('DRIE')).toBe(3)
+  })
+
+  it('returns undefined for unknown word', () => {
+    expect(dutchNumberWordToDigit('elf')).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// cleanGemeente
+// ---------------------------------------------------------------------------
+describe('cleanGemeente', () => {
+  it('strips "Vigerende bestemming" from gemeente', () => {
+    const result = cleanGemeente('Nuenen, Gerwen en Nederwetten Vigerende bestemming')
+    expect(result).toBe('Nuenen, Gerwen en Nederwetten')
+  })
+
+  it('strips "bestemmingsplan" from gemeente', () => {
+    const result = cleanGemeente('Eindhoven bestemmingsplan Woningbouw')
+    expect(result).toBe('Eindhoven')
+  })
+
+  it('strips "omgevingsplan" from gemeente', () => {
+    const result = cleanGemeente('Utrecht omgevingsplan 2024')
+    expect(result).toBe('Utrecht')
+  })
+
+  it('returns gemeente unchanged when no stop-words present', () => {
+    const result = cleanGemeente('Amsterdam')
+    expect(result).toBe('Amsterdam')
+  })
+
+  it('handles multi-word gemeente without stop-words', () => {
+    const result = cleanGemeente('Den Haag')
+    expect(result).toBe('Den Haag')
+  })
+
+  it('limits to 80 characters', () => {
+    const longName = 'A'.repeat(100)
+    const result = cleanGemeente(longName)
+    expect(result.length).toBeLessThanOrEqual(80)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// truncateField
+// ---------------------------------------------------------------------------
+describe('truncateField', () => {
+  it('returns text unchanged when shorter than maxLen', () => {
+    expect(truncateField('short', 100)).toBe('short')
+  })
+
+  it('truncates at sentence boundary', () => {
+    const text = 'First sentence. Second sentence. Third sentence is very long.'
+    const result = truncateField(text, 30)
+    expect(result).toBe('First sentence.')
+  })
+
+  it('truncates at word boundary when no sentence boundary', () => {
+    const text = 'This is a long text without any period that exceeds limit'
+    const result = truncateField(text, 25)
+    expect(result.length).toBeLessThanOrEqual(25)
+    expect(result).not.toMatch(/\s$/)
+  })
+
+  it('exact maxLen case returns truncated value', () => {
+    const text = 'abcde'
+    expect(truncateField(text, 5)).toBe('abcde')
+    expect(truncateField(text, 4)).toBe('abcd')
   })
 })

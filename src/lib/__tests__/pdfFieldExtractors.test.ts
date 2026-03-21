@@ -3,6 +3,7 @@ import {
   extractNaamTaxateur,
   extractObjectnaam,
   extractBvo,
+  extractVvo,
   extractLigging,
   extractTypeObject,
   extractGebruiksdoel,
@@ -11,6 +12,7 @@ import {
   extractKapitalisatiefactor,
   extractEnergielabel,
   extractAdres,
+  extractGemeente,
   extractRenovatiejaar,
   extractAllFieldsWithConfidence,
 } from '../pdfFieldExtractors'
@@ -332,5 +334,209 @@ describe('extractAllFieldsWithConfidence', () => {
     expect(result['bvo'].confidence).toBe('high')
     expect(result['bar'].confidence).toBe('high')
     expect(result['nar'].confidence).toBe('high')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 1: Type object
+// ---------------------------------------------------------------------------
+describe('extractTypeObject — extended patterns', () => {
+  it('extracts "kantoor" from "betreft een kantoorgebouw in twee bouwlagen"', () => {
+    const text = 'Het object betreft een kantoorgebouw in twee bouwlagen gelegen op een bedrijventerrein.'
+    const result = extractTypeObject(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('kantoor')
+  })
+
+  it('does not match "eigen gebruik" as physical type', () => {
+    const text = 'Gebruiksdoel: Eigen gebruik\nDe locatie is gunstig.'
+    const result = extractTypeObject(text)
+    // Should not extract "eigen gebruik" as physical type
+    if (result) {
+      expect(result.value).not.toContain('eigen gebruik')
+      expect(result.value).not.toBe('eigenaar_gebruiker')
+    }
+  })
+
+  it('prefers IPD-type label over generic keyword', () => {
+    const text = 'IPD-type: kantoor\nHet bedrijfscomplex is omvangrijk.'
+    const result = extractTypeObject(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('kantoor')
+    expect(result!.confidence).toBe('high')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 2: Gemeente
+// ---------------------------------------------------------------------------
+describe('extractGemeente — cleanGemeente integration', () => {
+  it('strips bestemmingsplan text from gemeente name', () => {
+    const text = 'Gemeente: Nuenen, Gerwen en Nederwetten Vigerende bestemming\nProvincie: Noord-Brabant'
+    const result = extractGemeente(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Nuenen, Gerwen en Nederwetten')
+    expect(result!.value).not.toContain('Vigerende')
+    expect(result!.value).not.toContain('bestemming')
+  })
+
+  it('extracts "Nuenen, Gerwen en Nederwetten" without trailing junk', () => {
+    const text = 'Gemeente: Nuenen, Gerwen en Nederwetten bestemmingsplan Buitengebied'
+    const result = extractGemeente(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Nuenen, Gerwen en Nederwetten')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 3: Ligging quality scores
+// ---------------------------------------------------------------------------
+describe('extractLigging — quality scores', () => {
+  it('extracts quality score "goed" when found after ligging label', () => {
+    const text = 'Omschrijving locatie, stand en ligging: goed\nHet object is gelegen op een bedrijventerrein.'
+    const result = extractLigging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('goed')
+    expect(result!.confidence).toBe('high')
+  })
+
+  it('prefers quality score over zoning type when both present after label', () => {
+    const text = 'Ligging: redelijk\nDit bedrijventerrein is goed ontsloten.'
+    const result = extractLigging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('redelijk')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 5: VVO
+// ---------------------------------------------------------------------------
+describe('extractVvo — space-only separator', () => {
+  it('extracts VVO 870 from "VVO 870" (no colon)', () => {
+    const text = 'Oppervlaktes\nVVO 870\nBVO 950'
+    const result = extractVvo(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(870)
+  })
+
+  it('extracts VVO from "totaal VVO 870"', () => {
+    const text = 'totaal VVO 870 m²'
+    const result = extractVvo(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(870)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 6: Bouwlagen (tested through pdfParser, but also test extractAllFields)
+// ---------------------------------------------------------------------------
+describe('extractAllFieldsWithConfidence — bouwlagen via word-numbers', () => {
+  it('includes vvo when present in text without colon', () => {
+    const text = 'VVO 870\nBVO 950'
+    const result = extractAllFieldsWithConfidence(text)
+    expect(result['vvo']).toBeDefined()
+    expect(result['vvo'].value).toBe(870)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 7: Renovatiejaar from reference section
+// ---------------------------------------------------------------------------
+describe('extractRenovatiejaar — reference section exclusion', () => {
+  it('returns undefined when renovatiejaar comes from reference section', () => {
+    const text = `
+      Object omschrijving: kantoor gebouwd in 2006
+      H.2 Koopreferenties
+      Referentieobject 1: renovatiejaar 2022
+      Columbusweg 13
+    `.trim()
+    const result = extractRenovatiejaar(text)
+    // Should NOT extract 2022 from the reference section
+    expect(result).toBeUndefined()
+  })
+
+  it('returns undefined when text says "geen aanzienlijke wijzigingen"', () => {
+    const text = 'Geen aanzienlijke wijzigingen of uitbreidingen. Renovatiejaar: 2022'
+    const result = extractRenovatiejaar(text)
+    expect(result).toBeUndefined()
+  })
+
+  it('extracts renovatiejaar outside of reference section normally', () => {
+    const text = 'Renovatiejaar: 2020\nMeest recente renovatie betreft het dak.'
+    const result = extractRenovatiejaar(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(2020)
+  })
+
+  it('extracts main-object renovatiejaar and ignores reference section renovatiejaar', () => {
+    const text = `
+      Renovatiejaar: 2020
+      H.2 Koopreferenties
+      Referentieobject 1: renovatiejaar 2022
+    `.trim()
+    const result = extractRenovatiejaar(text)
+    // Should extract 2020 from main section, not 2022 from reference section
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(2020)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 18: NAR
+// ---------------------------------------------------------------------------
+describe('extractNar — additional patterns', () => {
+  it('extracts NAR 6.75 from "NAR % von: 6,75 %"', () => {
+    const text = 'NAR % von: 6,75 %'
+    const result = extractNar(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(6.75)
+    expect(result!.confidence).toBe('high')
+  })
+
+  it('extracts NAR from "netto aanvangsrendement: 6,75%"', () => {
+    const text = 'Netto aanvangsrendement: 6,75%'
+    const result = extractNar(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(6.75)
+    expect(result!.sourceLabel).toContain('netto aanvangsrendement')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 19: Kapitalisatiefactor with "von"
+// ---------------------------------------------------------------------------
+describe('extractKapitalisatiefactor — "von" keyword', () => {
+  it('extracts 13.4 from "Kap. factor von 13,4"', () => {
+    const text = 'Kap. factor von 13,4'
+    const result = extractKapitalisatiefactor(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(13.4)
+  })
+
+  it('extracts from "kap.factor von 12,5"', () => {
+    const text = 'kap.factor von 12,5'
+    const result = extractKapitalisatiefactor(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(12.5)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 25: parserRule field in ExtractionResult
+// ---------------------------------------------------------------------------
+describe('ExtractionResult — parserRule field', () => {
+  it('includes parserRule for nar extraction', () => {
+    const text = 'NAR % von: 6,75 %'
+    const result = extractNar(text)
+    expect(result).toBeDefined()
+    expect(result!.parserRule).toBeDefined()
+    expect(typeof result!.parserRule).toBe('string')
+  })
+
+  it('includes parserRule for kapitalisatiefactor extraction', () => {
+    const text = 'Kapitalisatiefactor: 12,30'
+    const result = extractKapitalisatiefactor(text)
+    expect(result).toBeDefined()
+    expect(result!.parserRule).toBeDefined()
   })
 })

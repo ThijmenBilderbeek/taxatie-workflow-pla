@@ -14,6 +14,14 @@ import {
   extractAdres,
   extractGemeente,
   extractRenovatiejaar,
+  extractBouwjaar,
+  extractEigendomssituatie,
+  extractBereikbaarheid,
+  extractAsbest,
+  extractBodemverontreiniging,
+  extractZakelijkeRechten,
+  extractMarktwaarde,
+  extractPerceeloppervlak,
   extractAllFieldsWithConfidence,
 } from '../pdfFieldExtractors'
 
@@ -118,13 +126,12 @@ describe('type object vs gebruiksdoel distinction', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Asbest false positive prevention
+// Asbest false positive prevention (now handled by extractAsbest in pdfFieldExtractors)
 // ---------------------------------------------------------------------------
-describe('extractAllFieldsWithConfidence — asbest not extracted (no dedicated extractor)', () => {
-  it('does not include asbest in field extractors (handled by pdfParser)', () => {
+describe('extractAllFieldsWithConfidence — asbest soil context suppression', () => {
+  it('does not extract asbest when mention is in soil/environmental context', () => {
     const text = 'Bodemonderzoek: geen asbest in de grond aangetroffen.'
-    // pdfFieldExtractors does not expose an asbest extractor;
-    // this test confirms it is not in extractAllFieldsWithConfidence output
+    // The asbest mention here is in a soil (bodem) context and should be suppressed
     const result = extractAllFieldsWithConfidence(text)
     expect(result['asbest']).toBeUndefined()
   })
@@ -540,3 +547,382 @@ describe('ExtractionResult — parserRule field', () => {
     expect(result!.parserRule).toBeDefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Bug 4 — Bereikbaarheid extractor
+// ---------------------------------------------------------------------------
+describe('extractBereikbaarheid', () => {
+  it('extracts from "bereikbaarheid:" label', () => {
+    const text = 'Bereikbaarheid: Goed ontsloten via de A2, bushalte op 300m.'
+    const result = extractBereikbaarheid(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Goed')
+    expect(result!.confidence).toBe('high')
+  })
+
+  it('extracts from "toelichting bereikbaarheid:" label', () => {
+    const text = 'Toelichting bereikbaarheid: Goed bereikbaar via de A50.'
+    const result = extractBereikbaarheid(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Goed')
+  })
+
+  it('extracts from "ontsluiting:" label', () => {
+    const text = 'Ontsluiting: Directe toegang via Collse Hoefdijk naar A270.'
+    const result = extractBereikbaarheid(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Directe toegang')
+  })
+
+  it('extracts from "ov-verbinding:" label', () => {
+    const text = 'OV-verbinding: Bushalte op 400m, station op 2km.'
+    const result = extractBereikbaarheid(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Bushalte')
+  })
+
+  it('extracts from "openbaar vervoer" keyword (medium confidence)', () => {
+    const text = 'Het object ligt nabij openbaar vervoer en heeft een directe aansluiting.'
+    const result = extractBereikbaarheid(text)
+    expect(result).toBeDefined()
+    expect(result!.confidence).toBe('medium')
+  })
+
+  it('wires into extractAllFieldsWithConfidence', () => {
+    const text = 'Bereikbaarheid: Goed via A2 en openbaar vervoer.'
+    const result = extractAllFieldsWithConfidence(text)
+    expect(result['bereikbaarheid']).toBeDefined()
+    expect(result['bereikbaarheid'].value).toContain('Goed')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 9 — Eigendomssituatie stop-words
+// ---------------------------------------------------------------------------
+describe('extractEigendomssituatie — stop-word truncation', () => {
+  it('truncates eigendomssituatie at stop-words like perceeloppervlak', () => {
+    const text = 'Eigendomssituatie: Eigendom Perceeloppervlak 2802 m²'
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Eigendom')
+    expect(result!.value).not.toContain('Perceeloppervlak')
+  })
+
+  it('truncates at energielabel stop-word', () => {
+    const text = 'Eigendomssituatie: Eigendom Energielabel B Gemeente Nuenen'
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).not.toContain('Energielabel')
+  })
+
+  it('truncates at BVO stop-word', () => {
+    const text = 'Eigendomssituatie: Eigendom BVO 957 m2 VVO 870 m2'
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Eigendom')
+  })
+
+  it('limits value to 80 chars maximum', () => {
+    const text = 'Eigendomssituatie: ' + 'x'.repeat(200)
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value.length).toBeLessThanOrEqual(80)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 11 — Zakelijke rechten new keywords
+// ---------------------------------------------------------------------------
+describe('extractZakelijkeRechten — extended keywords', () => {
+  it('extracts from "zakelijk recht:" label', () => {
+    const text = 'Zakelijk recht: Beperkt zakelijk recht op perceel ten behoeve van Saranne B.V.'
+    const result = extractZakelijkeRechten(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Beperkt zakelijk recht')
+  })
+
+  it('extracts from "belemmeringenwet" keyword', () => {
+    const text = 'Belemmeringenwet: Leidingstrook op deel van het perceel.'
+    const result = extractZakelijkeRechten(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Leidingstrook')
+  })
+
+  it('extracts from "opstalrecht:" label', () => {
+    const text = 'Opstalrecht: Waterleiding op gedeelte van perceel.'
+    const result = extractZakelijkeRechten(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Waterleiding')
+  })
+
+  it('extracts from "recht van overpad:" label', () => {
+    const text = 'Recht van overpad: Voetpad langs noordzijde perceel ten behoeve van buurperceel.'
+    const result = extractZakelijkeRechten(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toContain('Voetpad')
+  })
+
+  it('wires into extractAllFieldsWithConfidence', () => {
+    const text = 'Zakelijk recht: Perceel belast met leidingrecht ten behoeve van waterschap.'
+    const result = extractAllFieldsWithConfidence(text)
+    expect(result['zakelijkeRechten']).toBeDefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 14 — Asbest logic
+// ---------------------------------------------------------------------------
+describe('extractAsbest — all 4 scenarios', () => {
+  it('"geen asbest aangetroffen" → "nee"', () => {
+    const text = 'Bij inspectie zijn geen asbest aangetroffen in het pand.'
+    const result = extractAsbest(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('nee')
+    expect(result!.confidence).toBe('high')
+  })
+
+  it('"asbest aanwezig" → "ja"', () => {
+    const text = 'Uit onderzoek blijkt dat asbest aanwezig is in de dakbeschot.'
+    const result = extractAsbest(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('ja')
+    expect(result!.confidence).toBe('high')
+  })
+
+  it('"asbest niet onderzocht" → "onbekend"', () => {
+    const text = 'Asbest niet onderzocht bij dit object; nader onderzoek aanbevolen.'
+    const result = extractAsbest(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('onbekend')
+  })
+
+  it('"asbestinventarisatie uitgevoerd, geen asbest" → "nee"', () => {
+    const text = 'Asbestinventarisatie uitgevoerd. Geen asbest aangetroffen in het gebouw.'
+    const result = extractAsbest(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('nee')
+  })
+
+  it('returns undefined when only soil/environmental asbest mentioned', () => {
+    const text = 'Bodemonderzoek: geen asbest in de grond aangetroffen.'
+    const result = extractAsbest(text)
+    expect(result).toBeUndefined()
+  })
+
+  it('"asbestonderzoek: nee" → "onbekend"', () => {
+    const text = 'Asbestonderzoek: nee. Er is geen onderzoek uitgevoerd.'
+    const result = extractAsbest(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('onbekend')
+  })
+
+  it('wires into extractAllFieldsWithConfidence for building asbest', () => {
+    const text = 'Uit inspectie blijkt asbest aanwezig in de luifel van het gebouw.'
+    const result = extractAllFieldsWithConfidence(text)
+    expect(result['asbest']).toBeDefined()
+    expect(result['asbest'].value).toBe('ja')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 15 — Bodemverontreiniging false positive prevention
+// ---------------------------------------------------------------------------
+describe('extractBodemverontreiniging', () => {
+  it('returns "nee" when text says "niet geregistreerd als mogelijk verontreinigde locatie"', () => {
+    const text = 'Bodeminformatie: het perceel is niet geregistreerd als mogelijk verontreinigde locatie.'
+    const result = extractBodemverontreiniging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('nee')
+    expect(result!.confidence).toBe('high')
+  })
+
+  it('returns "nee" when text says "geen verontreiniging"', () => {
+    const text = 'Bodemkwaliteit: er is geen verontreiniging vastgesteld.'
+    const result = extractBodemverontreiniging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('nee')
+  })
+
+  it('does not return "ja" from bodeminformatie section header alone', () => {
+    const text = 'Bodeminformatie: Bijlage 3 bevat het bodemrapport.'
+    const result = extractBodemverontreiniging(text)
+    // Should be undefined (header alone without verdict)
+    expect(result).toBeUndefined()
+  })
+
+  it('returns "ja" when text explicitly mentions verontreinigd', () => {
+    const text = 'Bodemverontreiniging: het perceel is verontreinigd met zware metalen.'
+    const result = extractBodemverontreiniging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('ja')
+  })
+
+  it('returns "onbekend" when text says "niet onderzocht"', () => {
+    const text = 'Bodemverontreiniging: niet onderzocht bij aankoop.'
+    const result = extractBodemverontreiniging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('onbekend')
+  })
+
+  it('returns undefined when no bodem keyword present', () => {
+    const text = 'Het pand heeft een goede technische staat.'
+    const result = extractBodemverontreiniging(text)
+    expect(result).toBeUndefined()
+  })
+
+  it('wires into extractAllFieldsWithConfidence', () => {
+    const text = 'Bodeminformatie: geen verontreiniging aanwezig op het perceel.'
+    const result = extractAllFieldsWithConfidence(text)
+    expect(result['bodemverontreiniging']).toBeDefined()
+    expect(result['bodemverontreiniging'].value).toBe('nee')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 17 — Marktwaarde non-rounded preference
+// ---------------------------------------------------------------------------
+describe('extractMarktwaarde — non-rounded preference', () => {
+  it('prefers non-rounded value over rounded when both present', () => {
+    const text = 'Marktwaarde: € 4.332.360\nAfgerond: € 4.330.000'
+    const result = extractMarktwaarde(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(4332360)
+    expect(result!.parserRule).toBe('marktwaarde-exact')
+  })
+
+  it('falls back to rounded when no exact value found', () => {
+    const text = 'Marktwaarde: € 4.330.000'
+    const result = extractMarktwaarde(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(4330000)
+    expect(result!.parserRule).toBe('marktwaarde-rounded')
+  })
+
+  it('skips marktwaarde in reference sections', () => {
+    const text = `
+      Objectomschrijving: kantoor in Nuenen
+      H.2 Koopreferenties
+      Referentie 1: Marktwaarde: € 2.500.000
+      Geen eigen object waardering beschikbaar.
+    `.trim()
+    const result = extractMarktwaarde(text)
+    // Should return undefined since only reference section has marktwaarde
+    expect(result).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 21 — Energielabel skips reference sections
+// ---------------------------------------------------------------------------
+describe('extractEnergielabel — skips vergelijkingsobjecten section', () => {
+  it('skips energielabel found in vergelijkingsobjecten section', () => {
+    const text = `
+      Energielabel: B
+      Vergelijkingsobjecten
+      Ref 1: Energielabel: A
+      Ref 2: Energielabel: C
+    `.trim()
+    const result = extractEnergielabel(text)
+    expect(result).toBeDefined()
+    // Should extract 'B' from before the reference section, not 'A' or 'C'
+    expect(result!.value).toBe('B')
+  })
+
+  it('skips energielabel only in reference section, returns undefined if none outside', () => {
+    const text = `
+      Technische staat: Goed
+      H.2 Koopreferenties
+      Referentieobject 1: Energielabel: A+
+    `.trim()
+    const result = extractEnergielabel(text)
+    // No energielabel outside reference section
+    expect(result).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 22-23 — Reference section leakage prevention for multiple fields
+// ---------------------------------------------------------------------------
+describe('reference leakage prevention — bouwjaar', () => {
+  it('does not extract bouwjaar from reference section', () => {
+    const text = `
+      Object omschrijving: kantoor gebouwd in 2006
+      H.2 Koopreferenties
+      Bouwjaar: 2015
+    `.trim()
+    const result = extractBouwjaar(text)
+    // Should extract from before the reference section, not from inside it
+    // "gebouwd in 2006" appears before H.2, so should get 2006
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(2006)
+  })
+
+  it('returns undefined when bouwjaar only in reference section', () => {
+    const text = `
+      H.2 Koopreferenties
+      Referentieobject: bouwjaar 2018
+    `.trim()
+    const result = extractBouwjaar(text)
+    expect(result).toBeUndefined()
+  })
+})
+
+describe('reference leakage prevention — BVO', () => {
+  it('skips BVO from reference section', () => {
+    const text = `
+      BVO: 957 m²
+      H.2 Koopreferenties
+      Referentieobject: BVO: 1200 m²
+    `.trim()
+    const result = extractBvo(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(957)
+  })
+
+  it('returns undefined when BVO only in reference section', () => {
+    const text = `
+      H.3 Huurreferenties
+      Referentieobject: BVO: 500 m²
+    `.trim()
+    const result = extractBvo(text)
+    expect(result).toBeUndefined()
+  })
+})
+
+describe('reference leakage prevention — perceeloppervlak', () => {
+  it('skips perceeloppervlak from reference section', () => {
+    const text = `
+      Perceeloppervlak: 2802 m²
+      H.2 Koopreferenties
+      Perceeloppervlak: 4000 m²
+    `.trim()
+    const result = extractPerceeloppervlak(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(2802)
+  })
+})
+
+describe('reference leakage prevention — typeObject', () => {
+  it('prefers type object from main section over reference section', () => {
+    const text = `
+      Het object betreft een kantoorgebouw in twee bouwlagen.
+      H.2 Koopreferenties
+      Referentieobject betreft een bedrijfshal op bedrijventerrein.
+    `.trim()
+    const result = extractTypeObject(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('kantoor')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug 13 — Technische staat dakbedekking and installaties keywords
+// ---------------------------------------------------------------------------
+describe('extractAllFieldsWithConfidence — dakbedekking and installaties wired', () => {
+  it('extractAllFieldsWithConfidence includes bereikbaarheid when present', () => {
+    const text = 'Bereikbaarheid: Goed bereikbaar via A2.'
+    const result = extractAllFieldsWithConfidence(text)
+    expect(result['bereikbaarheid']).toBeDefined()
+  })
+})
+

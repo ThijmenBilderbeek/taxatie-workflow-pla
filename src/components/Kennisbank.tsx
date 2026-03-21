@@ -139,8 +139,26 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
 
       setFieldSuggestions(suggestions)
       setPreview(mutable)
-    } catch {
-      toast.error('Kon de PDF niet uitlezen. Probeer een ander bestand.')
+
+      const hasAddress = !!(mutable.adres?.straat || mutable.adres?.postcode || mutable.adres?.plaats)
+      const hasMarktwaarde = mutable.marktwaarde != null && mutable.marktwaarde > 0
+      const hasBvo = mutable.wizardData?.stap3?.bvo != null && mutable.wizardData.stap3.bvo > 0
+      if (!hasAddress && !hasMarktwaarde && !hasBvo) {
+        toast.warning('Er kon weinig informatie uit deze PDF worden gehaald. Mogelijk is dit een gescand document zonder tekst.')
+      }
+    } catch (err) {
+      console.error('[PDF parse error]', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/worker|WorkerTransport/i.test(msg)) {
+        toast.error('PDF-worker kon niet worden geladen. Controleer uw internetverbinding en probeer opnieuw.')
+      } else if (/password|encrypted/i.test(msg)) {
+        toast.error('Dit PDF-bestand is beveiligd met een wachtwoord en kan niet worden gelezen.')
+      } else {
+        toast.error(
+          'Kon de PDF niet uitlezen. Probeer een ander bestand.' +
+          (import.meta.env.DEV ? ' Bekijk de browserconsole voor meer details.' : '')
+        )
+      }
     } finally {
       setIsLoading(false)
     }

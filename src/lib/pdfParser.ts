@@ -18,7 +18,7 @@ import {
   summarizeTechnicalField,
   summarizeAannames,
 } from './pdfNormalizers'
-import { extractAllFieldsWithConfidence, extractAantalBouwlagen } from './pdfFieldExtractors'
+import { extractAllFieldsWithConfidence, extractAantalBouwlagen, extractBar, extractNar, extractMarktwaarde } from './pdfFieldExtractors'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -804,6 +804,15 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const kapFacMatch = kapFacMatchLabel ?? kapFacMatchPipe ?? kapFacMatchDetail
   const stap8kapitalisatiefactor = kapFacMatch ? normalizeDecimalNumber(kapFacMatch[1]) : undefined
 
+  // BAR extraction for wizardData stap8
+  const stap8bar = extractBar(text)?.value
+
+  // NAR extraction for wizardData stap8
+  const stap8nar = extractNar(text)?.value
+
+  // Marktwaarde extraction for wizardData stap8
+  const stap8marktwaarde = extractMarktwaarde(text)?.value
+
   // --- Stap 9: Aannames ---
   const stap9aannames = (() => {
     const raw = extractSectionAfterKeyword(text, [
@@ -889,6 +898,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap5zakelijkeRechten) stap5Fields.zakelijkeRechten = truncateField(stap5zakelijkeRechten, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = truncateField(stap5kwalitatieveVerplichtingen, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = truncateField(stap5bestemmingsplan, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5teTaxerenBelang) stap5Fields.teTaxerenBelang = truncateField(stap5teTaxerenBelang, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap5Fields).length > 0) {
     wizardData.stap5 = stap5Fields as Dossier['stap5']
   }
@@ -923,6 +933,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap8methode) stap8Fields.methode = stap8methode
   if (stap8onderhandseVerkoopwaarde !== undefined) stap8Fields.onderhandseVerkoopwaarde = stap8onderhandseVerkoopwaarde
   if (stap8kapitalisatiefactor !== undefined) stap8Fields.kapitalisatiefactor = stap8kapitalisatiefactor
+  if (stap8bar !== undefined) stap8Fields.bar = stap8bar
+  if (stap8nar !== undefined) stap8Fields.nar = stap8nar
+  if (stap8marktwaarde !== undefined) stap8Fields.marktwaarde = stap8marktwaarde
   if (Object.keys(stap8Fields).length > 0) {
     wizardData.stap8 = stap8Fields as Dossier['stap8']
   }

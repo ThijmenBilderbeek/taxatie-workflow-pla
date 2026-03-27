@@ -475,3 +475,43 @@ describe('Columbusweg 13 — test 21: verhuurd=false for eigenaar-gebruiker', ()
     expect(data.stap4?.verhuurd).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Test 22 — BAR in wizardData.stap8
+// ---------------------------------------------------------------------------
+describe('Columbusweg 13 — test 22: BAR in wizardData.stap8', () => {
+  it('sets stap8.bar = 8.15 from extractWizardDataFromText', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap8?.bar).toBe(8.15)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 23 — NAR in wizardData.stap8
+// ---------------------------------------------------------------------------
+describe('Columbusweg 13 — test 23: NAR in wizardData.stap8', () => {
+  it('sets stap8.nar = 6.75 from extractWizardDataFromText', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap8?.nar).toBe(6.75)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 24 — marktwaarde in wizardData.stap8
+// ---------------------------------------------------------------------------
+describe('Columbusweg 13 — test 24: marktwaarde in wizardData.stap8', () => {
+  it('sets stap8.marktwaarde = 4332360 from extractWizardDataFromText', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap8?.marktwaarde).toBe(4332360)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 25 — teTaxerenBelang in wizardData.stap5
+// ---------------------------------------------------------------------------
+describe('Columbusweg 13 — test 25: teTaxerenBelang in wizardData.stap5', () => {
+  it('sets stap5.teTaxerenBelang = "Eigendom" from extractWizardDataFromText', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap5?.teTaxerenBelang).toBe('Eigendom')
+  })
+})

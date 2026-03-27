@@ -249,7 +249,7 @@ export function extractProvincie(text: string, postcodeHint?: string): Extractio
   const postcodeMatch = text.match(/\b(\d{4})\s?[A-Z]{2}\b/)
   if (postcodeMatch) {
     const fromPostcode = postcodeToProvincie(postcodeMatch[1])
-    if (fromPostcode) return { value: fromPostcode, confidence: 'low', sourceLabel: '(postcode-mapping)', sourceSnippet: postcodeMatch[0], sourceSection: 'Stap 2', parserRule: 'postcode-to-provincie-fulltext' }
+    if (fromPostcode) return { value: fromPostcode, confidence: 'medium', sourceLabel: '(postcode-mapping)', sourceSnippet: postcodeMatch[0], sourceSection: 'Stap 2', parserRule: 'postcode-to-provincie-fulltext' }
   }
   return undefined
 }

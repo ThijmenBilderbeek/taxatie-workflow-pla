@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import type { DocumentChunk, DocumentWritingProfile } from '@/types/kennisbank'
+import type { DocumentChunk, DocumentWritingProfile, AIEnhancementOptions } from '@/types/kennisbank'
+import { extractDocumentKnowledgeWithAI } from '@/lib/documentKnowledgeExtractor'
+import type { ObjectType } from '@/types'
 
 function chunkToRow(chunk: DocumentChunk, userId: string) {
   return {
@@ -137,11 +139,64 @@ export function useDocumentKnowledge() {
     return getDocumentChunks(rapportId)
   }, [getDocumentChunks])
 
+  /**
+   * Full pipeline helper: extracts knowledge from raw PDF text, optionally
+   * applies AI enhancement, and persists chunks + profile to Supabase.
+   *
+   * Knowledge extraction errors are swallowed so the calling flow is never
+   * blocked.
+   */
+  const saveDocumentKnowledgeFromText = useCallback(async (
+    text: string,
+    rapportId: string,
+    options?: {
+      objectType?: ObjectType
+      documentType?: string
+      objectAddress?: string
+      city?: string
+      region?: string
+      marketSegment?: DocumentChunk['marketSegment']
+      ai?: AIEnhancementOptions
+    }
+  ) => {
+    try {
+      const { chunks, profile } = await extractDocumentKnowledgeWithAI(text, rapportId, {
+        objectType: options?.objectType,
+        documentType: options?.documentType,
+        ai: options?.ai,
+      })
+
+      // Enrich chunks with additional metadata from the calling context
+      const enrichedChunks = chunks.map((chunk) => ({
+        ...chunk,
+        objectAddress: options?.objectAddress,
+        objectType: options?.objectType,
+        city: options?.city,
+        region: options?.region,
+        marketSegment: options?.marketSegment,
+      }))
+
+      const enrichedProfile = {
+        ...profile,
+        objectType: options?.objectType ?? profile.objectType,
+        marketSegment: options?.marketSegment ?? profile.marketSegment,
+      }
+
+      await Promise.all([
+        saveDocumentChunks(enrichedChunks),
+        saveDocumentProfile(enrichedProfile),
+      ])
+    } catch (err) {
+      console.warn('[useDocumentKnowledge] saveDocumentKnowledgeFromText failed silently:', err)
+    }
+  }, [saveDocumentChunks, saveDocumentProfile])
+
   return {
     saveDocumentChunks,
     saveDocumentProfile,
     getDocumentChunks,
     getDocumentProfile,
     getChunksByRapportId,
+    saveDocumentKnowledgeFromText,
   }
 }

@@ -59,3 +59,24 @@ export interface DetectedSection {
   endIndex: number
   text: string
 }
+
+/** Response shape returned by the `openai-classify` Supabase Edge Function. */
+export interface AIChunkClassification {
+  chunkType: ChunkType
+  writingFunction: WritingFunction
+  tones: ToneOfVoice[]
+  specificity: Specificity
+  templateCandidate: boolean
+  variablesDetected: string[]
+}
+
+/** Options controlling AI enhancement behaviour. */
+export interface AIEnhancementOptions {
+  /** When true, AI classification is requested for each chunk. Default: false */
+  enabled: boolean
+  /**
+   * Maximum number of chunks to send to the AI in parallel.
+   * Reduces rate-limit risk on large documents. Default: 5
+   */
+  batchSize?: number
+}

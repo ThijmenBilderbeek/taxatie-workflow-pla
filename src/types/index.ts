@@ -10,7 +10,7 @@ export type Ligging = 'binnenstad' | 'woonwijk' | 'bedrijventerrein' | 'buitenge
 
 export type Onderhoudsstaat = 'uitstekend' | 'goed' | 'redelijk' | 'matig' | 'slecht'
 
-export type Energielabel = 'A++++' | 'A+++' | 'A++' | 'A+' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G'
+export type Energielabel = 'A++++' | 'A+++' | 'A++' | 'A+' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'geen'
 
 export type WaarderingsMethode = 'vergelijkingsmethode' | 'BAR_NAR' | 'DCF' | 'kostenmethode' | 'combinatie'
 

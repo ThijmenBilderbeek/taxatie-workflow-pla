@@ -83,6 +83,7 @@ export interface JuridischeInfo {
   zakelijkeRechten: string
   kwalitatieveVerplichtingen: string
   bestemmingsplan: string
+  teTaxerenBelang?: string
 }
 
 export interface TechnischeStaat {

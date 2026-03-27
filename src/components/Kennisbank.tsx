@@ -1287,6 +1287,486 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                   />
                 </div>
               </div>
+
+              {/* Stap 1: Algemene gegevens */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Algemene gegevens</h4>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-objectnaam">Objectnaam</Label>
+                    <Input
+                      id="bew-objectnaam"
+                      value={bewerkFormulier.wizardData?.stap1?.objectnaam ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap1: { ...f.wizardData?.stap1, objectnaam: e.target.value } as AlgemeneGegevens } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-taxateur">Naam taxateur</Label>
+                    <Input
+                      id="bew-taxateur"
+                      value={bewerkFormulier.wizardData?.stap1?.naamTaxateur ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap1: { ...f.wizardData?.stap1, naamTaxateur: e.target.value } as AlgemeneGegevens } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-inspectiedatum">Inspectiedatum</Label>
+                    <Input
+                      id="bew-inspectiedatum"
+                      type="date"
+                      value={bewerkFormulier.wizardData?.stap1?.inspectiedatum ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap1: { ...f.wizardData?.stap1, inspectiedatum: e.target.value } as AlgemeneGegevens } }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stap 2: Adres & Locatie */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Locatie</h4>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-gemeente">Gemeente</Label>
+                    <Input
+                      id="bew-gemeente"
+                      value={bewerkFormulier.wizardData?.stap2?.gemeente ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap2: { ...f.wizardData?.stap2, gemeente: e.target.value } as AdresLocatie } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-provincie">Provincie</Label>
+                    <Input
+                      id="bew-provincie"
+                      value={bewerkFormulier.wizardData?.stap2?.provincie ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap2: { ...f.wizardData?.stap2, provincie: e.target.value } as AdresLocatie } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-ligging">Ligging</Label>
+                    <Select
+                      value={bewerkFormulier.wizardData?.stap2?.ligging ?? ''}
+                      onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap2: { ...f.wizardData?.stap2, ligging: v as Ligging } as AdresLocatie } }))}
+                    >
+                      <SelectTrigger id="bew-ligging">
+                        <SelectValue placeholder="Selecteer ligging" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="binnenstad">Binnenstad</SelectItem>
+                        <SelectItem value="woonwijk">Woonwijk</SelectItem>
+                        <SelectItem value="bedrijventerrein">Bedrijventerrein</SelectItem>
+                        <SelectItem value="buitengebied">Buitengebied</SelectItem>
+                        <SelectItem value="gemengd">Gemengd</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-bereikbaarheid">Bereikbaarheid</Label>
+                  <Textarea
+                    id="bew-bereikbaarheid"
+                    rows={3}
+                    value={bewerkFormulier.wizardData?.stap2?.bereikbaarheid ?? ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap2: { ...f.wizardData?.stap2, bereikbaarheid: e.target.value } as AdresLocatie } }))}
+                  />
+                </div>
+              </div>
+
+              {/* Stap 3: Oppervlaktes */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Oppervlaktes</h4>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-vvo">VVO (m²)</Label>
+                    <Input
+                      id="bew-vvo"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap3?.vvo ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap3: { ...f.wizardData?.stap3, vvo: parseFloat(e.target.value) || undefined } as Oppervlaktes } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-perceel">Perceeloppervlak (m²)</Label>
+                    <Input
+                      id="bew-perceel"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap3?.perceeloppervlak ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap3: { ...f.wizardData?.stap3, perceeloppervlak: parseFloat(e.target.value) || undefined } as Oppervlaktes } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-bouwlagen">Aantal bouwlagen</Label>
+                    <Input
+                      id="bew-bouwlagen"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap3?.aantalBouwlagen ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap3: { ...f.wizardData?.stap3, aantalBouwlagen: parseInt(e.target.value) || undefined } as Oppervlaktes } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-bouwjaar">Bouwjaar</Label>
+                    <Input
+                      id="bew-bouwjaar"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap3?.bouwjaar ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap3: { ...f.wizardData?.stap3, bouwjaar: parseInt(e.target.value) || undefined } as Oppervlaktes } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-renovatiejaar">Renovatiejaar</Label>
+                    <Input
+                      id="bew-renovatiejaar"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap3?.renovatiejaar ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap3: { ...f.wizardData?.stap3, renovatiejaar: parseInt(e.target.value) || undefined } as Oppervlaktes } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-aanbouwen">Aanbouwen</Label>
+                    <Input
+                      id="bew-aanbouwen"
+                      value={bewerkFormulier.wizardData?.stap3?.aanbouwen ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap3: { ...f.wizardData?.stap3, aanbouwen: e.target.value } as Oppervlaktes } }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stap 4: Huurgegevens */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Huurgegevens</h4>
+                <Separator />
+                <div className="flex items-center gap-2 mb-2">
+                  <Checkbox
+                    id="bew-verhuurd"
+                    checked={bewerkFormulier.wizardData?.stap4?.verhuurd ?? false}
+                    onCheckedChange={(checked) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap4: { ...f.wizardData?.stap4, verhuurd: !!checked } as Huurgegevens } }))}
+                  />
+                  <Label htmlFor="bew-verhuurd">Verhuurd</Label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-huurder">Huurder</Label>
+                    <Input
+                      id="bew-huurder"
+                      value={bewerkFormulier.wizardData?.stap4?.huurder ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap4: { ...f.wizardData?.stap4, huurder: e.target.value } as Huurgegevens } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-huurprijs">Huurprijs per jaar (€)</Label>
+                    <Input
+                      id="bew-huurprijs"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap4?.huurprijsPerJaar ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap4: { ...f.wizardData?.stap4, huurprijsPerJaar: parseFloat(e.target.value) || undefined } as Huurgegevens } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-markthuur">Markthuur per jaar (€)</Label>
+                    <Input
+                      id="bew-markthuur"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap4?.markthuurPerJaar ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap4: { ...f.wizardData?.stap4, markthuurPerJaar: parseFloat(e.target.value) || undefined } as Huurgegevens } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-contracttype">Contracttype</Label>
+                    <Input
+                      id="bew-contracttype"
+                      value={bewerkFormulier.wizardData?.stap4?.contracttype ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap4: { ...f.wizardData?.stap4, contracttype: e.target.value } as Huurgegevens } }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stap 5: Juridische informatie */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Juridische informatie</h4>
+                <Separator />
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-eigendom">Eigendomssituatie</Label>
+                    <Textarea
+                      id="bew-eigendom"
+                      rows={2}
+                      value={bewerkFormulier.wizardData?.stap5?.eigendomssituatie ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap5: { ...f.wizardData?.stap5, eigendomssituatie: e.target.value } as JuridischeInfo } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-erfpacht">Erfpacht</Label>
+                    <Textarea
+                      id="bew-erfpacht"
+                      rows={2}
+                      value={bewerkFormulier.wizardData?.stap5?.erfpacht ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap5: { ...f.wizardData?.stap5, erfpacht: e.target.value } as JuridischeInfo } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-zakelijkerechten">Zakelijke rechten</Label>
+                    <Textarea
+                      id="bew-zakelijkerechten"
+                      rows={2}
+                      value={bewerkFormulier.wizardData?.stap5?.zakelijkeRechten ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap5: { ...f.wizardData?.stap5, zakelijkeRechten: e.target.value } as JuridischeInfo } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-bestemmingsplan">Bestemmingsplan</Label>
+                    <Textarea
+                      id="bew-bestemmingsplan"
+                      rows={2}
+                      value={bewerkFormulier.wizardData?.stap5?.bestemmingsplan ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap5: { ...f.wizardData?.stap5, bestemmingsplan: e.target.value } as JuridischeInfo } }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stap 6: Technische staat */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Technische staat</h4>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-exterieur">Exterieur staat</Label>
+                    <Select
+                      value={bewerkFormulier.wizardData?.stap6?.exterieurStaat ?? ''}
+                      onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, exterieurStaat: v as Onderhoudsstaat } as TechnischeStaat } }))}
+                    >
+                      <SelectTrigger id="bew-exterieur">
+                        <SelectValue placeholder="Selecteer staat" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="uitstekend">Uitstekend</SelectItem>
+                        <SelectItem value="goed">Goed</SelectItem>
+                        <SelectItem value="redelijk">Redelijk</SelectItem>
+                        <SelectItem value="matig">Matig</SelectItem>
+                        <SelectItem value="slecht">Slecht</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-interieur">Interieur staat</Label>
+                    <Select
+                      value={bewerkFormulier.wizardData?.stap6?.interieurStaat ?? ''}
+                      onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, interieurStaat: v as Onderhoudsstaat } as TechnischeStaat } }))}
+                    >
+                      <SelectTrigger id="bew-interieur">
+                        <SelectValue placeholder="Selecteer staat" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="uitstekend">Uitstekend</SelectItem>
+                        <SelectItem value="goed">Goed</SelectItem>
+                        <SelectItem value="redelijk">Redelijk</SelectItem>
+                        <SelectItem value="matig">Matig</SelectItem>
+                        <SelectItem value="slecht">Slecht</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-fundering">Fundering</Label>
+                    <Input
+                      id="bew-fundering"
+                      value={bewerkFormulier.wizardData?.stap6?.fundering ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, fundering: e.target.value } as TechnischeStaat } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-dak">Dakbedekking</Label>
+                    <Input
+                      id="bew-dak"
+                      value={bewerkFormulier.wizardData?.stap6?.dakbedekking ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, dakbedekking: e.target.value } as TechnischeStaat } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-installaties">Installaties</Label>
+                    <Input
+                      id="bew-installaties"
+                      value={bewerkFormulier.wizardData?.stap6?.installaties ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, installaties: e.target.value } as TechnischeStaat } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-onderhoudskosten">Onderhoudskosten per jaar (€)</Label>
+                    <Input
+                      id="bew-onderhoudskosten"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap6?.onderhoudskosten ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, onderhoudskosten: parseFloat(e.target.value) || undefined } as TechnischeStaat } }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="bew-achterstallig"
+                    checked={bewerkFormulier.wizardData?.stap6?.achterstalligOnderhoud ?? false}
+                    onCheckedChange={(checked) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, achterstalligOnderhoud: !!checked } as TechnischeStaat } }))}
+                  />
+                  <Label htmlFor="bew-achterstallig">Achterstallig onderhoud</Label>
+                </div>
+                {bewerkFormulier.wizardData?.stap6?.achterstalligOnderhoud && (
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-achterstallig-beschrijving">Beschrijving achterstallig onderhoud</Label>
+                    <Textarea
+                      id="bew-achterstallig-beschrijving"
+                      rows={2}
+                      value={bewerkFormulier.wizardData?.stap6?.achterstalligOnderhoudBeschrijving ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap6: { ...f.wizardData?.stap6, achterstalligOnderhoudBeschrijving: e.target.value } as TechnischeStaat } }))}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Stap 7: Vergunningen & duurzaamheid */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Vergunningen &amp; duurzaamheid</h4>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-energielabel">Energielabel</Label>
+                    <Select
+                      value={bewerkFormulier.wizardData?.stap7?.energielabel ?? ''}
+                      onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap7: { ...f.wizardData?.stap7, energielabel: v as Energielabel } as Vergunningen } }))}
+                    >
+                      <SelectTrigger id="bew-energielabel">
+                        <SelectValue placeholder="Selecteer label" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(['A++++', 'A+++', 'A++', 'A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'geen'] as Energielabel[]).map((l) => (
+                          <SelectItem key={l} value={l}>{l === 'geen' ? 'Geen' : l}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-asbest">Asbest</Label>
+                    <Select
+                      value={bewerkFormulier.wizardData?.stap7?.asbest ?? ''}
+                      onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap7: { ...f.wizardData?.stap7, asbest: v as 'ja' | 'nee' | 'onbekend' } as Vergunningen } }))}
+                    >
+                      <SelectTrigger id="bew-asbest">
+                        <SelectValue placeholder="Selecteer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ja">Ja</SelectItem>
+                        <SelectItem value="nee">Nee</SelectItem>
+                        <SelectItem value="onbekend">Onbekend</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-bodem">Bodemverontreiniging</Label>
+                    <Select
+                      value={bewerkFormulier.wizardData?.stap7?.bodemverontreiniging ?? ''}
+                      onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap7: { ...f.wizardData?.stap7, bodemverontreiniging: v as 'ja' | 'nee' | 'onbekend' } as Vergunningen } }))}
+                    >
+                      <SelectTrigger id="bew-bodem">
+                        <SelectValue placeholder="Selecteer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ja">Ja</SelectItem>
+                        <SelectItem value="nee">Nee</SelectItem>
+                        <SelectItem value="onbekend">Onbekend</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bew-toelichting-verg">Toelichting</Label>
+                  <Textarea
+                    id="bew-toelichting-verg"
+                    rows={2}
+                    value={bewerkFormulier.wizardData?.stap7?.toelichting ?? ''}
+                    onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap7: { ...f.wizardData?.stap7, toelichting: e.target.value } as Vergunningen } }))}
+                  />
+                </div>
+              </div>
+
+              {/* Stap 8: Waardering */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Waardering</h4>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-methode">Waarderingsmethode</Label>
+                    <Select
+                      value={bewerkFormulier.wizardData?.stap8?.methode ?? ''}
+                      onValueChange={(v) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap8: { ...f.wizardData?.stap8, methode: v as WaarderingsMethode } as Waardering } }))}
+                    >
+                      <SelectTrigger id="bew-methode">
+                        <SelectValue placeholder="Selecteer methode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vergelijkingsmethode">Vergelijkingsmethode</SelectItem>
+                        <SelectItem value="BAR_NAR">BAR/NAR</SelectItem>
+                        <SelectItem value="DCF">DCF</SelectItem>
+                        <SelectItem value="kostenmethode">Kostenmethode</SelectItem>
+                        <SelectItem value="combinatie">Combinatie</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-ovw">Onderhandse verkoopwaarde (€)</Label>
+                    <Input
+                      id="bew-ovw"
+                      type="number"
+                      value={bewerkFormulier.wizardData?.stap8?.onderhandseVerkoopwaarde ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap8: { ...f.wizardData?.stap8, onderhandseVerkoopwaarde: parseFloat(e.target.value) || undefined } as Waardering } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-kapfac">Kapitalisatiefactor</Label>
+                    <Input
+                      id="bew-kapfac"
+                      type="number"
+                      step="0.01"
+                      value={bewerkFormulier.wizardData?.stap8?.kapitalisatiefactor ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap8: { ...f.wizardData?.stap8, kapitalisatiefactor: e.target.value ? parseFloat(e.target.value) : undefined } as Waardering } }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stap 9: Aannames & voorbehouden */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-foreground">Aannames &amp; voorbehouden</h4>
+                <Separator />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-aannames">Aannames</Label>
+                    <Textarea
+                      id="bew-aannames"
+                      rows={3}
+                      value={bewerkFormulier.wizardData?.stap9?.aannames ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap9: { ...f.wizardData?.stap9, aannames: e.target.value } as Aannames } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-voorbehouden">Voorbehouden</Label>
+                    <Textarea
+                      id="bew-voorbehouden"
+                      rows={3}
+                      value={bewerkFormulier.wizardData?.stap9?.voorbehouden ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap9: { ...f.wizardData?.stap9, voorbehouden: e.target.value } as Aannames } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bew-bijzonder">Bijzondere omstandigheden</Label>
+                    <Textarea
+                      id="bew-bijzonder"
+                      rows={3}
+                      value={bewerkFormulier.wizardData?.stap9?.bijzondereOmstandigheden ?? ''}
+                      onChange={(e) => setBewerkFormulier((f) => f && ({ ...f, wizardData: { ...f.wizardData, stap9: { ...f.wizardData?.stap9, bijzondereOmstandigheden: e.target.value } as Aannames } }))}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
           </div>

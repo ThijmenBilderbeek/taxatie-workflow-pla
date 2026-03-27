@@ -211,6 +211,10 @@ export interface HistorischRapport {
     sourceLabel: string
     sourceSnippet: string
     sourceSection?: string
+    parserRule?: string
+    wasNormalized?: boolean
+    discardedCandidates?: Array<{ value: unknown; reason: string }>
+    sourcePage?: number
   }>
 }
 

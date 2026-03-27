@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { HistorischRapport, ObjectType, Gebruiksdoel, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Waardering, Ligging, Onderhoudsstaat, Energielabel, WaarderingsMethode, Huurgegevens, TechnischeStaat, Vergunningen, Aannames, JuridischeInfo } from '../types'
 import type { DocumentChunk, DocumentWritingProfile } from '../types/kennisbank'
-import { extractDocumentKnowledge } from '../lib/documentKnowledgeExtractor'
+import { extractDocumentKnowledge, deriveMarketSegment } from '../lib/documentKnowledgeExtractor'
 import { useDocumentKnowledge } from '../hooks/useDocumentKnowledge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
@@ -156,6 +156,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
           const tempId = uuidv4()
           const knowledge = extractDocumentKnowledge(fullText, tempId, {
             objectType: mutable.typeObject,
+            marketSegment: deriveMarketSegment(mutable.typeObject),
           })
           setPendingChunks(knowledge.chunks)
           setPendingProfile(knowledge.profile)
@@ -280,7 +281,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
             objectType: rapport.typeObject ?? pendingProfile.objectType,
           }
         : null
-      Promise.all([
+      void Promise.all([
         saveDocumentChunks(chunks),
         profile ? saveDocumentProfile(profile) : Promise.resolve(),
       ]).catch((err) => {

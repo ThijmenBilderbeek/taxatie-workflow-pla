@@ -648,11 +648,12 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
   const ipdExact = tryExactLabelOutsideRef(text, ['ipd-type', 'ipd type', 'type vastgoed', 'type object', 'soort object', 'object type'])
   if (ipdExact) {
     const lower = ipdExact.raw.toLowerCase()
-    // "eigen gebruik" is a gebruiksdoel, never a physical type — skip it
-    if (/eigen\s+gebruik/.test(lower)) return undefined
-    for (const { keyword, value } of PHYSICAL_TYPES) {
-      if (lower.includes(keyword)) {
-        return { value, confidence: 'high', sourceLabel: ipdExact.label, sourceSnippet: ipdExact.snippet, sourceSection: 'Stap 1', parserRule: 'ipd-label' }
+    // "eigen gebruik" is a gebruiksdoel, never a physical type — skip to next priority
+    if (!/eigen\s+gebruik/.test(lower)) {
+      for (const { keyword, value } of PHYSICAL_TYPES) {
+        if (lower.includes(keyword)) {
+          return { value, confidence: 'high', sourceLabel: ipdExact.label, sourceSnippet: ipdExact.snippet, sourceSection: 'Stap 1', parserRule: 'ipd-label' }
+        }
       }
     }
   }
@@ -832,6 +833,8 @@ export function extractBodemverontreiniging(text: string): ExtractionResult<'ja'
   if (bodemIdx === -1) return undefined
 
   const bodemContext = lower.slice(bodemIdx, bodemIdx + 400)
+  // Also include backward context (up to 80 chars before keyword) to catch "geen ... voor bodemverontreiniging"
+  const bodemContextFull = lower.slice(Math.max(0, bodemIdx - 80), bodemIdx + 400)
   const snippet = text.slice(bodemIdx, bodemIdx + 80).replace(/\s+/g, ' ')
 
   // Phrases indicating that even though contamination exists, there is no impact on use
@@ -845,8 +848,9 @@ export function extractBodemverontreiniging(text: string): ExtractionResult<'ja'
   ]
 
   // Check NEGATIVE patterns FIRST — these override positive matches
+  // Use bodemContextFull (includes pre-keyword context) to catch "geen ... voor bodemverontreiniging"
   if (
-    /niet\s+geregistreerd\s+als\s+mogelijk\s+verontreinigd|geen\s+informatie\s+bekend\s+die\s+duidt\s+op\s+bodemverontreiniging|geen\s+visuele\s+waarnemingen|geen\s+aanwijzingen\s+voor\s+bodemverontreiniging|geen\s+verontreiniging/.test(bodemContext) ||
+    /niet\s+geregistreerd\s+als\s+mogelijk\s+verontreinigd|geen\s+informatie\s+bekend\s+die\s+duidt\s+op\s+bodemverontreiniging|geen\s+visuele\s+waarnemingen|geen\s+aanwijzingen\s+voor\s+bodemverontreiniging|geen\s+verontreiniging/.test(bodemContextFull) ||
     bodemContext.includes('niet aanwezig') ||
     bodemContext.includes('schoon') ||
     /\bnee\b/.test(bodemContext)
@@ -927,7 +931,7 @@ export function extractAantalBouwlagen(text: string): ExtractionResult<number> |
     return { value: val, confidence: 'high', sourceLabel: 'bouwlagen:', sourceSnippet: snippet, sourceSection: 'Stap 3', parserRule: 'bouwlagen-digit' }
   }
   // Medium: Dutch word-number patterns
-  const re2 = /\b(?:in|van|met)\s+(een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)\s+(?:bouwlagen|verdiepingen|lagen)\b/i
+  const re2 = /\b(?:in|van|met|over)\s+(een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)\s+(?:bouwlagen|verdiepingen|lagen)\b/i
   const m2 = text.match(re2)
   if (m2) {
     const val = dutchNumberWordToDigit(m2[1])
@@ -971,7 +975,9 @@ export function extractAannames(text: string): ExtractionResult<string> | undefi
     const idx = lower.indexOf(label)
     if (idx === -1) continue
     const after = text.slice(idx + label.length).replace(/^[\s:\-–]+/, '')
-    const raw = after.slice(0, 600)
+    // Stop at next section header (e.g. "H.2", "A.1", numbered chapters) to avoid reference section leakage
+    const sectionStop = after.search(/\n[A-Z]\.[0-9]|\n[0-9]+\.[0-9]+\s+[A-Z]|\nH\s*\.\s*[0-9]/)
+    const raw = sectionStop > 0 ? after.slice(0, sectionStop) : after.slice(0, 600)
     const value = summarizeAannames(raw, 450)
     if (value && value.length > 5) {
       const snippet = text.slice(Math.max(0, idx - 10), idx + label.length + 40).replace(/\s+/g, ' ')

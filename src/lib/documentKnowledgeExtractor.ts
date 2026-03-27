@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { DocumentChunk, DocumentWritingProfile } from '../types/kennisbank'
+import type { DocumentChunk, DocumentWritingProfile, AIEnhancementOptions } from '../types/kennisbank'
 import type { ObjectType } from '../types'
 import { detectChapters } from './chapterDetector'
 import { chunkSections } from './narrativeChunker'
@@ -93,4 +93,44 @@ export function extractDocumentKnowledge(
       },
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// AI-enhanced (async) variant
+// ---------------------------------------------------------------------------
+
+export interface ExtractOptions {
+  objectType?: ObjectType
+  documentType?: string
+  ai?: AIEnhancementOptions
+}
+
+/**
+ * Async version of `extractDocumentKnowledge` that optionally applies
+ * AI-enhanced classification after the rule-based pipeline.
+ *
+ * When `options.ai.enabled` is false (the default) this behaves identically
+ * to the synchronous variant but returns a Promise.
+ */
+export async function extractDocumentKnowledgeWithAI(
+  text: string,
+  rapportId: string,
+  options?: ExtractOptions
+): Promise<DocumentKnowledge> {
+  // Run the synchronous rule-based pipeline first
+  const result = extractDocumentKnowledge(text, rapportId, options)
+
+  if (!options?.ai?.enabled || result.chunks.length === 0) {
+    return result
+  }
+
+  // Lazily import to avoid loading the Supabase client in SSR / test environments
+  const { enhanceChunksBatch, enhanceDocumentProfile } = await import('./aiEnhancer')
+
+  const batchSize = options.ai.batchSize ?? 5
+
+  const enhancedChunks = await enhanceChunksBatch(result.chunks, batchSize)
+  const enhancedProfile = enhanceDocumentProfile(enhancedChunks, result.profile)
+
+  return { chunks: enhancedChunks, profile: enhancedProfile }
 }

@@ -384,8 +384,12 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const hasRentalPhrase = /thans\s+verhuurd|lopende\s+huurovereenkomst/.test(lowerText)
   const hasContractType = stap4contracttype !== undefined && stap4contracttype.length < 60
   const hasActiveRental = hasActiveTenant || hasActualRentAmount || hasRentalPhrase || hasContractType
+  // For eigenaar-gebruiker: verhuurd is ONLY true when there is SIMULTANEOUSLY an
+  // explicit tenant, an explicit rent amount AND an explicit rental phrase
+  // ("thans verhuurd" / "lopende huurovereenkomst").  Market-analysis sentences
+  // that mention rental in passing must not flip this flag.
   const stap4verhuurd = isEigenaarGebruiker
-    ? hasRentalPhrase
+    ? (hasRentalPhrase && hasActiveTenant && hasActualRentAmount)
     : hasActiveRental && !hasPastRental
 
   // --- Stap 6: Technische Staat ---
@@ -870,10 +874,13 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   const stap4Fields: Partial<NonNullable<Dossier['stap4']>> = {}
   stap4Fields.verhuurd = stap4verhuurd
-  if (stap4huurder) stap4Fields.huurder = truncateField(stap4huurder, MAX_FIELD_LENGTH_SHORT)
-  if (stap4huurprijsPerJaar !== undefined) stap4Fields.huurprijsPerJaar = stap4huurprijsPerJaar
+  // For eigenaar-gebruiker with verhuurd=false: suppress tenant/rent fields to avoid
+  // incorrect data leaking from market-analysis sections, but always keep markthuur.
+  const allowRentalFields = stap4verhuurd || !isEigenaarGebruiker
+  if (allowRentalFields && stap4huurder) stap4Fields.huurder = truncateField(stap4huurder, MAX_FIELD_LENGTH_SHORT)
+  if (allowRentalFields && stap4huurprijsPerJaar !== undefined) stap4Fields.huurprijsPerJaar = stap4huurprijsPerJaar
+  if (allowRentalFields && stap4contracttype) stap4Fields.contracttype = truncateField(stap4contracttype, MAX_FIELD_LENGTH_SHORT)
   if (stap4markthuurPerJaar !== undefined) stap4Fields.markthuurPerJaar = stap4markthuurPerJaar
-  if (stap4contracttype) stap4Fields.contracttype = truncateField(stap4contracttype, MAX_FIELD_LENGTH_SHORT)
   wizardData.stap4 = stap4Fields as Dossier['stap4']
 
   const stap5Fields: Partial<NonNullable<Dossier['stap5']>> = {}

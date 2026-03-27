@@ -27,6 +27,7 @@ import {
   extractConstructie,
 } from '../pdfFieldExtractors'
 import { postcodeToProvincie, stripHeaderFooterNoise, cleanLabelRemnant } from '../pdfNormalizers'
+import { extractWizardDataFromText } from '../pdfParser'
 
 // ---------------------------------------------------------------------------
 // Shared fixture — simulates the Columbusweg 13 te Venlo rapport
@@ -432,5 +433,37 @@ describe('Columbusweg 13 — test 20: BAR', () => {
     const result = extractBar(COLUMBUSWEG_TEXT)
     expect(result).toBeDefined()
     expect(result!.value).toBe(8.15)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 21 — verhuurd = false for eigenaar-gebruiker (extractWizardDataFromText)
+// ---------------------------------------------------------------------------
+describe('Columbusweg 13 — test 21: verhuurd=false for eigenaar-gebruiker', () => {
+  it('sets verhuurd=false when eigenaar-gebruiker with markthuur but no tenant/huurprijs', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap4?.verhuurd).toBe(false)
+  })
+
+  it('does not set huurder when eigenaar-gebruiker and verhuurd=false', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap4?.huurder).toBeUndefined()
+  })
+
+  it('does not set huurprijsPerJaar when eigenaar-gebruiker and verhuurd=false', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap4?.huurprijsPerJaar).toBeUndefined()
+  })
+
+  it('keeps markthuurPerJaar=352951 even when verhuurd=false', () => {
+    const data = extractWizardDataFromText(COLUMBUSWEG_TEXT)
+    expect(data.stap4?.markthuurPerJaar).toBe(352951)
+  })
+
+  it('requires ALL THREE conditions (tenant + rent amount + rental phrase) before setting verhuurd=true for eigenaar-gebruiker', () => {
+    // Only "thans verhuurd" phrase — without explicit tenant and huurprijs → still false
+    const phraseOnly = 'Eigenaar-gebruiker\nDe markt toont dat objecten thans verhuurd worden.\nMarkthuur: 100.000'
+    const data = extractWizardDataFromText(phraseOnly)
+    expect(data.stap4?.verhuurd).toBe(false)
   })
 })

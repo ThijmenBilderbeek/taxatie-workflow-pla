@@ -1102,3 +1102,75 @@ describe('extractAantalBouwlagen', () => {
     expect(result!.value).toBe(2)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Naam taxateur trailing digit strip
+// ---------------------------------------------------------------------------
+describe('extractNaamTaxateur — strip trailing page-number digits', () => {
+  it('strips single trailing digit from naam taxateur', () => {
+    const text = 'Uitvoerend taxateur: Rick Schiffelers RT  1\nVolgende veld: waarde'
+    const result = extractNaamTaxateur(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Rick Schiffelers RT')
+  })
+
+  it('strips multi-digit trailing page number', () => {
+    const text = 'Uitvoerend taxateur: J. de Vries  12\nOverige info'
+    const result = extractNaamTaxateur(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('J. de Vries')
+  })
+
+  it('does not strip non-trailing digits that are part of the name', () => {
+    const text = 'Uitvoerend taxateur: J.P. Smit\nOverige info'
+    const result = extractNaamTaxateur(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('J.P. Smit')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Eigendomssituatie — no-newline PDF format (real PDF uses space-joined text)
+// ---------------------------------------------------------------------------
+describe('extractEigendomssituatie — no-newline real-PDF format', () => {
+  it('returns "Eigendom" when "Te taxeren belang: Eigendom" follows on same line', () => {
+    // Simulates real PDF text where lines are joined with spaces (no newlines within a page)
+    const text = 'Type eigendom: Eigendom Te taxeren belang: Eigendom Erfpacht: n.v.t. BVO: 2444'
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Eigendom')
+  })
+
+  it('returns "Eigendom" for no-space concatenation "EigendomTe taxeren belang:Eigendom"', () => {
+    const text = 'Type eigendom: EigendomTe taxeren belang:Eigendom Erfpacht: n.v.t.'
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Eigendom')
+  })
+
+  it('does not produce "EigendomEigendom" in any scenario', () => {
+    const text = 'Type eigendom: Eigendom Te taxeren belang: Eigendom'
+    const result = extractEigendomssituatie(text)
+    expect(result?.value).not.toMatch(/EigendomEigendom/i)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Ligging — "locatiescoring:" label recognition
+// ---------------------------------------------------------------------------
+describe('extractLigging — locatiescoring label', () => {
+  it('extracts "goed" from "Locatiescoring: Goed"', () => {
+    const text = 'Locatiescoring: Goed\nAndere info'
+    const result = extractLigging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('goed')
+  })
+
+  it('quality score from "locatiescoring:" wins over "bedrijventerrein" elsewhere', () => {
+    const text = 'Locatiescoring: Goed\nBestemming: Bedrijventerrein\nGebruik: Ja'
+    const result = extractLigging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('goed')
+    expect(result!.value).not.toBe('bedrijventerrein')
+  })
+})

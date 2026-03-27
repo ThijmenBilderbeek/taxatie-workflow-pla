@@ -163,7 +163,8 @@ function tryExactLabelOutsideRef(
 export function extractNaamTaxateur(text: string): ExtractionResult<string> | undefined {
   const exact = tryExactLabel(text, ['uitvoerend taxateur', 'naam taxateur', 'taxateur', 'beëdigd taxateur', 'getaxeerd door'])
   if (exact) {
-    const value = exact.raw.slice(0, 80).split('\n')[0].trim()
+    // Strip trailing page-number digits (e.g. "Rick Schiffelers RT  1" → "Rick Schiffelers RT")
+    const value = exact.raw.slice(0, 80).split('\n')[0].trim().replace(/\s+\d{1,3}$/, '')
     return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
   }
   return undefined
@@ -261,7 +262,7 @@ export function extractLigging(text: string): ExtractionResult<string> | undefin
   const lower = text.toLowerCase()
 
   // High: explicit ligging label — check quality scores first (only in first line), then enum
-  for (const keyword of ['ligging:', 'omschrijving locatie, stand en ligging:', 'ligging object:', 'type ligging:', 'locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'locatiescore:']) {
+  for (const keyword of ['ligging:', 'omschrijving locatie, stand en ligging:', 'ligging object:', 'type ligging:', 'locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'locatiescore:', 'locatiescoring:', 'score locatie:']) {
     const idx = lower.indexOf(keyword)
     if (idx === -1) continue
     // Only search the first line after the label for quality/enum values (avoids false positives from body text)
@@ -433,9 +434,17 @@ export function extractEigendomssituatie(text: string): ExtractionResult<string>
   const exact = tryExactLabel(text, ['eigendomssituatie', 'eigendomsvorm', 'eigendom', 'type eigendom'])
   if (exact) {
     let value = exact.raw.split('\n')[0].trim()
+    // Stop at first inline label pattern before any other cleanup
+    // (e.g. "Eigendom Te taxeren belang: Eigendom..." → stops at "Te taxeren belang:")
+    const inlineLabelIdx = value.search(/\s+[A-Za-zÀ-öø-ÿ][A-Za-zÀ-öø-ÿ\s]{2,30}:\s/)
+    if (inlineLabelIdx > 0) value = value.slice(0, inlineLabelIdx).trim()
     // Strip embedded "Te taxeren belang: ..." label text
-    value = value.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, '').trim()
+    // Use ' ' replacement (not '') to avoid direct concatenation like "EigendomEigendom"
+    value = value.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, ' ').trim()
     // Remove repeated value caused by PDF concatenation glitch (e.g. "EigendomEigendom" → "Eigendom")
+    // Non-anchored: handles prefix repetitions followed by more content
+    value = value.replace(/^([A-Za-zÀ-öø-ÿ]{3,})\1+/i, '$1')
+    // Anchored: handles full-string repetitions
     value = value.replace(/^(.{3,}?)\1+$/i, '$1')
     // Remove duplicate words (case-insensitive) separated by whitespace
     const words = value.split(/\s+/)

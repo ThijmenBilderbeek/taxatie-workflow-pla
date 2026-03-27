@@ -147,7 +147,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   )
 
   // Naam taxateur: extended label synonyms
-  const stap1naamTaxateur = extractSectionAfterKeyword(
+  const stap1naamTaxateurRaw = extractSectionAfterKeyword(
     text,
     [
       'uitvoerend taxateur:',
@@ -160,6 +160,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     60,
     { singleLine: true }
   )
+  // Strip trailing page-number digits (e.g. "Rick Schiffelers RT  1" → "Rick Schiffelers RT")
+  const stap1naamTaxateur = stap1naamTaxateurRaw?.replace(/\s+\d{1,3}$/, '').trim() || undefined
 
   // Inspectiedatum: extended label synonyms, handle "vrijdag 7 november 2025"
   const stap1inspectiedatumRaw = extractSectionAfterKeyword(
@@ -216,7 +218,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   let stap2ligging: Ligging | undefined
 
   // Step 1: check for quality score near explicit ligging/locatie labels
-  for (const keyword of ['locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'ligging:', 'ligging object:', 'type ligging:', 'locatiescore:', 'omschrijving locatie, stand en ligging:']) {
+  for (const keyword of ['locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'ligging:', 'ligging object:', 'type ligging:', 'locatiescore:', 'locatiescoring:', 'score locatie:', 'omschrijving locatie, stand en ligging:']) {
     const idx = lowerText.indexOf(keyword)
     if (idx === -1) continue
     const afterLabel = lowerText.slice(idx + keyword.length).trimStart()
@@ -349,8 +351,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   )
 
   // --- Stap 4: Huurgegevens ---
+  // (?<!\w) prevents "markthuurprijs" from matching the huurprijs pattern
   const huurprijsMatch = text.match(
-    /(?:huurprijs|jaarhuur|huur\s+per\s+jaar)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
+    /(?<!\w)(?:huurprijs|jaarhuur|huur\s+per\s+jaar)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
   )
   const stap4huurprijsPerJaar = huurprijsMatch ? normalizeEuro(huurprijsMatch[1]) : undefined
 
@@ -527,18 +530,23 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
   // --- Stap 5: Juridische Info ---
   // Eigendomssituatie: limit to 100 chars, stop at unrelated field markers
+  // stopAtInlineLabel stops before "Te taxeren belang:" and similar inline follow-up labels
   const stap5eigendomssituatieRaw = extractSectionAfterKeyword(text, [
     'eigendomssituatie:',
     'eigendomsvorm:',
     'eigendom:',
     'type eigendom:',
-  ], 100, { singleLine: true })
+  ], 100, { singleLine: true, stopAtInlineLabel: true })
   // Strip junk: truncate at known unrelated-field stop-words, remove embedded labels
   let stap5eigendomssituatie = stap5eigendomssituatieRaw
   if (stap5eigendomssituatie) {
     // Remove embedded "Te taxeren belang: ..." from eigendomssituatie text
-    stap5eigendomssituatie = stap5eigendomssituatie.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, '').trim()
+    // Use ' ' as replacement (not '') to avoid direct concatenation like "EigendomEigendom"
+    stap5eigendomssituatie = stap5eigendomssituatie.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, ' ').trim()
     // Remove repeated value caused by PDF concatenation glitch (e.g. "EigendomEigendom" → "Eigendom")
+    // Non-anchored form handles the case where more content follows the repeated prefix
+    stap5eigendomssituatie = stap5eigendomssituatie.replace(/^([A-Za-zÀ-öø-ÿ]{3,})\1+/i, '$1')
+    // Anchored form for full-string repetitions (e.g. short isolated values)
     stap5eigendomssituatie = stap5eigendomssituatie.replace(/^(.{3,}?)\1+$/i, '$1')
     // Remove duplicate words
     const words = stap5eigendomssituatie.split(/\s+/)

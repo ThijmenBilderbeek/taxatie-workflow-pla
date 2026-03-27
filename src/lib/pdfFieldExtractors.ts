@@ -18,6 +18,8 @@ import {
   cleanupLongFieldText,
   compactWhitespace,
   truncateField,
+  postcodeToProvincie,
+  dutchNumberWordToDigit,
 } from './pdfNormalizers'
 
 export interface ExtractionResult<T> {
@@ -31,6 +33,12 @@ export interface ExtractionResult<T> {
   sourceSection?: string
   /** The parser rule / pattern that produced the match */
   parserRule?: string
+  /** Whether the raw value was normalized (e.g. date or number conversion) */
+  wasNormalized?: boolean
+  /** Candidates that were considered but discarded */
+  discardedCandidates?: Array<{ value: unknown; reason: string }>
+  /** Zero-based page index where the match was found (when available) */
+  sourcePage?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +99,9 @@ const REFERENCE_SECTION_MARKERS = [
   'vergelijkingsobject',
   'huurref',
   'koopref',
+  'marktanalyse',
+  'marktoverzicht',
+  'marktontwikkeling',
 ]
 
 /**
@@ -186,10 +197,25 @@ export function extractWaardepeildatum(text: string): ExtractionResult<string> |
 }
 
 export function extractInspectiedatum(text: string): ExtractionResult<string> | undefined {
-  const exact = tryExactLabel(text, ['inspectiedatum', 'datum opname en inspectie', 'datum opname', 'datum inspectie', 'opnamedatum'])
+  // High confidence: explicit label with colon
+  const exact = tryExactLabel(text, [
+    'inspectiedatum',
+    'datum opname en inspectie',
+    'datum opname',
+    'datum inspectie',
+    'opnamedatum',
+    'inpandige opname',
+    'opgenomen op',
+  ])
   if (exact) {
     const normalized = normalizeDutchDate(exact.raw.slice(0, 50).split('\n')[0].trim())
-    if (normalized) return { value: normalized, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
+    if (normalized) return { value: normalized, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1', wasNormalized: true }
+  }
+  // Medium confidence: keyword without colon
+  const kw = tryKeyword(text, ['inpandige opname', 'opgenomen op', 'datum opname', 'inspectiedatum'], 60)
+  if (kw) {
+    const normalized = normalizeDutchDate(kw.raw.slice(0, 50).split('\n')[0].trim())
+    if (normalized) return { value: normalized, confidence: 'medium', sourceLabel: kw.label, sourceSnippet: kw.snippet, sourceSection: 'Stap 1', wasNormalized: true }
   }
   return undefined
 }
@@ -206,11 +232,22 @@ export function extractGemeente(text: string): ExtractionResult<string> | undefi
   return undefined
 }
 
-export function extractProvincie(text: string): ExtractionResult<string> | undefined {
+export function extractProvincie(text: string, postcodeHint?: string): ExtractionResult<string> | undefined {
   const exact = tryExactLabel(text, ['provincie'])
   if (exact) {
     const value = exact.raw.slice(0, 30).split('\n')[0].trim()
     if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 2' }
+  }
+  // Fallback: derive province from postcode
+  if (postcodeHint) {
+    const fromPostcode = postcodeToProvincie(postcodeHint)
+    if (fromPostcode) return { value: fromPostcode, confidence: 'medium', sourceLabel: '(postcode-mapping)', sourceSnippet: postcodeHint, sourceSection: 'Stap 2', parserRule: 'postcode-to-provincie' }
+  }
+  // Fallback: extract postcode from text and derive province
+  const postcodeMatch = text.match(/\b(\d{4})\s?[A-Z]{2}\b/)
+  if (postcodeMatch) {
+    const fromPostcode = postcodeToProvincie(postcodeMatch[1])
+    if (fromPostcode) return { value: fromPostcode, confidence: 'low', sourceLabel: '(postcode-mapping)', sourceSnippet: postcodeMatch[0], sourceSection: 'Stap 2', parserRule: 'postcode-to-provincie-fulltext' }
   }
   return undefined
 }
@@ -223,7 +260,7 @@ export function extractLigging(text: string): ExtractionResult<string> | undefin
   const lower = text.toLowerCase()
 
   // High: explicit ligging label — check quality scores first (only in first line), then enum
-  for (const keyword of ['ligging:', 'omschrijving locatie, stand en ligging:', 'ligging object:', 'type ligging:']) {
+  for (const keyword of ['ligging:', 'omschrijving locatie, stand en ligging:', 'ligging object:', 'type ligging:', 'locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:']) {
     const idx = lower.indexOf(keyword)
     if (idx === -1) continue
     // Only search the first line after the label for quality/enum values (avoids false positives from body text)
@@ -392,15 +429,36 @@ export function extractMarkthuur(text: string): ExtractionResult<number> | undef
 const MAX_EIGENDOMSSITUATIE_LENGTH = 80
 
 export function extractEigendomssituatie(text: string): ExtractionResult<string> | undefined {
-  const exact = tryExactLabel(text, ['eigendomssituatie', 'eigendomsvorm', 'eigendom', 'type eigendom', 'te taxeren belang'])
+  const exact = tryExactLabel(text, ['eigendomssituatie', 'eigendomsvorm', 'eigendom', 'type eigendom'])
   if (exact) {
     let value = exact.raw.split('\n')[0].trim()
-    // Truncate at known unrelated-field stop-words (Bug 9)
+    // Strip embedded "Te taxeren belang: ..." label text
+    value = value.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, '').trim()
+    // Remove duplicate words (case-insensitive) separated by whitespace
+    const words = value.split(/\s+/)
+    const seen = new Set<string>()
+    const deduped = words.filter((w) => {
+      const lower = w.toLowerCase()
+      if (seen.has(lower)) return false
+      seen.add(lower)
+      return true
+    })
+    value = deduped.join(' ')
+    // Truncate at known unrelated-field stop-words
     const stopIdx = value.search(/perceeloppervlak|energielabel|bvo|vvo|kadastrale|oppervlak/i)
     if (stopIdx !== -1) value = value.slice(0, stopIdx).replace(/[,;:\s]+$/, '').trim()
     // Enforce max length
     if (value.length > MAX_EIGENDOMSSITUATIE_LENGTH) value = truncateField(value, MAX_EIGENDOMSSITUATIE_LENGTH)
     if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 5', parserRule: 'eigendomssituatie-stop-words' }
+  }
+  return undefined
+}
+
+export function extractTeTaxerenBelang(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['te taxeren belang'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 80)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 5' }
   }
   return undefined
 }
@@ -522,7 +580,7 @@ export function extractEnergielabel(text: string): ExtractionResult<string> | un
       const raw = after.trim().slice(0, 20).split('\n')[0].trim()
       const rawLower = raw.toLowerCase()
       const snippet = text.slice(Math.max(0, idx - 10), idx + needle.length + 40).replace(/\s+/g, ' ')
-      const INVALID = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'onbekend', 'niet']
+      const INVALID = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen label', 'niet van toepassing', 'onbekend', 'niet']
       if (INVALID.some((v) => rawLower === v || rawLower.startsWith(v))) {
         return { value: 'geen', confidence: 'medium', sourceLabel: needle, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-geen' }
       }
@@ -750,13 +808,95 @@ export function extractBodemverontreiniging(text: string): ExtractionResult<'ja'
   if (bodemContext.includes('verontreinigd') || bodemContext.includes('sanering nodig') || bodemContext.includes('vervuild')) {
     return { value: 'ja', confidence: 'high', sourceLabel: 'bodem', sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'bodem-ja' }
   }
-  if (bodemContext.includes('aanwezig') && !bodemContext.includes('niet aanwezig')) {
-    return { value: 'ja', confidence: 'medium', sourceLabel: 'bodem', sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'bodem-aanwezig' }
-  }
   if (bodemContext.includes('onbekend') || bodemContext.includes('niet onderzocht')) {
     return { value: 'onbekend', confidence: 'medium', sourceLabel: 'bodem', sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'bodem-onbekend' }
   }
   // Only section header found with no verdict → leave undefined (not auto-set to 'ja')
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
+// extractOmgevingstype — gebiedstype (bedrijventerrein, woonwijk, etc.)
+// ---------------------------------------------------------------------------
+
+export function extractOmgevingstype(text: string): ExtractionResult<string> | undefined {
+  const OMGEVINGSTYPES = ['bedrijventerrein', 'binnenstad', 'woonwijk', 'buitengebied', 'gemengd']
+  const lower = text.toLowerCase()
+  // Look for explicit label with omgevingstype
+  const exact = tryExactLabel(text, ['omgevingstype', 'gebiedstype', 'type omgeving', 'locatietype'])
+  if (exact) {
+    const rawLower = exact.raw.toLowerCase()
+    for (const val of OMGEVINGSTYPES) {
+      if (rawLower.includes(val)) {
+        return { value: val, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 2' }
+      }
+    }
+  }
+  // Medium: contextual keyword search
+  for (const val of OMGEVINGSTYPES) {
+    const idx = lower.indexOf(val)
+    if (idx !== -1 && !isInReferenceSection(text, idx)) {
+      const snippet = text.slice(Math.max(0, idx - 20), idx + val.length + 20).replace(/\s+/g, ' ')
+      return { value: val, confidence: 'medium', sourceLabel: '(omgevingstype)', sourceSnippet: snippet, sourceSection: 'Stap 2', parserRule: 'omgevingstype-contextual' }
+    }
+  }
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
+// extractConstructie — staalconstructie, betonnen skelet, etc.
+// ---------------------------------------------------------------------------
+
+export function extractConstructie(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['constructie', 'bouwconstructie', 'draagconstructie', 'skelet'])
+  if (exact) {
+    const value = compactWhitespace(exact.raw.split('\n')[0].trim()).slice(0, 120)
+    if (value && value.length > 2) {
+      return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 6', parserRule: 'constructie-label' }
+    }
+  }
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
+// extractAantalBouwlagen — number of floors
+// ---------------------------------------------------------------------------
+
+export function extractAantalBouwlagen(text: string): ExtractionResult<number> | undefined {
+  // High: explicit digit-based label
+  const re1 = /(?:aantal\s+bouwlagen|bouwlagen|verdiepingen(?:\s+incl\.?\s+begane\s+grond)?)[:\s]+([0-9]{1,2})/i
+  const m1 = text.match(re1)
+  if (m1) {
+    const val = parseInt(m1[1], 10)
+    const idx = text.indexOf(m1[0])
+    const snippet = text.slice(Math.max(0, idx), idx + m1[0].length + 10).replace(/\s+/g, ' ')
+    return { value: val, confidence: 'high', sourceLabel: 'bouwlagen:', sourceSnippet: snippet, sourceSection: 'Stap 3', parserRule: 'bouwlagen-digit' }
+  }
+  // Medium: Dutch word-number patterns
+  const re2 = /\b(?:in|van|met)\s+(een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)\s+(?:bouwlagen|verdiepingen|lagen)\b/i
+  const m2 = text.match(re2)
+  if (m2) {
+    const val = dutchNumberWordToDigit(m2[1])
+    if (val !== undefined) {
+      const idx = text.indexOf(m2[0])
+      const snippet = text.slice(Math.max(0, idx), idx + m2[0].length + 10).replace(/\s+/g, ' ')
+      return { value: val, confidence: 'medium', sourceLabel: 'bouwlagen-wordnumber', sourceSnippet: snippet, sourceSection: 'Stap 3', parserRule: 'bouwlagen-wordnumber' }
+    }
+  }
+  // Medium: "begane grond + verdieping" patterns → 2 bouwlagen
+  // Logic: "begane grond + eerste verdieping" = 2 total floors (ground + 1st)
+  //        "begane grond + tweede verdieping" = 3 total floors (ground + 2nd)
+  const beganePat = /begane\s+grond\s+(?:en|[+&])\s+(?:(?:eerste|één|1|tweede|twee|2)\s+)?verdieping(?:en)?/i
+  const m3 = text.match(beganePat)
+  if (m3) {
+    // Count extra floors: default "begane grond + verdieping" = 2
+    const matchText = m3[0].toLowerCase()
+    let val = 2
+    if (/tweede|twee|2/.test(matchText)) val = 3
+    const idx = text.indexOf(m3[0])
+    const snippet = text.slice(Math.max(0, idx), idx + m3[0].length + 10).replace(/\s+/g, ' ')
+    return { value: val, confidence: 'medium', sourceLabel: 'begane grond + verdieping', sourceSnippet: snippet, sourceSection: 'Stap 3', parserRule: 'bouwlagen-begane-grond' }
+  }
   return undefined
 }
 
@@ -772,6 +912,10 @@ export type ExtractionDebugRecord = Record<
     sourceLabel: string
     sourceSnippet: string
     sourceSection?: string
+    parserRule?: string
+    wasNormalized?: boolean
+    discardedCandidates?: Array<{ value: unknown; reason: string }>
+    sourcePage?: number
   }
 >
 
@@ -809,6 +953,10 @@ export function extractAllFieldsWithConfidence(text: string): ExtractionDebugRec
   add('zakelijkeRechten', extractZakelijkeRechten(text))
   add('asbest', extractAsbest(text))
   add('bodemverontreiniging', extractBodemverontreiniging(text))
+  add('teTaxerenBelang', extractTeTaxerenBelang(text))
+  add('omgevingstype', extractOmgevingstype(text))
+  add('constructie', extractConstructie(text))
+  add('aantalBouwlagen', extractAantalBouwlagen(text))
   add('energielabel', extractEnergielabel(text))
   add('marktwaarde', extractMarktwaarde(text))
   add('bar', extractBar(text))

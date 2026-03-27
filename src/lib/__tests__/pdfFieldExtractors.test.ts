@@ -23,7 +23,11 @@ import {
   extractMarktwaarde,
   extractPerceeloppervlak,
   extractAllFieldsWithConfidence,
+  extractInspectiedatum,
+  extractProvincie,
+  extractAantalBouwlagen,
 } from '../pdfFieldExtractors'
+import { postcodeToProvincie, cleanLabelRemnant } from '../pdfNormalizers'
 
 // ---------------------------------------------------------------------------
 // Confidence levels
@@ -926,3 +930,175 @@ describe('extractAllFieldsWithConfidence — dakbedekking and installaties wired
   })
 })
 
+
+// ---------------------------------------------------------------------------
+// Fix #1 — inspectiedatum without colon
+// ---------------------------------------------------------------------------
+describe('extractInspectiedatum — extended labels and no-colon fallback', () => {
+  it('extracts inspectiedatum when label has no colon', () => {
+    const text = 'inspectiedatum 7 november 2025\nOverige gegevens'
+    const result = extractInspectiedatum(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('2025-11-07')
+  })
+
+  it('extracts inspectiedatum from "inpandige opname:" label', () => {
+    const text = 'Inpandige opname: vrijdag 7 november 2025\nOverige gegevens'
+    const result = extractInspectiedatum(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('2025-11-07')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix #2 — ligging quality score over enum value
+// ---------------------------------------------------------------------------
+describe('extractLigging — quality score wins over enum', () => {
+  it('returns quality score "goed" over "bedrijventerrein" when both present', () => {
+    const text = 'Locatiebeoordeling: goed\nHet object is gelegen op een bedrijventerrein.'
+    const result = extractLigging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('goed')
+  })
+
+  it('does not return "bedrijventerrein" as ligging when quality score found via label', () => {
+    const text = 'Ligging: goed\nHet object bevindt zich op een bedrijventerrein.'
+    const result = extractLigging(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('goed')
+    expect(result!.value).not.toBe('bedrijventerrein')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix #4 — eigendomssituatie clean labels
+// ---------------------------------------------------------------------------
+describe('extractEigendomssituatie — clean double labels', () => {
+  it('strips embedded "te taxeren belang:" from eigendomssituatie', () => {
+    const text = 'Eigendom: Eigendom  Te taxeren belang: Eigendom'
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).not.toContain('Te taxeren belang')
+    expect(result!.value).not.toContain('te taxeren belang')
+  })
+
+  it('deduplicates repeated word in eigendomssituatie', () => {
+    const text = 'Eigendom: Eigendom Eigendom'
+    const result = extractEigendomssituatie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Eigendom')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix #7 — dakbedekking no label remnant
+// ---------------------------------------------------------------------------
+describe('cleanLabelRemnant — strip label fragment', () => {
+  it('removes leading lowercase-colon fragment', () => {
+    const raw = 'ie: plat dak voorzien van kunststof dakbedekking'
+    const cleaned = cleanLabelRemnant(raw)
+    expect(cleaned).not.toMatch(/^ie:/)
+    expect(cleaned.charAt(0)).toBe(cleaned.charAt(0).toUpperCase())
+  })
+
+  it('returns capitalized value after stripping label remnant', () => {
+    const raw = 'ing: staalconstructie met betonnen vloerplaten'
+    const cleaned = cleanLabelRemnant(raw)
+    expect(cleaned).toMatch(/^Staalconstructie/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix #9 — energielabel niet in referentie
+// ---------------------------------------------------------------------------
+describe('extractEnergielabel — reference section suppression', () => {
+  it('maps "Energielabel: -" to "geen"', () => {
+    const result = extractEnergielabel('Energielabel: -\nOverige info')
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('geen')
+  })
+
+  it('maps "Energielabel: Geen label" to "geen"', () => {
+    const result = extractEnergielabel('Energielabel: Geen label\nOverige info')
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('geen')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix #10 — bodemverontreiniging no false positive from presence alone
+// ---------------------------------------------------------------------------
+describe('extractBodemverontreiniging — no false positive from header alone', () => {
+  it('returns undefined or nee when only bodeminformatie header is present', () => {
+    const text = 'Bodeminformatie: Geen bijzonderheden bekend.'
+    const result = extractBodemverontreiniging(text)
+    // Either undefined or nee, never "ja"
+    if (result !== undefined) {
+      expect(result.value).not.toBe('ja')
+    }
+  })
+
+  it('does not set "ja" when "aanwezig" is used for the section not contamination', () => {
+    const text = 'Bodeminformatie aanwezig voor dit perceel. Er zijn geen aanwijzingen voor bodemverontreiniging.'
+    const result = extractBodemverontreiniging(text)
+    if (result !== undefined) {
+      expect(result.value).not.toBe('ja')
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix #11 — provincie via postcode mapping
+// ---------------------------------------------------------------------------
+describe('postcodeToProvincie', () => {
+  it('returns "Limburg" for postcode 5928LA', () => {
+    expect(postcodeToProvincie('5928LA')).toBe('Limburg')
+  })
+
+  it('returns "Limburg" for numeric prefix 5928', () => {
+    expect(postcodeToProvincie('5928')).toBe('Limburg')
+  })
+
+  it('returns "Noord-Brabant" for postcode 5000', () => {
+    expect(postcodeToProvincie('5000')).toBe('Noord-Brabant')
+  })
+
+  it('returns "Zuid-Holland" for postcode 2500', () => {
+    expect(postcodeToProvincie('2500')).toBe('Zuid-Holland')
+  })
+})
+
+describe('extractProvincie — postcode fallback', () => {
+  it('derives provincie from postcode when no explicit label', () => {
+    const text = 'Columbusweg 13, 5928LA Venlo'
+    const result = extractProvincie(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('Limburg')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix #12 — bouwlagen: "begane grond en eerste verdieping" → 2
+// ---------------------------------------------------------------------------
+describe('extractAantalBouwlagen', () => {
+  it('returns 2 for "begane grond en eerste verdieping"', () => {
+    const text = 'Het gebouw bestaat uit begane grond en eerste verdieping.'
+    const result = extractAantalBouwlagen(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(2)
+  })
+
+  it('returns 2 for "begane grond + verdieping"', () => {
+    const text = 'Gebouw: begane grond + verdieping'
+    const result = extractAantalBouwlagen(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(2)
+  })
+
+  it('returns 2 for digit-based "2 bouwlagen"', () => {
+    const text = 'Aantal bouwlagen: 2'
+    const result = extractAantalBouwlagen(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe(2)
+  })
+})

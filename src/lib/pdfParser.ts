@@ -12,8 +12,13 @@ import {
   dutchNumberWordToDigit,
   cleanGemeente,
   truncateField,
+  postcodeToProvincie,
+  stripHeaderFooterNoise,
+  cleanLabelRemnant,
+  summarizeTechnicalField,
+  summarizeAannames,
 } from './pdfNormalizers'
-import { extractAllFieldsWithConfidence } from './pdfFieldExtractors'
+import { extractAllFieldsWithConfidence, extractAantalBouwlagen } from './pdfFieldExtractors'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -128,6 +133,8 @@ function extractSectionAfterKeyword(
  * This is best-effort: missing sections simply return undefined.
  */
 export function extractWizardDataFromText(text: string): Partial<Dossier> {
+  // Strip header/footer noise before parsing
+  text = stripHeaderFooterNoise(text)
   const lowerText = text.toLowerCase()
 
   // --- Stap 1: Algemene Gegevens ---
@@ -163,48 +170,104 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       'datum opname:',
       'datum inspectie:',
       'opnamedatum:',
+      'inpandige opname:',
+      'opgenomen op:',
       'inspectiedatum',
+      'inpandige opname',
+      'opgenomen op',
     ],
     50,
     { singleLine: true }
   )
-  const stap1inspectiedatum = stap1inspectiedatumRaw
+  let stap1inspectiedatum = stap1inspectiedatumRaw
     ? normalizeDutchDate(stap1inspectiedatumRaw)
     : undefined
+  // Broader fallback: scan for date patterns near "opname"/"inspectie" keywords
+  if (!stap1inspectiedatum) {
+    const DUTCH_MONTH_PAT_LOCAL = 'januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december'
+    const inspFallbackRe = new RegExp(
+      `(?:opname|inspectie)[^\\n]{0,50}?(\\d{1,2}[\\s\\-](?:${DUTCH_MONTH_PAT_LOCAL})[\\s\\-]\\d{4}|\\d{1,2}-\\d{1,2}-\\d{4})`,
+      'i'
+    )
+    const inspFallbackMatch = text.match(inspFallbackRe)
+    if (inspFallbackMatch) {
+      stap1inspectiedatum = normalizeDutchDate(inspFallbackMatch[1]) ?? undefined
+    }
+  }
 
   // --- Stap 2: Adres & Locatie ---
   // Gemeente: strict label with colon only, use cleanGemeente to strip bestemmingsplan text
   const stap2gemeenteRaw = extractSectionAfterKeyword(text, ['gemeente:'], 80, { singleLine: true })
   const stap2gemeente = stap2gemeenteRaw ? cleanGemeente(stap2gemeenteRaw) || undefined : undefined
 
-  const stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 30, { singleLine: true })
+  let stap2provincie = extractSectionAfterKeyword(text, ['provincie:'], 30, { singleLine: true })
+  // Fallback: derive from postcode
+  if (!stap2provincie) {
+    const pcMatch = text.match(/\b(\d{4})\s?[A-Z]{2}\b/)
+    if (pcMatch) {
+      stap2provincie = postcodeToProvincie(pcMatch[1])
+    }
+  }
 
-  const LIGGING_VALUES: Ligging[] = ['bedrijventerrein', 'binnenstad', 'woonwijk', 'buitengebied', 'gemengd']
+  // Ligging: use extractLigging from pdfFieldExtractors which prioritizes quality scores
+  // over enum values. Quality scores ('goed', 'uitstekend', etc.) take priority.
+  const LIGGING_QUALITY = ['uitstekend', 'goed', 'redelijk', 'matig', 'slecht']
+  const LIGGING_ENUM_VALUES: Ligging[] = ['bedrijventerrein', 'binnenstad', 'woonwijk', 'buitengebied', 'gemengd']
   let stap2ligging: Ligging | undefined
-  // Prefer explicit ligging label context over bare keyword match
-  const liggingRaw = extractSectionAfterKeyword(
-    text,
-    ['ligging:', 'ligging object:', 'type ligging:'],
-    50,
-    { singleLine: true }
-  )
-  if (liggingRaw) {
-    const lower = liggingRaw.toLowerCase()
-    for (const val of LIGGING_VALUES) {
-      if (lower.includes(val)) {
-        stap2ligging = val
+
+  // Step 1: check for quality score near explicit ligging/locatie labels
+  for (const keyword of ['locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'ligging:', 'ligging object:', 'type ligging:']) {
+    const idx = lowerText.indexOf(keyword)
+    if (idx === -1) continue
+    const afterLabel = lowerText.slice(idx + keyword.length).trimStart()
+    const context200 = afterLabel.slice(0, 200)
+    for (const val of LIGGING_QUALITY) {
+      if (context200.includes(val)) {
+        stap2ligging = val as Ligging
         break
       }
     }
+    if (stap2ligging) break
   }
-  // Context-aware fallback: search within 200 chars of "ligging"/"locatie"/"omgeving" keywords
+  // Step 2: if no quality score found yet, check contextual search for quality scores
   if (!stap2ligging) {
     for (const keyword of ['ligging', 'locatie', 'omgeving']) {
       const idx = lowerText.indexOf(keyword)
       if (idx === -1) continue
       const context = lowerText.slice(Math.max(0, idx - 20), idx + 200)
-      // Prioritize specific values over generic ones (order matters)
-      for (const val of LIGGING_VALUES) {
+      for (const val of LIGGING_QUALITY) {
+        if (context.includes(val)) {
+          stap2ligging = val as Ligging
+          break
+        }
+      }
+      if (stap2ligging) break
+    }
+  }
+  // Step 3: fallback to enum values only if no quality score found
+  if (!stap2ligging) {
+    const liggingRaw = extractSectionAfterKeyword(
+      text,
+      ['ligging:', 'ligging object:', 'type ligging:'],
+      50,
+      { singleLine: true }
+    )
+    if (liggingRaw) {
+      const lower = liggingRaw.toLowerCase()
+      for (const val of LIGGING_ENUM_VALUES) {
+        if (lower.includes(val)) {
+          stap2ligging = val
+          break
+        }
+      }
+    }
+  }
+  if (!stap2ligging) {
+    for (const keyword of ['ligging', 'locatie', 'omgeving']) {
+      const idx = lowerText.indexOf(keyword)
+      if (idx === -1) continue
+      const context = lowerText.slice(Math.max(0, idx - 20), idx + 200)
+      for (const val of LIGGING_ENUM_VALUES) {
         if (context.includes(val)) {
           stap2ligging = val
           break
@@ -214,8 +277,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     }
   }
   if (!stap2ligging) {
-    // Final fallback: full-text scan (prioritize specific over generic)
-    for (const val of LIGGING_VALUES) {
+    for (const val of LIGGING_ENUM_VALUES) {
       if (lowerText.includes(val)) {
         stap2ligging = val
         break
@@ -254,20 +316,10 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap3perceeloppervlak = perceelMatch ? normalizeArea(perceelMatch[1]) : undefined
 
   // Bouwlagen: match digit-based first, then Dutch word-numbers
-  const bouwlagenDigitMatch = text.match(
-    /(?:aantal\s+bouwlagen|bouwlagen|verdiepingen(?:\s+incl\.?\s+begane\s+grond)?)[:\s]+([0-9]{1,2})/i
-  )
   let stap3aantalBouwlagen: number | undefined
-  if (bouwlagenDigitMatch) {
-    stap3aantalBouwlagen = parseInt(bouwlagenDigitMatch[1], 10)
-  } else {
-    // "kantoorgebouw in twee bouwlagen", "in drie bouwlagen"
-    const bouwlagenWordMatch = text.match(
-      /\b(?:in|van|met)\s+(een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)\s+(?:bouwlagen|verdiepingen|lagen)\b/i
-    )
-    if (bouwlagenWordMatch) {
-      stap3aantalBouwlagen = dutchNumberWordToDigit(bouwlagenWordMatch[1])
-    }
+  const bouwlagenExtracted = extractAantalBouwlagen(text)
+  if (bouwlagenExtracted) {
+    stap3aantalBouwlagen = bouwlagenExtracted.value
   }
 
   const bouwjaarMatch = text.match(/(?:bouwjaar|gebouwd\s+in|jaar\s+van\s+oplevering)[:\s]+([0-9]{4})/i)
@@ -322,13 +374,16 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   // verhuurd: only set true for current/active rental evidence; ignore past-tense rental
   // Past: "verhuurd geweest", "voormalige huurder", "tot <year> verhuurd geweest", "voorheen verhuurd", "was verhuurd", "niet meer verhuurd"
   const hasPastRental = /verhuurd\s+geweest|voormalige?\s+huurder|voorheen\s+verhuurd|tot\s+\d{1,2}\s+\w+\s+\d{4}\s+verhuurd|was\s+verhuurd|niet\s+meer\s+verhuurd/.test(lowerText)
-  // Active: huurder known, huurprijs present, contracttype present, or "thans verhuurd" / "lopende huurovereenkomst"
-  const hasActiveRental =
-    stap4huurder !== undefined ||
-    stap4huurprijsPerJaar !== undefined ||
-    (stap4contracttype !== undefined && stap4contracttype.length < 60) ||
-    /thans\s+verhuurd|lopende\s+huurovereenkomst/.test(lowerText)
-  const stap4verhuurd = hasActiveRental && !hasPastRental
+  // Eigenaar-gebruiker detection: if owner-occupied, default to not rented unless active rental evidence
+  const isEigenaarGebruiker = /eigenaar[-\s]gebruiker|eigen\s+gebruik|owner\s+occupied/.test(lowerText)
+  const hasActiveTenant = stap4huurder !== undefined
+  const hasActualRentAmount = stap4huurprijsPerJaar !== undefined
+  const hasRentalPhrase = /thans\s+verhuurd|lopende\s+huurovereenkomst/.test(lowerText)
+  const hasContractType = stap4contracttype !== undefined && stap4contracttype.length < 60
+  const hasActiveRental = hasActiveTenant || hasActualRentAmount || hasRentalPhrase || hasContractType
+  const stap4verhuurd = isEigenaarGebruiker
+    ? (hasActiveTenant && hasActualRentAmount) || hasRentalPhrase
+    : hasActiveRental && !hasPastRental
 
   // --- Stap 6: Technische Staat ---
   const ONDERHOUD_VALUES: Onderhoudsstaat[] = ['uitstekend', 'goed', 'redelijk', 'matig', 'slecht']
@@ -411,14 +466,23 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     ? normalizeEuro(onderhoudskostenMatch[1])
     : undefined
 
-  const stap6fundering = extractSectionAfterKeyword(text, [
+  const stap6funderingRaw = extractSectionAfterKeyword(text, [
     'fundering:',
     'funderingstype:',
     'funderingssituatie:',
     'fundering',
-  ], 120)
+  ], 150, { stopAtInlineLabel: true })
+  // Truncate fundering at first occurrence of a technical sub-label
+  const stap6fundering = stap6funderingRaw
+    ? (() => {
+        let v = stap6funderingRaw
+        const techStop = v.search(/\b(?:constructie|dak|gevels|kozijnen|installaties|interieur|exterieur)\s*:/i)
+        if (techStop !== -1) v = v.slice(0, techStop)
+        return summarizeTechnicalField(v, 200) || undefined
+      })()
+    : undefined
 
-  const stap6dakbedekking = extractSectionAfterKeyword(text, [
+  const stap6dakbedekkingRaw = extractSectionAfterKeyword(text, [
     'dakbedekking:',
     'daktype:',
     'dak:',
@@ -428,9 +492,19 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'bitumen',
     'dakpannen',
     'sedumdak',
-  ], 120)
+  ], 150, { stopAtInlineLabel: true })
+  // Strip label remnant from start (e.g. "ie: plat dak..." when "dakconstruct" was matched)
+  const stap6dakbedekking = stap6dakbedekkingRaw ? cleanLabelRemnant(stap6dakbedekkingRaw) || undefined : undefined
 
-  const stap6installaties = extractSectionAfterKeyword(text, [
+  // Constructie: extract separately, stop at next technical label
+  const stap6constructieRaw = extractSectionAfterKeyword(text, [
+    'constructie:',
+    'bouwconstructie:',
+    'draagconstructie:',
+  ], 120, { singleLine: true })
+  const stap6constructie = stap6constructieRaw ? summarizeTechnicalField(stap6constructieRaw, 150) || undefined : undefined
+
+  const stap6installatiesRaw = extractSectionAfterKeyword(text, [
     'installaties:',
     'installatie:',
     'klimaatinstallatie:',
@@ -442,7 +516,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'radiatoren',
     'warmtepomp',
     'zonnepanelen',
-  ], 120)
+  ], 300)
+  const stap6installaties = stap6installatiesRaw ? summarizeTechnicalField(stap6installatiesRaw, 300) || undefined : undefined
 
   const stap6achterstallig = extractSectionAfterKeyword(text, [
     'achterstallig onderhoud:',
@@ -457,16 +532,28 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'eigendomsvorm:',
     'eigendom:',
     'type eigendom:',
-    'te taxeren belang:',
   ], 100, { singleLine: true })
-  // Strip junk: truncate at known unrelated-field stop-words
+  // Strip junk: truncate at known unrelated-field stop-words, remove embedded labels
   let stap5eigendomssituatie = stap5eigendomssituatieRaw
   if (stap5eigendomssituatie) {
+    // Remove embedded "Te taxeren belang: ..." from eigendomssituatie text
+    stap5eigendomssituatie = stap5eigendomssituatie.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, '').trim()
+    // Remove duplicate words
+    const words = stap5eigendomssituatie.split(/\s+/)
+    const seen = new Set<string>()
+    stap5eigendomssituatie = words.filter((w) => {
+      const lower = w.toLowerCase()
+      if (seen.has(lower)) return false
+      seen.add(lower)
+      return true
+    }).join(' ')
     const EIGEN_STOP = /perceeloppervlak|energielabel|kadaster|oppervlak|bvo|vvo/i
     const stopMatch = stap5eigendomssituatie.search(EIGEN_STOP)
     if (stopMatch !== -1) stap5eigendomssituatie = stap5eigendomssituatie.slice(0, stopMatch).trim()
     if (stap5eigendomssituatie.length === 0) stap5eigendomssituatie = undefined
   }
+  // Te taxeren belang as separate field
+  const stap5teTaxerenBelang = extractSectionAfterKeyword(text, ['te taxeren belang:'], 80, { singleLine: true })
 
   // Erfpacht: only set when explicitly present; clear if text says "geen erfpacht" / "n.v.t." / "vol eigendom"
   const stap5erfpachtRaw = extractSectionAfterKeyword(text, [
@@ -516,6 +603,11 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap5bestemmingsplan) {
     const stopIdx = stap5bestemmingsplan.search(/raadsbesluit|vastgesteld\s+op/i)
     if (stopIdx !== -1) stap5bestemmingsplan = stap5bestemmingsplan.slice(0, stopIdx).trim()
+    // Remove header/footer noise fragments within extracted text
+    stap5bestemmingsplan = stap5bestemmingsplan
+      .replace(/\s*(?:Pagina\s+\d+(\s+van\s+\d+)?|Printdatum[:\s][^\n]*|Uitvoerend\s+taxateur[:\s][^\n]*|\d+\s+van\s+\d+)\s*/gi, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
     stap5bestemmingsplan = cleanupLongFieldText(stap5bestemmingsplan, 300) || undefined
   }
 
@@ -663,22 +755,30 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap8kapitalisatiefactor = kapFacMatch ? normalizeDecimalNumber(kapFacMatch[1]) : undefined
 
   // --- Stap 9: Aannames ---
-  const stap9aannames = extractSectionAfterKeyword(text, [
-    'aannames:',
-    'aanname:',
-    'uitgangspunten en aannames:',
-    'algemene uitgangspunten:',
-    'uitgangspunten:',
-    'taxatie onnauwkeurigheid:',
-  ], 500)
+  const stap9aannames = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'aannames:',
+      'aanname:',
+      'uitgangspunten en aannames:',
+      'algemene uitgangspunten:',
+      'uitgangspunten:',
+      'taxatie onnauwkeurigheid:',
+    ], 600)
+    return raw ? summarizeAannames(raw, 450) || undefined : undefined
+  })()
 
-  const stap9voorbehouden = extractSectionAfterKeyword(text, [
-    'voorbehouden:',
-    'voorbehoud:',
-    'voorbehoud en bijzondere omstandigheden:',
-    'onzekerheidsmarge:',
-    'disclaimer:',
-  ], 500)
+  const stap9voorbehouden = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'voorbehouden:',
+      'voorbehoud:',
+      'voorbehoud en bijzondere omstandigheden:',
+      'beperkingen:',
+      'bijzondere aannames:',
+      'onzekerheidsmarge:',
+      'disclaimer:',
+    ], 600)
+    return raw ? summarizeAannames(raw, 450) || undefined : undefined
+  })()
 
   const stap9bijzondereOmstandigheden = extractSectionAfterKeyword(text, [
     'bijzondere omstandigheden:',

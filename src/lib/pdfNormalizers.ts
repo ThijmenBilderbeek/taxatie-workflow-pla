@@ -298,3 +298,102 @@ export function parseAddress(text: string): {
 
   return { straat, huisnummer, postcode, plaats }
 }
+
+/**
+ * Maps a Dutch postcode (4-digit prefix) to its province name.
+ * Returns undefined when the mapping is uncertain.
+ */
+export function postcodeToProvincie(postcode: string): string | undefined {
+  const num = parseInt(postcode.slice(0, 4), 10)
+  if (isNaN(num)) return undefined
+  if (num >= 1000 && num <= 1299) return 'Noord-Holland'
+  if (num >= 1300 && num <= 1399) return 'Flevoland'
+  if (num >= 1400 && num <= 1999) return 'Noord-Holland'
+  if (num >= 2000 && num <= 2999) return 'Zuid-Holland'
+  if (num >= 3000 && num <= 3399) return 'Zuid-Holland'
+  if (num >= 3400 && num <= 3999) return 'Utrecht'
+  if (num >= 4000 && num <= 4099) return 'Gelderland'
+  if (num >= 4100 && num <= 4299) return 'Gelderland'
+  if (num >= 4300 && num <= 4599) return 'Zeeland'
+  if (num >= 4600 && num <= 4999) return 'Noord-Brabant'
+  if (num >= 5000 && num <= 5299) return 'Noord-Brabant'
+  if (num >= 5300 && num <= 5399) return 'Gelderland'
+  if (num >= 5400 && num <= 5899) return 'Noord-Brabant'
+  if (num >= 5900 && num <= 6499) return 'Limburg'
+  if (num >= 6500 && num <= 6999) return 'Gelderland'
+  if (num >= 7000 && num <= 7099) return 'Gelderland'
+  if (num >= 7100 && num <= 7999) return 'Overijssel'
+  if (num >= 8000 && num <= 8099) return 'Overijssel'
+  if (num >= 8100 && num <= 8199) return 'Overijssel'
+  if (num >= 8200 && num <= 8299) return 'Flevoland'
+  if (num >= 8300 && num <= 8499) return 'Overijssel'
+  if (num >= 8500 && num <= 9299) return 'Friesland'
+  if (num >= 9300 && num <= 9499) return 'Drenthe'
+  if (num >= 9500 && num <= 9999) return 'Groningen'
+  return undefined
+}
+
+/**
+ * Strips header/footer noise from extracted PDF text.
+ * Removes lines that are purely page-header or page-footer artefacts such as
+ * "Pagina 3 van 12", "Printdatum: ...", standalone page numbers, etc.
+ * Applied before semantic parsing to keep field extractions clean.
+ */
+export function stripHeaderFooterNoise(text: string): string {
+  const NOISE_LINE_PATTERNS = [
+    /^pagina\s+\d+(\s+van\s+\d+)?\.?\s*$/i,
+    /^\d+\s+van\s+\d+\s*$/i,
+    /^printdatum[:\s]/i,
+    /^uitvoerend taxateur[:\s]/i,
+    /^waarde\s+op\s+\d{1,2}[-/]\d{1,2}[-/]\d{4}\s*$/i,
+  ]
+  const lines = text.split('\n')
+  return lines
+    .filter((line) => {
+      const trimmed = line.trim()
+      if (trimmed.length === 0) return true
+      return !NOISE_LINE_PATTERNS.some((re) => re.test(trimmed))
+    })
+    .join('\n')
+}
+
+/**
+ * Removes a truncated label fragment from the start of an extracted value.
+ * Example: "ie: plat dak..." → "Plat dak..." (the "ie:" is the end of "Dakbedekking:")
+ * Only removes fragments of at most 6 lowercase letters followed by a colon.
+ * 6 characters covers the longest common Dutch label suffix fragments (e.g. "ing:", "heid:").
+ */
+export function cleanLabelRemnant(text: string): string {
+  let result = text.replace(/^[a-zà-öø-ÿ]{1,6}:\s*/i, '').trim()
+  if (result.length > 0) {
+    result = result.charAt(0).toUpperCase() + result.slice(1)
+  }
+  return result
+}
+
+/**
+ * Compacts a raw technical field value: removes duplicate words, collapses
+ * whitespace, and truncates at a sentence boundary up to maxLength characters.
+ */
+export function summarizeTechnicalField(text: string, maxLength = 300): string {
+  let result = compactWhitespace(text)
+  // Remove trailing incomplete word or fragment (no sentence end)
+  if (result.length > maxLength) {
+    result = cleanupLongFieldText(result, maxLength)
+  }
+  return result.trim()
+}
+
+/**
+ * Compacts a raw aannames/voorbehouden text: strips bullet dashes, collapses
+ * whitespace, removes duplicate sentences, and truncates to maxLength characters.
+ */
+export function summarizeAannames(text: string, maxLength = 450): string {
+  // Remove leading bullet/dash characters from each clause
+  let result = text.replace(/^\s*[-–•]\s*/gm, '').replace(/\n\s*[-–•]\s*/g, ' ')
+  result = compactWhitespace(result)
+  if (result.length > maxLength) {
+    result = cleanupLongFieldText(result, maxLength)
+  }
+  return result.trim()
+}

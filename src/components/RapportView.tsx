@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant } from '@/types'
 import { formatForFlux, createFluxReport } from '@/lib/fluxFormatter'
 import { generateAlleSecties } from '@/lib/templates'
-import { extractDocumentKnowledge } from '@/lib/documentKnowledgeExtractor'
+import { extractDocumentKnowledge, deriveMarketSegment } from '@/lib/documentKnowledgeExtractor'
 import { useDocumentKnowledge } from '@/hooks/useDocumentKnowledge'
 
 function getRapportVariant(dossier: Dossier): RapportVariant {
@@ -290,19 +290,19 @@ export function RapportView({
       const historischRapport: HistorischRapport = {
         id: `hr-${crypto.randomUUID()}`,
         adres: {
-          straat: activeDossier.stap2!.straatnaam,
-          huisnummer: activeDossier.stap2!.huisnummer,
-          postcode: activeDossier.stap2!.postcode,
-          plaats: activeDossier.stap2!.plaats,
+          straat: activeDossier.stap2?.straatnaam ?? '',
+          huisnummer: activeDossier.stap2?.huisnummer ?? '',
+          postcode: activeDossier.stap2?.postcode ?? '',
+          plaats: activeDossier.stap2?.plaats ?? '',
         },
-        coordinaten: activeDossier.stap2!.coordinaten,
-        typeObject: activeDossier.stap1!.typeObject,
-        gebruiksdoel: activeDossier.stap1!.gebruiksdoel,
-        bvo: activeDossier.stap3!.bvo,
-        marktwaarde: activeDossier.stap8!.marktwaarde,
-        bar: activeDossier.stap8!.bar,
-        nar: activeDossier.stap8!.nar,
-        waardepeildatum: activeDossier.stap1!.waardepeildatum,
+        coordinaten: activeDossier.stap2?.coordinaten ?? { lat: 0, lng: 0 },
+        typeObject: activeDossier.stap1?.typeObject ?? 'overig',
+        gebruiksdoel: activeDossier.stap1?.gebruiksdoel ?? 'overig',
+        bvo: activeDossier.stap3?.bvo ?? 0,
+        marktwaarde: activeDossier.stap8?.marktwaarde ?? 0,
+        bar: activeDossier.stap8?.bar,
+        nar: activeDossier.stap8?.nar,
+        waardepeildatum: activeDossier.stap1?.waardepeildatum ?? '',
         rapportTeksten,
         wizardData: activeDossier,
       }
@@ -314,29 +314,23 @@ export function RapportView({
       const fullText = Object.values(rapportTeksten).filter(Boolean).join('\n\n')
       if (fullText) {
         try {
-          const knowledge = extractDocumentKnowledge(fullText, historischRapport.id, {
-            objectType: activeDossier.stap1!.typeObject,
-          })
-          const objectAddress = [activeDossier.stap2!.straatnaam, activeDossier.stap2!.huisnummer]
+          const objectAddress = [activeDossier.stap2?.straatnaam, activeDossier.stap2?.huisnummer]
             .filter(Boolean)
             .join(' ')
             .trim() || undefined
-          const city = activeDossier.stap2!.plaats || undefined
-          const region = activeDossier.stap2!.provincie || undefined
-          const chunks = knowledge.chunks.map((c) => ({
-            ...c,
-            objectAddress: objectAddress ?? c.objectAddress,
-            objectType: activeDossier.stap1!.typeObject ?? c.objectType,
-            city: city ?? c.city,
-            region: region ?? c.region,
-          }))
-          const profile = {
-            ...knowledge.profile,
-            objectType: activeDossier.stap1!.typeObject ?? knowledge.profile.objectType,
-          }
-          Promise.all([
-            saveDocumentChunks(chunks),
-            saveDocumentProfile(profile),
+          const city = activeDossier.stap2?.plaats || undefined
+          const region = activeDossier.stap2?.provincie || undefined
+          const objectType = activeDossier.stap1?.typeObject
+          const knowledge = extractDocumentKnowledge(fullText, historischRapport.id, {
+            objectType,
+            objectAddress,
+            city,
+            region,
+            marketSegment: deriveMarketSegment(objectType),
+          })
+          void Promise.all([
+            saveDocumentChunks(knowledge.chunks),
+            saveDocumentProfile(knowledge.profile),
           ]).catch((err) => {
             console.warn('[knowledge save] failed silently:', err)
           })

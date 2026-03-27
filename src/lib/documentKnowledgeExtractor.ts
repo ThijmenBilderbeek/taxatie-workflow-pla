@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { DocumentChunk, DocumentWritingProfile, AIEnhancementOptions } from '../types/kennisbank'
+import type { DocumentChunk, DocumentWritingProfile, AIEnhancementOptions, MarketSegment } from '../types/kennisbank'
 import type { ObjectType } from '../types'
 import { detectChapters } from './chapterDetector'
 import { chunkSections } from './narrativeChunker'
@@ -10,6 +10,27 @@ import { extractTemplates } from './templateExtractor'
 export interface DocumentKnowledge {
   chunks: DocumentChunk[]
   profile: DocumentWritingProfile
+}
+
+/**
+ * Derives a MarketSegment from an ObjectType when no explicit marketSegment is provided.
+ */
+export function deriveMarketSegment(objectType?: ObjectType): MarketSegment | undefined {
+  switch (objectType) {
+    case 'woning':
+    case 'appartement':
+      return 'residentieel'
+    case 'kantoor':
+    case 'winkel':
+      return 'commercieel'
+    case 'bedrijfscomplex':
+    case 'bedrijfshal':
+      return 'industrieel'
+    case 'overig':
+      return 'overig'
+    default:
+      return undefined
+  }
 }
 
 /**
@@ -30,6 +51,10 @@ export function extractDocumentKnowledge(
   options?: {
     objectType?: ObjectType
     documentType?: string
+    objectAddress?: string
+    city?: string
+    region?: string
+    marketSegment?: DocumentChunk['marketSegment']
   }
 ): DocumentKnowledge {
   const now = new Date().toISOString()
@@ -53,6 +78,11 @@ export function extractDocumentKnowledge(
       documentType: options?.documentType,
     })
 
+    // Override inferred marketSegment if provided explicitly
+    if (options?.marketSegment) {
+      profile.marketSegment = options.marketSegment
+    }
+
     // Step 6: Map to DocumentChunk interface
     const chunks: DocumentChunk[] = templatedChunks.map((chunk) => ({
       id: uuidv4(),
@@ -70,6 +100,11 @@ export function extractDocumentKnowledge(
       templateCandidate: chunk.templateCandidate,
       templateText: chunk.templateText,
       variablesDetected: chunk.variablesDetected,
+      objectAddress: options?.objectAddress,
+      objectType: options?.objectType,
+      marketSegment: options?.marketSegment,
+      city: options?.city,
+      region: options?.region,
       metadata: {},
       createdAt: now,
       updatedAt: now,
@@ -85,6 +120,7 @@ export function extractDocumentKnowledge(
         documentId: rapportId,
         documentType: options?.documentType ?? 'taxatierapport',
         objectType: options?.objectType,
+        marketSegment: options?.marketSegment,
         toneOfVoice: 'neutraal',
         detailLevel: 'standaard',
         standardizationLevel: 'laag',
@@ -102,6 +138,10 @@ export function extractDocumentKnowledge(
 export interface ExtractOptions {
   objectType?: ObjectType
   documentType?: string
+  objectAddress?: string
+  city?: string
+  region?: string
+  marketSegment?: DocumentChunk['marketSegment']
   ai?: AIEnhancementOptions
 }
 
@@ -118,7 +158,14 @@ export async function extractDocumentKnowledgeWithAI(
   options?: ExtractOptions
 ): Promise<DocumentKnowledge> {
   // Run the synchronous rule-based pipeline first
-  const result = extractDocumentKnowledge(text, rapportId, options)
+  const result = extractDocumentKnowledge(text, rapportId, {
+    objectType: options?.objectType,
+    documentType: options?.documentType,
+    objectAddress: options?.objectAddress,
+    city: options?.city,
+    region: options?.region,
+    marketSegment: options?.marketSegment,
+  })
 
   if (!options?.ai?.enabled || result.chunks.length === 0) {
     return result

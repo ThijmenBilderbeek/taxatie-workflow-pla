@@ -258,9 +258,28 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     // Save knowledge data non-blocking (after rapport is saved)
     if (pendingChunks.length > 0 || pendingProfile) {
       const rapportId = rapport.id
-      // Re-key chunks and profile to the final rapport ID
-      const chunks = pendingChunks.map((c) => ({ ...c, documentId: rapportId }))
-      const profile = pendingProfile ? { ...pendingProfile, documentId: rapportId } : null
+      const objectAddress = [rapport.adres.straat, rapport.adres.huisnummer]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || undefined
+      const city = rapport.adres.plaats || undefined
+      const region = preview?.wizardData?.stap2?.provincie || undefined
+      // Re-key chunks and profile to the final rapport ID, enriched with rapport metadata
+      const chunks = pendingChunks.map((c) => ({
+        ...c,
+        documentId: rapportId,
+        objectAddress: objectAddress ?? c.objectAddress,
+        objectType: rapport.typeObject ?? c.objectType,
+        city: city ?? c.city,
+        region: region ?? c.region,
+      }))
+      const profile = pendingProfile
+        ? {
+            ...pendingProfile,
+            documentId: rapportId,
+            objectType: rapport.typeObject ?? pendingProfile.objectType,
+          }
+        : null
       Promise.all([
         saveDocumentChunks(chunks),
         profile ? saveDocumentProfile(profile) : Promise.resolve(),

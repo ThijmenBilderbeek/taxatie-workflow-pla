@@ -133,10 +133,15 @@ export function useDocumentKnowledge() {
     return rowToProfile(data)
   }, [])
 
+  const getChunksByRapportId = useCallback(async (rapportId: string): Promise<DocumentChunk[]> => {
+    return getDocumentChunks(rapportId)
+  }, [getDocumentChunks])
+
   return {
     saveDocumentChunks,
     saveDocumentProfile,
     getDocumentChunks,
     getDocumentProfile,
+    getChunksByRapportId,
   }
 }

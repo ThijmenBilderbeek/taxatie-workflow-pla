@@ -9,6 +9,8 @@ import { toast } from 'sonner'
 import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant } from '@/types'
 import { formatForFlux, createFluxReport } from '@/lib/fluxFormatter'
 import { generateAlleSecties } from '@/lib/templates'
+import { extractDocumentKnowledge } from '@/lib/documentKnowledgeExtractor'
+import { useDocumentKnowledge } from '@/hooks/useDocumentKnowledge'
 
 function getRapportVariant(dossier: Dossier): RapportVariant {
   const isVerhuurd = dossier.stap4?.verhuurd || false
@@ -88,6 +90,7 @@ export function RapportView({
 }) {
   const activeDossier = dossiers.find(d => d.id === activeDossierId)
 
+  const { saveDocumentChunks, saveDocumentProfile } = useDocumentKnowledge()
   const [editingStates, setEditingStates] = useState<Record<string, string>>({})
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAfronden, setIsAfronden] = useState(false)
@@ -306,6 +309,42 @@ export function RapportView({
 
       onAddHistorischRapport(historischRapport)
       onUpdateDossier({ ...activeDossier, status: 'afgerond', updatedAt: new Date().toISOString() })
+
+      // Extract and persist document knowledge non-blocking
+      const fullText = Object.values(rapportTeksten).filter(Boolean).join('\n\n')
+      if (fullText) {
+        try {
+          const knowledge = extractDocumentKnowledge(fullText, historischRapport.id, {
+            objectType: activeDossier.stap1!.typeObject,
+          })
+          const objectAddress = [activeDossier.stap2!.straatnaam, activeDossier.stap2!.huisnummer]
+            .filter(Boolean)
+            .join(' ')
+            .trim() || undefined
+          const city = activeDossier.stap2!.plaats || undefined
+          const region = activeDossier.stap2!.provincie || undefined
+          const chunks = knowledge.chunks.map((c) => ({
+            ...c,
+            objectAddress: objectAddress ?? c.objectAddress,
+            objectType: activeDossier.stap1!.typeObject ?? c.objectType,
+            city: city ?? c.city,
+            region: region ?? c.region,
+          }))
+          const profile = {
+            ...knowledge.profile,
+            objectType: activeDossier.stap1!.typeObject ?? knowledge.profile.objectType,
+          }
+          Promise.all([
+            saveDocumentChunks(chunks),
+            saveDocumentProfile(profile),
+          ]).catch((err) => {
+            console.warn('[knowledge save] failed silently:', err)
+          })
+        } catch (err) {
+          console.warn('[knowledge extraction] failed silently:', err)
+        }
+      }
+
       toast.success('Dossier afgerond en opgeslagen in kennisbank')
       onAfgerond?.()
     } finally {

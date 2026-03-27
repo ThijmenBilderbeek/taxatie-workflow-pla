@@ -1,5 +1,9 @@
 import { useState, useMemo, useRef } from 'react'
+import { v4 as uuidv4 } from 'uuid'
 import type { HistorischRapport, ObjectType, Gebruiksdoel, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Waardering, Ligging, Onderhoudsstaat, Energielabel, WaarderingsMethode, Huurgegevens, TechnischeStaat, Vergunningen, Aannames, JuridischeInfo } from '../types'
+import type { DocumentChunk, DocumentWritingProfile } from '../types/kennisbank'
+import { extractDocumentKnowledge } from '../lib/documentKnowledgeExtractor'
+import { useDocumentKnowledge } from '../hooks/useDocumentKnowledge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -35,6 +39,11 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   const [extractionDebug, setExtractionDebug] = useState<ExtractionDebugRecord>({})
   const [fieldSuggestions, setFieldSuggestions] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Knowledge extraction state
+  const [pendingChunks, setPendingChunks] = useState<DocumentChunk[]>([])
+  const [pendingProfile, setPendingProfile] = useState<DocumentWritingProfile | null>(null)
+  const { saveDocumentChunks, saveDocumentProfile } = useDocumentKnowledge()
 
   // Selectie-modus state
   const [selectieModus, setSelectieModus] = useState(false)
@@ -140,6 +149,23 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       setFieldSuggestions(suggestions)
       setPreview(mutable)
 
+      // Run knowledge extraction in the background (non-blocking)
+      const fullText = parsed.rapportTeksten?.volledig ?? ''
+      if (fullText) {
+        try {
+          const tempId = uuidv4()
+          const knowledge = extractDocumentKnowledge(fullText, tempId, {
+            objectType: mutable.typeObject,
+          })
+          setPendingChunks(knowledge.chunks)
+          setPendingProfile(knowledge.profile)
+        } catch (knowledgeErr) {
+          console.warn('[knowledge extraction] failed silently:', knowledgeErr)
+          setPendingChunks([])
+          setPendingProfile(null)
+        }
+      }
+
       const hasAddress = !!(mutable.adres?.straat || mutable.adres?.postcode || mutable.adres?.plaats)
       const hasMarktwaarde = mutable.marktwaarde != null && mutable.marktwaarde > 0
       const hasBvo = mutable.wizardData?.stap3?.bvo != null && mutable.wizardData.stap3.bvo > 0
@@ -228,6 +254,21 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       },
     }
     onAddRapport(rapport)
+
+    // Save knowledge data non-blocking (after rapport is saved)
+    if (pendingChunks.length > 0 || pendingProfile) {
+      const rapportId = rapport.id
+      // Re-key chunks and profile to the final rapport ID
+      const chunks = pendingChunks.map((c) => ({ ...c, documentId: rapportId }))
+      const profile = pendingProfile ? { ...pendingProfile, documentId: rapportId } : null
+      Promise.all([
+        saveDocumentChunks(chunks),
+        profile ? saveDocumentProfile(profile) : Promise.resolve(),
+      ]).catch((err) => {
+        console.warn('[knowledge save] failed silently:', err)
+      })
+    }
+
     toast.success('Rapport toegevoegd aan kennisbank')
     handleCloseDialog()
   }
@@ -238,6 +279,8 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     setExtractionDebug({})
     setFieldSuggestions({})
     setIsLoading(false)
+    setPendingChunks([])
+    setPendingProfile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -431,6 +474,24 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                 <p className="text-sm text-muted-foreground">
                   Controleer en pas de geëxtraheerde gegevens aan voor het opslaan.
                 </p>
+
+                {/* Knowledge extraction summary */}
+                {pendingChunks.length > 0 && (
+                  <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm space-y-1">
+                    <p className="font-medium text-foreground">AI-kennis gedetecteerd</p>
+                    <p className="text-muted-foreground">
+                      {pendingChunks.length} chunks gedetecteerd
+                      {' · '}
+                      {pendingChunks.filter((c) => c.templateCandidate).length} herbruikbare templates
+                      {pendingProfile && (
+                        <span>
+                          {' · '}schrijfstijl: <span className="font-medium">{pendingProfile.toneOfVoice}</span>
+                          {' / '}<span className="font-medium">{pendingProfile.detailLevel}</span>
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
 
                 {/* Stap 1: Algemene gegevens */}
                 <div className="space-y-3">

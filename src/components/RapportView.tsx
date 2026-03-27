@@ -4,13 +4,14 @@ import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { Separator } from './ui/separator'
 import { Badge } from './ui/badge'
-import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download, CheckCircle } from '@phosphor-icons/react'
+import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download, CheckCircle, Books } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant } from '@/types'
 import { formatForFlux, createFluxReport } from '@/lib/fluxFormatter'
 import { generateAlleSecties } from '@/lib/templates'
 import { extractDocumentKnowledge, deriveMarketSegment } from '@/lib/documentKnowledgeExtractor'
 import { useDocumentKnowledge } from '@/hooks/useDocumentKnowledge'
+import { KennisbankSuggestiesPanel } from './KennisbankSuggestiesPanel'
 
 function getRapportVariant(dossier: Dossier): RapportVariant {
   const isVerhuurd = dossier.stap4?.verhuurd || false
@@ -94,6 +95,9 @@ export function RapportView({
   const [editingStates, setEditingStates] = useState<Record<string, string>>({})
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAfronden, setIsAfronden] = useState(false)
+  const [suggestiePanelOpen, setSuggestiePanelOpen] = useState(false)
+  const [suggestiePanelChapter, setSuggestiePanelChapter] = useState<string | undefined>()
+  const [suggestiePanelSectieKey, setSuggestiePanelSectieKey] = useState<string | undefined>()
 
   useEffect(() => {
     if (!activeDossier) return
@@ -356,6 +360,28 @@ export function RapportView({
     }
   }
 
+  const getChapterFromSectieKey = (key: string): string => {
+    const match = key.match(/^([a-zA-Z]+)\d*/i)
+    if (!match) return key
+    return match[1].toUpperCase()
+  }
+
+  const handleOpenSuggesties = (sectieKey: string) => {
+    const chapter = getChapterFromSectieKey(sectieKey)
+    setSuggestiePanelChapter(chapter)
+    setSuggestiePanelSectieKey(sectieKey)
+    setSuggestiePanelOpen(true)
+  }
+
+  const handleGebruikSuggestie = (text: string) => {
+    if (!suggestiePanelSectieKey) return
+    setEditingStates((current) => ({
+      ...current,
+      [suggestiePanelSectieKey]: (current[suggestiePanelSectieKey] ? current[suggestiePanelSectieKey] + '\n\n' : '') + text,
+    }))
+    toast.success('Tekst toegevoegd aan sectie')
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -436,6 +462,14 @@ export function RapportView({
                     </div>
 
                     <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleOpenSuggesties(sectie.key)}
+                        title="Kennisbank suggesties"
+                      >
+                        <Books />
+                      </Button>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -545,6 +579,17 @@ export function RapportView({
           </CardContent>
         </Card>
       )}
+
+      <KennisbankSuggestiesPanel
+        open={suggestiePanelOpen}
+        onOpenChange={setSuggestiePanelOpen}
+        objectType={activeDossier.stap1?.typeObject}
+        marketSegment={deriveMarketSegment(activeDossier.stap1?.typeObject)}
+        chapter={suggestiePanelChapter}
+        city={activeDossier.stap2?.plaats}
+        dossier={activeDossier}
+        onGebruikTekst={handleGebruikSuggestie}
+      />
     </div>
   )
 }

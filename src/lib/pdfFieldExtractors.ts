@@ -20,6 +20,7 @@ import {
   truncateField,
   postcodeToProvincie,
   dutchNumberWordToDigit,
+  summarizeAannames,
 } from './pdfNormalizers'
 
 export interface ExtractionResult<T> {
@@ -260,7 +261,7 @@ export function extractLigging(text: string): ExtractionResult<string> | undefin
   const lower = text.toLowerCase()
 
   // High: explicit ligging label — check quality scores first (only in first line), then enum
-  for (const keyword of ['ligging:', 'omschrijving locatie, stand en ligging:', 'ligging object:', 'type ligging:', 'locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:']) {
+  for (const keyword of ['ligging:', 'omschrijving locatie, stand en ligging:', 'ligging object:', 'type ligging:', 'locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'locatiescore:']) {
     const idx = lower.indexOf(keyword)
     if (idx === -1) continue
     // Only search the first line after the label for quality/enum values (avoids false positives from body text)
@@ -434,6 +435,8 @@ export function extractEigendomssituatie(text: string): ExtractionResult<string>
     let value = exact.raw.split('\n')[0].trim()
     // Strip embedded "Te taxeren belang: ..." label text
     value = value.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, '').trim()
+    // Remove repeated value caused by PDF concatenation glitch (e.g. "EigendomEigendom" → "Eigendom")
+    value = value.replace(/^(.{3,}?)\1+$/i, '$1')
     // Remove duplicate words (case-insensitive) separated by whitespace
     const words = value.split(/\s+/)
     const seen = new Set<string>()
@@ -520,6 +523,10 @@ export function extractBar(text: string): ExtractionResult<number> | undefined {
 }
 
 export function extractNar(text: string): ExtractionResult<number> | undefined {
+  // NOTE: text.match() returns the FIRST match in the document. Because the summary section
+  // appears before the backtesting/detail tables, this naturally gives summary-section NAR
+  // priority. When both exist, the summary (earlier) value wins — which is the intended behaviour.
+
   // Pattern 1: "NAR ..." with colon and value (handles "NAR % von: 6,75 %")
   const re1 = /\bNAR\b[^:\n]{0,40}?:\s*([0-9]{1,2}[.,][0-9]{1,2})\s*%?/i
   const m1 = text.match(re1)
@@ -546,16 +553,37 @@ export function extractNar(text: string): ExtractionResult<number> | undefined {
 }
 
 export function extractKapitalisatiefactor(text: string): ExtractionResult<number> | undefined {
-  // Matches: "kapitalisatiefactor: 12,30", "kap. factor: 12,30", "kap.factor: 12,30",
-  //          "Kap. factor von 13,4" (German-style "von" in Dutch IPD reports)
-  const re = /(?:kapitalisatiefactor|kap\.?\s*factor)[:\s|]+(?:von\s+)?([0-9]{1,2}[.,][0-9]{1,2})/i
-  const match = text.match(re)
-  if (match) {
-    const val = normalizeDecimalNumber(match[1])
+  // Priority 1: explicit "Kapitalisatiefactor: X" label (most specific, always summary context)
+  const reLabel = /kapitalisatiefactor[:\s|]+([0-9]{1,2}[.,][0-9]{1,2})/i
+  const matchLabel = text.match(reLabel)
+  if (matchLabel) {
+    const val = normalizeDecimalNumber(matchLabel[1])
     if (val !== undefined) {
-      const idx = text.indexOf(match[0])
-      const snippet = text.slice(Math.max(0, idx), idx + match[0].length + 10).replace(/\s+/g, ' ')
-      const label = match[0].split(/[\s:|]/)[0].toLowerCase()
+      const idx = text.indexOf(matchLabel[0])
+      const snippet = text.slice(Math.max(0, idx), idx + matchLabel[0].length + 10).replace(/\s+/g, ' ')
+      return { value: val, confidence: 'high', sourceLabel: 'kapitalisatiefactor:', sourceSnippet: snippet, sourceSection: 'Stap 8', parserRule: 'kap-factor-summary' }
+    }
+  }
+  // Priority 2: "Kap. markt/herz. huur ... | value" summary line (pipe-separated value)
+  const rePipe = /kap\.?\s*markt[^\n|]{0,60}\|\s*([0-9]{1,2}[.,][0-9]{1,2})/i
+  const matchPipe = text.match(rePipe)
+  if (matchPipe) {
+    const val = normalizeDecimalNumber(matchPipe[1])
+    if (val !== undefined) {
+      const idx = text.indexOf(matchPipe[0])
+      const snippet = text.slice(Math.max(0, idx), idx + matchPipe[0].length + 10).replace(/\s+/g, ' ')
+      return { value: val, confidence: 'high', sourceLabel: 'kap. markt:', sourceSnippet: snippet, sourceSection: 'Stap 8', parserRule: 'kap-factor-pipe' }
+    }
+  }
+  // Priority 3: detail-table labels ("kap. factor von", "kap.factor von")
+  const reDetail = /kap\.?\s*factor[:\s|]+(?:von\s+)?([0-9]{1,2}[.,][0-9]{1,2})/i
+  const matchDetail = text.match(reDetail)
+  if (matchDetail) {
+    const val = normalizeDecimalNumber(matchDetail[1])
+    if (val !== undefined) {
+      const idx = text.indexOf(matchDetail[0])
+      const snippet = text.slice(Math.max(0, idx), idx + matchDetail[0].length + 10).replace(/\s+/g, ' ')
+      const label = matchDetail[0].split(/[\s:|]/)[0].toLowerCase()
       return { value: val, confidence: 'high', sourceLabel: label + ':', sourceSnippet: snippet, sourceSection: 'Stap 8', parserRule: 'kap-factor-label' }
     }
   }
@@ -564,31 +592,41 @@ export function extractKapitalisatiefactor(text: string): ExtractionResult<numbe
 
 export function extractEnergielabel(text: string): ExtractionResult<string> | undefined {
   const lower = text.toLowerCase()
-  const labels = ['energielabel', 'energieklasse']
-  for (const label of labels) {
-    const needle = label + ':'
-    let searchFrom = 0
-    while (true) {
-      const idx = lower.indexOf(needle, searchFrom)
-      if (idx === -1) break
-      // Skip matches in reference sections
-      if (isInReferenceSection(text, idx)) {
-        searchFrom = idx + 1
-        continue
-      }
-      const after = text.slice(idx + needle.length).replace(/^[\s]+/, '')
-      const raw = after.trim().slice(0, 20).split('\n')[0].trim()
-      const rawLower = raw.toLowerCase()
-      const snippet = text.slice(Math.max(0, idx - 10), idx + needle.length + 40).replace(/\s+/g, ' ')
-      const INVALID = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen label', 'niet van toepassing', 'onbekend', 'niet']
-      if (INVALID.some((v) => rawLower === v || rawLower.startsWith(v))) {
-        return { value: 'geen', confidence: 'medium', sourceLabel: needle, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-geen' }
-      }
-      const labelMatch = raw.match(/^([A-G][+]{0,4})/i)
-      if (labelMatch) {
-        return { value: labelMatch[1].toUpperCase(), confidence: 'high', sourceLabel: needle, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-exact' }
-      }
-      break
+
+  // Suppression: if text contains explicit "no registered label" phrases, force 'geen'
+  const SUPPRESSION_PHRASES = [
+    'geen energielabel geregistreerd',
+    'geen energielabel beschikbaar',
+    'geen energielabel aanwezig',
+    'er is geen energielabel',
+    'energielabel niet geregistreerd',
+    'check ep-online',
+  ]
+  for (const phrase of SUPPRESSION_PHRASES) {
+    if (lower.includes(phrase)) {
+      const idx = lower.indexOf(phrase)
+      const snippet = text.slice(Math.max(0, idx - 10), idx + phrase.length + 20).replace(/\s+/g, ' ')
+      return { value: 'geen', confidence: 'high', sourceLabel: '(suppression)', sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-suppression' }
+    }
+  }
+
+  // Use tryExactLabelOutsideRef to avoid reference section matches
+  const GEEN_VALUES = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen label', 'niet van toepassing', 'onbekend', 'niet', '- / geen', 'nee']
+  const exact = tryExactLabelOutsideRef(text, ['energielabel', 'energieklasse'])
+  if (exact) {
+    const rawLower = exact.raw.trim().toLowerCase()
+    const snippet = exact.snippet
+    if (GEEN_VALUES.some((v) => rawLower === v || rawLower.startsWith(v))) {
+      return { value: 'geen', confidence: 'medium', sourceLabel: exact.label, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-geen' }
+    }
+    // Guard against supposition phrases (e.g. "vermoedelijk aan minimaal label A kan voldoen")
+    const SUPPOSITION_PHRASES = ['vermoedelijk', 'kan voldoen aan', 'wordt verwacht']
+    if (SUPPOSITION_PHRASES.some((p) => rawLower.includes(p))) {
+      return { value: 'geen', confidence: 'medium', sourceLabel: exact.label, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-geen-supposition' }
+    }
+    const labelMatch = exact.raw.trim().match(/^([A-G][+]{0,4})/i)
+    if (labelMatch) {
+      return { value: labelMatch[1].toUpperCase(), confidence: 'high', sourceLabel: exact.label, sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'energielabel-exact' }
     }
   }
   return undefined
@@ -796,6 +834,16 @@ export function extractBodemverontreiniging(text: string): ExtractionResult<'ja'
   const bodemContext = lower.slice(bodemIdx, bodemIdx + 400)
   const snippet = text.slice(bodemIdx, bodemIdx + 80).replace(/\s+/g, ' ')
 
+  // Phrases indicating that even though contamination exists, there is no impact on use
+  const NO_IMPACT_PHRASES = [
+    'geen saneringsnoodzaak',
+    'geen sanering noodzakelijk',
+    'geen gebruiksbeperking',
+    'geen beperkingen voor huidig gebruik',
+    'geen gegevens bekend die wijzen op beperkingen',
+    'niet verontreinigd verklaard',
+  ]
+
   // Check NEGATIVE patterns FIRST — these override positive matches
   if (
     /niet\s+geregistreerd\s+als\s+mogelijk\s+verontreinigd|geen\s+informatie\s+bekend\s+die\s+duidt\s+op\s+bodemverontreiniging|geen\s+visuele\s+waarnemingen|geen\s+aanwijzingen\s+voor\s+bodemverontreiniging|geen\s+verontreiniging/.test(bodemContext) ||
@@ -805,6 +853,12 @@ export function extractBodemverontreiniging(text: string): ExtractionResult<'ja'
   ) {
     return { value: 'nee', confidence: 'high', sourceLabel: 'bodem', sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'bodem-nee' }
   }
+
+  // Check "no impact" phrases — verontreiniging exists but no usage restrictions
+  if (NO_IMPACT_PHRASES.some((p) => bodemContext.includes(p))) {
+    return { value: 'onbekend', confidence: 'medium', sourceLabel: 'bodem', sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'bodem-no-impact' }
+  }
+
   if (bodemContext.includes('verontreinigd') || bodemContext.includes('sanering nodig') || bodemContext.includes('vervuild')) {
     return { value: 'ja', confidence: 'high', sourceLabel: 'bodem', sourceSnippet: snippet, sourceSection: 'Stap 7', parserRule: 'bodem-ja' }
   }
@@ -901,6 +955,66 @@ export function extractAantalBouwlagen(text: string): ExtractionResult<number> |
 }
 
 // ---------------------------------------------------------------------------
+// extractAannames — aannames en uitgangspunten
+// ---------------------------------------------------------------------------
+
+export function extractAannames(text: string): ExtractionResult<string> | undefined {
+  const labels = [
+    'bijzondere uitgangspunten',
+    'taxatie onnauwkeurigheid',
+    'aannames',
+    'uitgangspunten',
+    'algemene uitgangspunten',
+  ]
+  const lower = text.toLowerCase()
+  for (const label of labels) {
+    const idx = lower.indexOf(label)
+    if (idx === -1) continue
+    const after = text.slice(idx + label.length).replace(/^[\s:\-–]+/, '')
+    const raw = after.slice(0, 600)
+    const value = summarizeAannames(raw, 450)
+    if (value && value.length > 5) {
+      const snippet = text.slice(Math.max(0, idx - 10), idx + label.length + 40).replace(/\s+/g, ' ')
+      return { value, confidence: 'medium', sourceLabel: label, sourceSnippet: snippet, sourceSection: 'Stap 9', parserRule: 'aannames-label' }
+    }
+  }
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
+// extractVoorbehouden — voorbehouden en condities
+// ---------------------------------------------------------------------------
+
+export function extractVoorbehouden(text: string): ExtractionResult<string> | undefined {
+  const lower = text.toLowerCase()
+  // Check for "geen bijzondere uitgangspunten" first
+  if (lower.includes('geen bijzondere uitgangspunten')) {
+    const idx = lower.indexOf('geen bijzondere uitgangspunten')
+    const snippet = text.slice(Math.max(0, idx - 10), idx + 50).replace(/\s+/g, ' ')
+    return { value: 'Geen bijzondere uitgangspunten opgenomen.', confidence: 'high', sourceLabel: 'geen bijzondere uitgangspunten', sourceSnippet: snippet, sourceSection: 'Stap 9', parserRule: 'voorbehouden-geen' }
+  }
+  const labels = [
+    'voorbehouden',
+    'voorbehoud',
+    'bijzondere uitgangspunten',
+    'condities en beperkingen',
+    'beperkingen',
+  ]
+  for (const label of labels) {
+    const idx = lower.indexOf(label)
+    if (idx === -1) continue
+    const after = text.slice(idx + label.length).replace(/^[\s:\-–]+/, '')
+    const raw = after.slice(0, 400)
+    const value = summarizeAannames(raw, 300)
+    if (value && value.length > 5) {
+      const snippet = text.slice(Math.max(0, idx - 10), idx + label.length + 40).replace(/\s+/g, ' ')
+      return { value, confidence: 'medium', sourceLabel: label, sourceSnippet: snippet, sourceSection: 'Stap 9', parserRule: 'voorbehouden-label' }
+    }
+  }
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
 // Master function
 // ---------------------------------------------------------------------------
 
@@ -962,6 +1076,8 @@ export function extractAllFieldsWithConfidence(text: string): ExtractionDebugRec
   add('bar', extractBar(text))
   add('nar', extractNar(text))
   add('kapitalisatiefactor', extractKapitalisatiefactor(text))
+  add('aannames', extractAannames(text))
+  add('voorbehouden', extractVoorbehouden(text))
 
   if (import.meta.env.DEV) {
     console.debug('[pdfFieldExtractors] extractAllFieldsWithConfidence', debug)

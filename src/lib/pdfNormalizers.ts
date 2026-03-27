@@ -346,6 +346,8 @@ export function stripHeaderFooterNoise(text: string): string {
     /^printdatum[:\s]/i,
     /^uitvoerend taxateur[:\s]/i,
     /^waarde\s+op\s+\d{1,2}[-/]\d{1,2}[-/]\d{4}\s*$/i,
+    /^\d{1,3}\s*$/, // standalone page numbers (e.g. "3", "12") in headers/footers
+    /^[A-Z][a-z]+\s+[A-Z][a-z]+\s+R\.?T\.?\s*$/,
   ]
   const lines = text.split('\n')
   return lines

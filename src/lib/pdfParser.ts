@@ -216,7 +216,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   let stap2ligging: Ligging | undefined
 
   // Step 1: check for quality score near explicit ligging/locatie labels
-  for (const keyword of ['locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'ligging:', 'ligging object:', 'type ligging:']) {
+  for (const keyword of ['locatiebeoordeling:', 'beoordeling ligging:', 'kwaliteit ligging:', 'ligging:', 'ligging object:', 'type ligging:', 'locatiescore:', 'omschrijving locatie, stand en ligging:']) {
     const idx = lowerText.indexOf(keyword)
     if (idx === -1) continue
     const afterLabel = lowerText.slice(idx + keyword.length).trimStart()
@@ -382,7 +382,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const hasContractType = stap4contracttype !== undefined && stap4contracttype.length < 60
   const hasActiveRental = hasActiveTenant || hasActualRentAmount || hasRentalPhrase || hasContractType
   const stap4verhuurd = isEigenaarGebruiker
-    ? (hasActiveTenant && hasActualRentAmount) || hasRentalPhrase
+    ? hasRentalPhrase
     : hasActiveRental && !hasPastRental
 
   // --- Stap 6: Technische Staat ---
@@ -538,6 +538,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap5eigendomssituatie) {
     // Remove embedded "Te taxeren belang: ..." from eigendomssituatie text
     stap5eigendomssituatie = stap5eigendomssituatie.replace(/\s*te\s+taxeren\s+belang\s*:\s*/gi, '').trim()
+    // Remove repeated value caused by PDF concatenation glitch (e.g. "EigendomEigendom" → "Eigendom")
+    stap5eigendomssituatie = stap5eigendomssituatie.replace(/^(.{3,}?)\1+$/i, '$1')
     // Remove duplicate words
     const words = stap5eigendomssituatie.split(/\s+/)
     const seen = new Set<string>()
@@ -605,7 +607,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     if (stopIdx !== -1) stap5bestemmingsplan = stap5bestemmingsplan.slice(0, stopIdx).trim()
     // Remove header/footer noise fragments within extracted text
     stap5bestemmingsplan = stap5bestemmingsplan
-      .replace(/\s*(?:Pagina\s+\d+(\s+van\s+\d+)?|Printdatum[:\s][^\n]*|Uitvoerend\s+taxateur[:\s][^\n]*|\d+\s+van\s+\d+)\s*/gi, ' ')
+      .replace(/\s*(?:Pagina\s+\d+(\s+van\s+\d+)?|Printdatum[:\s][^\n]*|Uitvoerend\s+taxateur[:\s][^\n]*|\d+\s+van\s+\d+|[A-Z][a-z]+\s+[A-Z][a-z]+\s+R\.?T\.?)\s*/gi, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim()
     stap5bestemmingsplan = cleanupLongFieldText(stap5bestemmingsplan, 300) || undefined
@@ -614,19 +616,38 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   // --- Stap 7: Vergunningen ---
   // Energielabel: check for "Geen"/"-"/undefined values first
   let stap7energielabel: Energielabel | undefined
-  const energielabelRaw = extractSectionAfterKeyword(
-    text,
-    ['energielabel:', 'energieklasse:', 'energielabel'],
-    20,
-    { singleLine: true }
-  )
-  if (energielabelRaw) {
-    const lower = energielabelRaw.trim().toLowerCase()
-    const INVALID_LABELS = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'onbekend', 'niet']
-    if (!INVALID_LABELS.some((v) => lower === v || lower.startsWith(v))) {
-      const labelMatch = energielabelRaw.trim().match(/^([A-G][+]{0,4})/i)
-      if (labelMatch) {
-        stap7energielabel = labelMatch[1].toUpperCase() as Energielabel
+  // Suppression phrases: if any are found, force 'geen' regardless of other matches
+  const ENERGIELABEL_SUPPRESSION_PHRASES = [
+    'geen energielabel geregistreerd',
+    'geen energielabel beschikbaar',
+    'geen energielabel aanwezig',
+    'er is geen energielabel',
+    'energielabel niet geregistreerd',
+    'check ep-online',
+  ]
+  const hasEnergielabelSuppression = ENERGIELABEL_SUPPRESSION_PHRASES.some((p) => lowerText.includes(p))
+  if (hasEnergielabelSuppression) {
+    stap7energielabel = 'geen'
+  } else {
+    const energielabelRaw = extractSectionAfterKeyword(
+      text,
+      ['energielabel:', 'energieklasse:', 'energielabel'],
+      20,
+      { singleLine: true }
+    )
+    if (energielabelRaw) {
+      const lower = energielabelRaw.trim().toLowerCase()
+      const INVALID_LABELS = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'onbekend', 'niet', '- / geen', 'nee']
+      const SUPPOSITION_PHRASES = ['vermoedelijk', 'kan voldoen aan', 'wordt verwacht']
+      if (INVALID_LABELS.some((v) => lower === v || lower.startsWith(v))) {
+        stap7energielabel = 'geen'
+      } else if (SUPPOSITION_PHRASES.some((p) => lower.includes(p))) {
+        stap7energielabel = 'geen'
+      } else {
+        const labelMatch = energielabelRaw.trim().match(/^([A-G][+]{0,4})/i)
+        if (labelMatch) {
+          stap7energielabel = labelMatch[1].toUpperCase() as Energielabel
+        }
       }
     }
   }
@@ -678,6 +699,15 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (bodemIdx === -1) bodemIdx = lowerText.indexOf('bodemkwaliteit')
   if (bodemIdx !== -1) {
     const bodemContext = lowerText.slice(bodemIdx, bodemIdx + 400)
+    // Phrases indicating that even though contamination is mentioned, there is no usage impact
+    const NO_IMPACT_PHRASES = [
+      'geen saneringsnoodzaak',
+      'geen sanering noodzakelijk',
+      'geen gebruiksbeperking',
+      'geen beperkingen voor huidig gebruik',
+      'geen gegevens bekend die wijzen op beperkingen',
+      'niet verontreinigd verklaard',
+    ]
     // Check NEGATIVE patterns FIRST — these override positive matches
     if (
       /niet\s+geregistreerd\s+als\s+mogelijk\s+verontreinigd|geen\s+informatie\s+bekend\s+die\s+duidt\s+op\s+bodemverontreiniging|geen\s+visuele\s+waarnemingen|geen\s+aanwijzingen\s+voor\s+bodemverontreiniging|geen\s+verontreiniging/.test(bodemContext) ||
@@ -686,6 +716,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       /\bnee\b/.test(bodemContext)
     ) {
       stap7bodemverontreiniging = 'nee'
+    } else if (NO_IMPACT_PHRASES.some((p) => bodemContext.includes(p))) {
+      // Verontreiniging exists but without saneringsnoodzaak / usage restrictions → 'onbekend'
+      stap7bodemverontreiniging = 'onbekend'
     } else if (
       bodemContext.includes('verontreinigd') ||
       bodemContext.includes('sanering nodig') ||
@@ -750,8 +783,13 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   )
   const stap8onderhandseVerkoopwaarde = ovwMatch ? normalizeEuro(ovwMatch[1]) : undefined
 
-  // Kapitalisatiefactor: multiple label synonyms including "kap. factor von"
-  const kapFacMatch = text.match(/(?:kapitalisatiefactor|kap\.?\s*factor)[:\s|]+(?:von\s+)?([0-9]{1,2}[.,][0-9]{1,2})/i)
+  // Kapitalisatiefactor: priority 1 = explicit "Kapitalisatiefactor: X" label,
+  // priority 2 = "Kap. markt/herz. huur ... | X" pipe-separated summary line,
+  // priority 3 = detail table "Kap. factor von X"
+  const kapFacMatchLabel = text.match(/kapitalisatiefactor[:\s|]+([0-9]{1,2}[.,][0-9]{1,2})/i)
+  const kapFacMatchPipe = text.match(/kap\.?\s*markt[^\n|]{0,60}\|\s*([0-9]{1,2}[.,][0-9]{1,2})/i)
+  const kapFacMatchDetail = text.match(/kap\.?\s*factor[:\s|]+(?:von\s+)?([0-9]{1,2}[.,][0-9]{1,2})/i)
+  const kapFacMatch = kapFacMatchLabel ?? kapFacMatchPipe ?? kapFacMatchDetail
   const stap8kapitalisatiefactor = kapFacMatch ? normalizeDecimalNumber(kapFacMatch[1]) : undefined
 
   // --- Stap 9: Aannames ---

@@ -1,0 +1,61 @@
+import type { ObjectType } from './index'
+
+export type ChunkType = 'narratief' | 'opsomming' | 'tabel' | 'conclusie' | 'inleiding' | 'juridisch' | 'technisch' | 'financieel' | 'beschrijving'
+
+export type WritingFunction = 'beschrijvend' | 'analyserend' | 'concluderend' | 'opsommend' | 'vergelijkend' | 'normatief'
+
+export type ToneOfVoice = 'formeel' | 'zakelijk' | 'neutraal' | 'technisch' | 'informatief'
+
+export type DetailLevel = 'beknopt' | 'standaard' | 'uitgebreid' | 'zeer_uitgebreid'
+
+export type StandardizationLevel = 'hoog' | 'gemiddeld' | 'laag'
+
+export type Specificity = 'standaard' | 'object_specifiek' | 'gemengd'
+
+export type MarketSegment = 'commercieel' | 'residentieel' | 'industrieel' | 'agrarisch' | 'gemengd' | 'overig'
+
+export interface DocumentChunk {
+  id: string
+  documentId: string
+  chapter: string
+  subchapter: string
+  chunkType: ChunkType
+  rawText: string
+  cleanText: string
+  writingFunction: WritingFunction
+  tones: ToneOfVoice[]
+  specificity: Specificity
+  reuseScore: number
+  reuseAsStyleExample: boolean
+  templateCandidate: boolean
+  templateText?: string
+  variablesDetected: string[]
+  objectAddress?: string
+  objectType?: ObjectType
+  marketSegment?: MarketSegment
+  city?: string
+  region?: string
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DocumentWritingProfile {
+  documentId: string
+  documentType: string
+  objectType?: ObjectType
+  marketSegment?: MarketSegment
+  toneOfVoice: ToneOfVoice
+  detailLevel: DetailLevel
+  standardizationLevel: StandardizationLevel
+  dominantChapterStructure: string[]
+  reuseQuality: number
+}
+
+export interface DetectedSection {
+  chapter: string
+  subchapter: string
+  startIndex: number
+  endIndex: number
+  text: string
+}

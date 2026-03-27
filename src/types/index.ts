@@ -1,3 +1,5 @@
+export * from './kennisbank'
+
 export type DossierStatus = 'concept' | 'in_behandeling' | 'afgerond'
 
 export type ObjectType = 'kantoor' | 'bedrijfscomplex' | 'bedrijfshal' | 'winkel' | 'woning' | 'appartement' | 'overig'
@@ -217,6 +219,7 @@ export interface HistorischRapport {
     discardedCandidates?: Array<{ value: unknown; reason: string }>
     sourcePage?: number
   }>
+  writingProfile?: import('./kennisbank').DocumentWritingProfile
 }
 
 export interface SimilarityInstellingen {

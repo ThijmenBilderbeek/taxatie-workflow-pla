@@ -379,6 +379,14 @@ describe('Columbusweg 13 — test 16: provincie', () => {
     expect(result).toBeDefined()
     expect(result!.value).toBe('Limburg')
   })
+
+  it('extractProvincie confidence is at least "medium" for postcode-derived province (not cleared by clearIfLow)', () => {
+    const result = extractProvincie(COLUMBUSWEG_TEXT)
+    expect(result).toBeDefined()
+    // 'low' confidence causes clearIfLow in Kennisbank.tsx to empty the field;
+    // postcode-to-province mapping is deterministic so must be at least 'medium'.
+    expect(['medium', 'high']).toContain(result!.confidence)
+  })
 })
 
 // ---------------------------------------------------------------------------

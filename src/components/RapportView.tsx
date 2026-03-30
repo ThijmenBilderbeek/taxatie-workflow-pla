@@ -13,6 +13,8 @@ import { generateAlleSectiesMetAI } from '@/lib/aiRapportGenerator'
 import { extractDocumentKnowledge, deriveMarketSegment } from '@/lib/documentKnowledgeExtractor'
 import { useDocumentKnowledge } from '@/hooks/useDocumentKnowledge'
 import { KennisbankSuggestiesPanel } from './KennisbankSuggestiesPanel'
+import { saveSectieFeedback } from '@/hooks/useSectieFeedback'
+import { useAlleSectieStats } from '@/hooks/useSectieKwaliteit'
 
 function getRapportVariant(dossier: Dossier): RapportVariant {
   const isVerhuurd = dossier.stap4?.verhuurd || false
@@ -93,6 +95,7 @@ export function RapportView({
   const activeDossier = dossiers.find(d => d.id === activeDossierId)
 
   const { saveDocumentChunks, saveDocumentProfile } = useDocumentKnowledge()
+  const { allStats } = useAlleSectieStats()
   const [editingStates, setEditingStates] = useState<Record<string, string>>({})
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
@@ -164,14 +167,28 @@ export function RapportView({
   }).filter(Boolean) as Array<{ key: string } & RapportSectie>
 
   const handleSaveSectie = (key: string) => {
+    const sectie = activeDossier.rapportSecties[key]
+    const nieuweInhoud = editingStates[key]
+
+    // Sla 'bewerkt' feedback op als de inhoud afwijkt van de AI-gegenereerde tekst
+    if (sectie?.gegenereerdeInhoud && nieuweInhoud !== sectie.gegenereerdeInhoud) {
+      void saveSectieFeedback(
+        activeDossier.id,
+        key,
+        'bewerkt',
+        sectie.gegenereerdeInhoud,
+        nieuweInhoud
+      )
+    }
+
     onUpdateDossier({
       ...activeDossier,
       rapportSecties: {
         ...activeDossier.rapportSecties,
         [key]: {
           ...activeDossier.rapportSecties[key],
-          inhoud: editingStates[key],
-          fluxKlaarTekst: formatForFlux(editingStates[key]),
+          inhoud: nieuweInhoud,
+          fluxKlaarTekst: formatForFlux(nieuweInhoud),
         },
       },
       updatedAt: new Date().toISOString(),
@@ -280,6 +297,12 @@ export function RapportView({
         },
       },
     })
+
+    // Sla feedback op in sectie_feedback tabel
+    const origineleTekst = sectie?.gegenereerdeInhoud ?? sectie?.inhoud ?? ''
+    if (origineleTekst) {
+      void saveSectieFeedback(activeDossier.id, key, score, origineleTekst)
+    }
 
     if (score === 'negatief') {
       const newFeedback: SimilarityFeedback = {
@@ -541,6 +564,21 @@ export function RapportView({
                       {kennisbankSecties.has(sectie.key) && (
                         <Badge variant="secondary" className="text-xs" aria-label="Gegenereerd met Kennisbank-context">
                           📚 Kennisbank
+                        </Badge>
+                      )}
+                      {allStats[sectie.key] && allStats[sectie.key].totaal >= 3 && (
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${
+                            allStats[sectie.key].acceptatieRatio >= 0.8
+                              ? 'border-green-500 text-green-700'
+                              : allStats[sectie.key].acceptatieRatio >= 0.5
+                              ? 'border-yellow-500 text-yellow-700'
+                              : 'border-orange-500 text-orange-700'
+                          }`}
+                          title={`Gebaseerd op ${allStats[sectie.key].totaal} eerdere generaties`}
+                        >
+                          {Math.round(allStats[sectie.key].acceptatieRatio * 100)}% geaccepteerd
                         </Badge>
                       )}
                     </div>

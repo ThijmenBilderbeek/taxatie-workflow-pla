@@ -5,6 +5,7 @@ import type { ObjectType } from '@/types'
 import type { MarketSegment } from '@/types/kennisbank'
 import { calculateSimilarity } from './similarity'
 import { getKennisbankContextForSectie } from './kennisbankRetriever'
+import { getSectieFeedback } from '@/hooks/useSectieFeedback'
 
 // ---------------------------------------------------------------------------
 // Section configuration: maps sectieKey → relevant dossier stappen + titel
@@ -56,6 +57,14 @@ const SECTIE_CONFIG: Record<string, SectieConfig> = {
 // Public interfaces
 // ---------------------------------------------------------------------------
 
+export interface EerdereSectieGeneratieFeedback {
+  feedbackType: string
+  reden?: string
+  toelichting?: string
+  origineleTekst?: string
+  bewerkteTekst?: string
+}
+
 export interface GenerateSectieOptions {
   sectieKey: string
   sectieTitel: string
@@ -64,6 +73,7 @@ export interface GenerateSectieOptions {
   templateTekst?: string
   objectType?: ObjectType
   marketSegment?: MarketSegment
+  eerdereFeedback?: EerdereSectieGeneratieFeedback[]
 }
 
 export interface GenerateSectieResult {
@@ -183,6 +193,23 @@ function getSectieTekstUitRapport(rapport: HistorischRapport, sectieKey: string)
 // ---------------------------------------------------------------------------
 
 /**
+ * Queries the sectie_feedback table for the 5 most recent negative/edited
+ * entries for the given sectieKey, to be included in the AI generation prompt.
+ */
+export async function getSectieFeedbackVoorGeneratie(
+  sectieKey: string
+): Promise<EerdereSectieGeneratieFeedback[]> {
+  const records = await getSectieFeedback(sectieKey, 5)
+  return records.map((r) => ({
+    feedbackType: r.feedbackType,
+    reden: r.reden,
+    toelichting: r.toelichting,
+    origineleTekst: r.origineleTekst ? r.origineleTekst.slice(0, 300) : undefined,
+    bewerkteTekst: r.bewerkteTekst ? r.bewerkteTekst.slice(0, 300) : undefined,
+  }))
+}
+
+/**
  * Generates a single rapport section using AI.
  * Falls back to the template text if AI fails.
  */
@@ -244,6 +271,9 @@ export async function generateSectieMetAI(
       }
     : undefined
 
+  // Haal eerdere feedback op voor deze sectie (wordt meegestuurd naar Edge Function)
+  const eerdereFeedback = options.eerdereFeedback ?? await getSectieFeedbackVoorGeneratie(sectieKey)
+
   try {
     const { data, error } = await supabase.functions.invoke('openai-generate-section', {
       body: {
@@ -254,6 +284,7 @@ export async function generateSectieMetAI(
         templateTekst,
         schrijfstijl,
         kennisbankContext,
+        eerdereFeedback: eerdereFeedback.length > 0 ? eerdereFeedback : undefined,
       },
     })
 

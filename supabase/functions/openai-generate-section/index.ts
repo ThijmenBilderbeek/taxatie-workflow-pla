@@ -82,6 +82,14 @@ interface KennisbankContext {
   writingGuidance: WritingGuidance | null
 }
 
+interface EerdereFeedback {
+  feedbackType: string
+  reden?: string
+  toelichting?: string
+  origineleTekst?: string
+  bewerkteTekst?: string
+}
+
 interface RequestBody {
   sectieKey: string
   sectieTitel: string
@@ -90,6 +98,7 @@ interface RequestBody {
   templateTekst?: string
   schrijfstijl?: SchrijfStijl
   kennisbankContext?: KennisbankContext
+  eerdereFeedback?: EerdereFeedback[]
 }
 
 function buildUserPrompt(
@@ -99,7 +108,8 @@ function buildUserPrompt(
   referenties: Referentie[],
   templateTekst: string | undefined,
   schrijfstijl: SchrijfStijl | undefined,
-  kennisbankContext: KennisbankContext | undefined
+  kennisbankContext: KennisbankContext | undefined,
+  eerdereFeedback: EerdereFeedback[] | undefined
 ): string {
   let prompt = `Genereer de tekst voor sectie "${sectieTitel}" (key: ${sectieKey}) van een taxatierapport.\n`
 
@@ -172,6 +182,23 @@ function buildUserPrompt(
     prompt += `\nStructuurhint (huidige template-output, gebruik als structuurgids maar schrijf betere tekst):\n"${truncatedTemplate}"\n`
   }
 
+  // Voeg eerdere feedback toe aan de prompt
+  if (eerdereFeedback && eerdereFeedback.length > 0) {
+    prompt += '\nRecente feedback op eerdere generaties van deze sectie (neem dit mee):\n'
+    for (const fb of eerdereFeedback) {
+      if (fb.feedbackType === 'bewerkt') {
+        const origTrunc = fb.origineleTekst ? `"${fb.origineleTekst.slice(0, 200)}${fb.origineleTekst.length > 200 ? '…' : ''}"` : '(niet beschikbaar)'
+        const bewTrunc = fb.bewerkteTekst ? `"${fb.bewerkteTekst.slice(0, 200)}${fb.bewerkteTekst.length > 200 ? '…' : ''}"` : '(niet beschikbaar)'
+        prompt += `- Type: bewerkt — De taxateur heeft de tekst aangepast. Origineel: ${origTrunc} → Bewerkt: ${bewTrunc}\n`
+      } else if (fb.feedbackType === 'negatief') {
+        prompt += `- Type: negatief`
+        if (fb.reden) prompt += ` — Reden: ${fb.reden}`
+        if (fb.toelichting) prompt += ` — Toelichting: "${fb.toelichting}"`
+        prompt += '\n'
+      }
+    }
+  }
+
   prompt += `\nSchrijf nu de tekst voor sectie "${sectieTitel}". Geef alleen de sectietekst, zonder opmaak, headers of uitleg.`
 
   // Trunceer de volledige prompt als die te lang is
@@ -190,7 +217,7 @@ serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as RequestBody
-    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext } = body
+    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback } = body
 
     if (!sectieKey || typeof sectieKey !== 'string') {
       return new Response(JSON.stringify({ error: 'sectieKey is required' }), {
@@ -220,7 +247,8 @@ serve(async (req: Request) => {
       referenties ?? [],
       templateTekst,
       schrijfstijl,
-      kennisbankContext
+      kennisbankContext,
+      eerdereFeedback
     )
 
     console.log(`[openai-generate-section] Generating section "${sectieKey}"${kennisbankContext ? ' (met Kennisbank-context)' : ''}`)

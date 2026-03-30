@@ -703,6 +703,11 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [perceelVerrijking, setPerceelVerrijking] = useState<PerceelVerrijking | null>(null)
   const [isVerrijkingLaden, setIsVerrijkingLaden] = useState(false)
   const [isAppartementsrecht, setIsAppartementsrecht] = useState(false)
+  // --- Handmatig perceel toevoegen ---
+  const [toonHandmatigInvoer, setToonHandmatigInvoer] = useState(false)
+  const [handmatigGemeente, setHandmatigGemeente] = useState('')
+  const [handmatigSectie, setHandmatigSectie] = useState('')
+  const [handmatigPerceelnummer, setHandmatigPerceelnummer] = useState('')
   // Sla het laatste geselecteerde PDOK-id op voor retry
   const lastPdokIdRef = useRef<string | null>(null)
   // Altijd de meest recente data beschikbaar in async callbacks
@@ -992,122 +997,189 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         </div>
       </div>
 
-      {/* Kadastraal perceel sectie: toont automatisch gevonden percelen na adresselectie */}
-      {(percelenLaden || gevondenPercelen.length > 0 || perceelFout !== null || isAppartementsrecht) && (
-        <div className="grid gap-2">
-          <Label>{gevondenPercelen.length > 1 ? 'Kadastrale percelen' : 'Kadastraal perceel'}</Label>
+      {/* Kadastraal perceel sectie: altijd zichtbaar, toont automatisch gevonden percelen of handmatige invoer */}
+      <div className="grid gap-2">
+        <Label>{gevondenPercelen.length > 1 ? 'Kadastrale percelen' : 'Kadastraal perceel'}</Label>
 
-          {/* --- PDOK Perceel: appartementsrecht melding --- */}
-          {isAppartementsrecht && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
-              ℹ️ Dit adres betreft een appartementsrecht
-            </div>
-          )}
+        {/* --- PDOK Perceel: appartementsrecht melding --- */}
+        {isAppartementsrecht && (
+          <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            ℹ️ Dit adres betreft een appartementsrecht
+          </div>
+        )}
 
-          {percelenLaden ? (
-            // Loading state: skeletons terwijl percelen worden opgehaald
-            <div className="space-y-2">
-              <Skeleton className="h-10 w-full rounded-md" />
-              <Skeleton className="h-4 w-2/3 rounded-md" />
+        {percelenLaden ? (
+          // Loading state: skeletons terwijl percelen worden opgehaald
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full rounded-md" />
+            <Skeleton className="h-4 w-2/3 rounded-md" />
+          </div>
+        ) : perceelFout ? (
+          // Foutmelding als de PDOK-call mislukt, met retry knop
+          <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <span>{perceelFout}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto shrink-0"
+              onClick={() => {
+                // --- PDOK Perceel: retry ophalen percelen ---
+                if (lastPdokIdRef.current) {
+                  laadPercelenVoorId(lastPdokIdRef.current)
+                }
+              }}
+            >
+              Opnieuw proberen
+            </Button>
+          </div>
+        ) : gevondenPercelen.length === 0 ? (
+          // Geen percelen gevonden of nog geen adres geselecteerd via PDOK
+          <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            {lastPdokIdRef.current
+              ? 'Geen gekoppeld kadastraal perceel gevonden voor dit adres.'
+              : 'Selecteer een adres via PDOK voor automatische invulling, of voeg handmatig een perceel toe.'}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {/* Eén of meerdere percelen: toon eerste perceel met badge */}
+            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+              <Badge variant="secondary">✓ Automatisch ingevuld via PDOK</Badge>
+              <span>{gevondenPercelen[0].volledigeAanduiding}</span>
+              {gevondenPercelen.length > 1 && (
+                <Badge variant="outline" className="ml-auto">{gevondenPercelen.length} percelen</Badge>
+              )}
             </div>
-          ) : perceelFout ? (
-            // Foutmelding als de PDOK-call mislukt, met retry knop
-            <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              <span>{perceelFout}</span>
+
+            {/* --- PDOK Perceel: verrijking loading en oppervlakte badge --- */}
+            {isVerrijkingLaden && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Skeleton className="h-4 w-4 rounded-full" />
+                <span>Oppervlakte ophalen…</span>
+              </div>
+            )}
+            {!isVerrijkingLaden && perceelVerrijking?.oppervlakte && (
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="outline">Oppervlakte via Kadaster: {perceelVerrijking.oppervlakte} m²</Badge>
+              </div>
+            )}
+
+            {/* --- PDOK Perceel: meerdere percelen knop en uitklapbare lijst --- */}
+            {gevondenPercelen.length > 1 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setToonMeerPercelen((v) => !v)}
+                >
+                  {toonMeerPercelen ? 'Verberg percelen' : `Toon meer percelen (${gevondenPercelen.length})`}
+                </Button>
+                {toonMeerPercelen && (
+                  // Uitklapbare lijst met alle percelen als selecteerbare opties
+                  <div className="grid gap-2 pt-1">
+                    {gevondenPercelen.map((p, i) => {
+                      const isGeselecteerd =
+                        data.kadasterAanduiding?.gemeente === p.gemeente &&
+                        data.kadasterAanduiding?.sectie === p.sectie &&
+                        data.kadasterAanduiding?.perceelnummer === p.perceelnummer
+                      return (
+                        <button
+                          key={p.volledigeAanduiding}
+                          type="button"
+                          onClick={() => {
+                            onChange({
+                              ...data,
+                              kadasterAanduiding: {
+                                gemeente: p.gemeente,
+                                sectie: p.sectie,
+                                perceelnummer: p.perceelnummer,
+                              },
+                            })
+                            // --- PDOK Perceel: verrijking voor geselecteerd perceel ---
+                            startVerrijkingVoorPerceel(p)
+                          }}
+                          className={`w-full text-left rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isGeselecteerd ? 'border-primary bg-primary/10 font-medium' : ''}`}
+                        >
+                          {p.volledigeAanduiding}
+                          {i === 0 && <span className="ml-2 text-muted-foreground">(standaard)</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* --- Handmatig perceel toevoegen: altijd beschikbaar --- */}
+        <div className="pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setToonHandmatigInvoer((v) => !v)}
+          >
+            {toonHandmatigInvoer ? 'Annuleer' : '+ Perceel handmatig toevoegen'}
+          </Button>
+          {toonHandmatigInvoer && (
+            <div className="mt-2 grid gap-2 rounded-md border p-3">
+              <div className="grid grid-cols-3 gap-2">
+                <Input
+                  placeholder="Gemeente (bijv. VLO00)"
+                  value={handmatigGemeente}
+                  onChange={(e) => setHandmatigGemeente(e.target.value.toUpperCase())}
+                />
+                <Input
+                  placeholder="Sectie (bijv. E)"
+                  value={handmatigSectie}
+                  onChange={(e) => setHandmatigSectie(e.target.value.toUpperCase())}
+                />
+                <Input
+                  placeholder="Perceelnummer (bijv. 600)"
+                  value={handmatigPerceelnummer}
+                  onChange={(e) => setHandmatigPerceelnummer(e.target.value)}
+                />
+              </div>
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
-                className="ml-auto shrink-0"
+                disabled={!handmatigGemeente || !handmatigSectie || !handmatigPerceelnummer}
                 onClick={() => {
-                  // --- PDOK Perceel: retry ophalen percelen ---
-                  if (lastPdokIdRef.current) {
-                    laadPercelenVoorId(lastPdokIdRef.current)
+                  // --- Handmatig perceel: toevoegen aan percelen lijst en invullen in kadasterAanduiding ---
+                  const g = handmatigGemeente.trim()
+                  const s = handmatigSectie.trim()
+                  const p = handmatigPerceelnummer.trim()
+                  // Voorkom duplicaten op basis van gemeente/sectie/perceelnummer
+                  const isDuplicaat = gevondenPercelen.some(
+                    (existing) => existing.gemeente === g && existing.sectie === s && existing.perceelnummer === p
+                  )
+                  if (!isDuplicaat) {
+                    const nieuwPerceel: PerceelData = {
+                      gemeente: g,
+                      sectie: s,
+                      perceelnummer: p,
+                      volledigeAanduiding: `${g} ${s} ${p}`,
+                    }
+                    setGevondenPercelen((prev) => [...prev, nieuwPerceel])
                   }
+                  onChange({
+                    ...data,
+                    kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
+                  })
+                  setHandmatigGemeente('')
+                  setHandmatigSectie('')
+                  setHandmatigPerceelnummer('')
+                  setToonHandmatigInvoer(false)
                 }}
               >
-                Opnieuw proberen
+                Perceel toevoegen
               </Button>
-            </div>
-          ) : gevondenPercelen.length === 0 ? (
-            // Geen percelen gevonden voor dit adres
-            <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-              Geen gekoppeld kadastraal perceel gevonden voor dit adres.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {/* Eén of meerdere percelen: toon eerste perceel met badge */}
-              <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                <Badge variant="secondary">✓ Automatisch ingevuld via PDOK</Badge>
-                <span>{gevondenPercelen[0].volledigeAanduiding}</span>
-                {gevondenPercelen.length > 1 && (
-                  <Badge variant="outline" className="ml-auto">{gevondenPercelen.length} percelen</Badge>
-                )}
-              </div>
-
-              {/* --- PDOK Perceel: verrijking loading en oppervlakte badge --- */}
-              {isVerrijkingLaden && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Skeleton className="h-4 w-4 rounded-full" />
-                  <span>Oppervlakte ophalen…</span>
-                </div>
-              )}
-              {!isVerrijkingLaden && perceelVerrijking?.oppervlakte && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Badge variant="outline">Oppervlakte via Kadaster: {perceelVerrijking.oppervlakte} m²</Badge>
-                </div>
-              )}
-
-              {/* --- PDOK Perceel: meerdere percelen knop en uitklapbare lijst --- */}
-              {gevondenPercelen.length > 1 && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setToonMeerPercelen((v) => !v)}
-                  >
-                    {toonMeerPercelen ? 'Verberg percelen' : `Toon meer percelen (${gevondenPercelen.length})`}
-                  </Button>
-                  {toonMeerPercelen && (
-                    // Uitklapbare lijst met alle percelen als selecteerbare opties
-                    <div className="grid gap-2 pt-1">
-                      {gevondenPercelen.map((p, i) => {
-                        const isGeselecteerd =
-                          data.kadasterAanduiding?.gemeente === p.gemeente &&
-                          data.kadasterAanduiding?.sectie === p.sectie &&
-                          data.kadasterAanduiding?.perceelnummer === p.perceelnummer
-                        return (
-                          <button
-                            key={p.volledigeAanduiding}
-                            type="button"
-                            onClick={() => {
-                              onChange({
-                                ...data,
-                                kadasterAanduiding: {
-                                  gemeente: p.gemeente,
-                                  sectie: p.sectie,
-                                  perceelnummer: p.perceelnummer,
-                                },
-                              })
-                              // --- PDOK Perceel: verrijking voor geselecteerd perceel ---
-                              startVerrijkingVoorPerceel(p)
-                            }}
-                            className={`w-full text-left rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isGeselecteerd ? 'border-primary bg-primary/10 font-medium' : ''}`}
-                          >
-                            {p.volledigeAanduiding}
-                            {i === 0 && <span className="ml-2 text-muted-foreground">(standaard)</span>}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </>
-              )}
             </div>
           )}
         </div>
-      )}
+      </div>
 
       <div className="grid gap-2">
         <Label htmlFor="kadastraalOppervlak">Kadastraal oppervlak (m²)</Label>

@@ -39,8 +39,9 @@ serve(async (req: Request) => {
   }
 
   try {
-    const body = await req.json() as { text?: string }
+    const body = await req.json() as { text?: string; generateEmbedding?: boolean }
     const text = body?.text
+    const generateEmbedding = body?.generateEmbedding === true
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: 'text is required' }), {
@@ -67,6 +68,22 @@ serve(async (req: Request) => {
       throw new Error('OpenAI returned an empty response')
     }
     const classification = JSON.parse(raw)
+
+    // Optionally generate a vector embedding for semantic search
+    if (generateEmbedding) {
+      try {
+        const embeddingResponse = await openai.embeddings.create({
+          model: 'text-embedding-ada-002',
+          input: truncatedText,
+        })
+        const embedding = embeddingResponse.data[0]?.embedding
+        if (embedding) {
+          classification.embedding = embedding
+        }
+      } catch (embeddingErr) {
+        console.warn('[openai-classify] embedding generation failed, returning classification only. Error:', embeddingErr instanceof Error ? embeddingErr.message : embeddingErr)
+      }
+    }
 
     return new Response(JSON.stringify(classification), {
       status: 200,

@@ -1,52 +1,119 @@
 /**
- * Helper functies voor het ophalen en parsen van kadastrale perceeldata via de PDOK Locatieserver.
+ * Helper functies voor het ophalen en parsen van kadastrale perceeldata via de PDOK API.
  */
 
-export interface KadastraalPerceel {
-  gemeente: string
-  sectie: string
-  perceelnummer: string
+// --- Types ---
+
+/** Basis kadastrale perceel data */
+export interface PerceelData {
+  gemeente: string             // bijv. "VLO00"
+  sectie: string               // bijv. "E"
+  perceelnummer: string        // bijv. "600"
+  volledigeAanduiding: string  // bijv. "VLO00 E 600"
+}
+
+/** Verrijkte perceeldata met oppervlakte en geometrie */
+export interface PerceelVerrijking extends PerceelData {
+  oppervlakte?: number  // m² uit Kadastrale Kaart API
+  geometrie?: any       // GeoJSON geometry (optioneel, voor toekomstig kaartgebruik)
+}
+
+/** @deprecated Gebruik PerceelData */
+export type KadastraalPerceel = PerceelData
+
+// --- Functies ---
+
+/**
+ * Parse een perceelstring "GEM00-S-1234" of "GEM00 S 1234" naar PerceelData.
+ * Kan null teruggeven als parsing faalt.
+ */
+export function parsePerceelString(perceelStr: string): PerceelData | null {
+  // Probeer formaat "GEMEENTE-SECTIE-NUMMER" (koppelteken als separator)
+  const matchDash = perceelStr.trim().match(/^(.+)-([A-Z]{1,2})-(\d+)$/)
+  if (matchDash) {
+    const gemeente = matchDash[1]
+    const sectie = matchDash[2]
+    const perceelnummer = matchDash[3]
+    return { gemeente, sectie, perceelnummer, volledigeAanduiding: `${gemeente} ${sectie} ${perceelnummer}` }
+  }
+  // Probeer formaat "GEMEENTE SECTIE NUMMER" (spatie als separator)
+  const matchSpace = perceelStr.trim().match(/^(.+)\s+([A-Z]{1,2})\s+(\d+)$/)
+  if (matchSpace) {
+    const gemeente = matchSpace[1]
+    const sectie = matchSpace[2]
+    const perceelnummer = matchSpace[3]
+    return { gemeente, sectie, perceelnummer, volledigeAanduiding: `${gemeente} ${sectie} ${perceelnummer}` }
+  }
+  return null
+}
+
+/** @deprecated Gebruik parsePerceelString */
+export function parsePerceelIdentificatie(id: string): PerceelData | null {
+  return parsePerceelString(id)
 }
 
 /**
- * Parst een perceelidentificatie-string (bijv. "HTN02-A-1234") naar een KadastraalPerceel object.
- * Formaat: "<gemeente>-<sectie>-<perceelnummer>"
+ * Haal percelen op uit een PDOK lookup doc.
+ * gekoppeld_perceel kan een string of string[] zijn. Normaliseer naar PerceelData[].
  */
-export function parsePerceelIdentificatie(id: string): KadastraalPerceel | null {
-  // Splits op het eerste en tweede koppelteken: gemeente kan ook koppeltekens bevatten
-  // Formaat: GEMEENTE-SECTIE-NUMMER, waarbij NUMMER numeriek is en SECTIE één letter
-  const match = id.match(/^(.+)-([A-Z]{1,2})-(\d+)$/)
-  if (!match) return null
-  return {
-    gemeente: match[1],
-    sectie: match[2],
-    perceelnummer: match[3],
+export function extractPercelenUitPdokDoc(doc: any): PerceelData[] {
+  // gekoppeld_perceel kan een string (1 perceel) of string[] (meerdere) zijn
+  const rawPercelen = doc?.gekoppeld_perceel
+  const gekoppeld: string[] = Array.isArray(rawPercelen)
+    ? rawPercelen
+    : typeof rawPercelen === 'string'
+      ? [rawPercelen]
+      : []
+  const percelen: PerceelData[] = []
+  for (const id of gekoppeld) {
+    const parsed = parsePerceelString(id)
+    if (parsed) percelen.push(parsed)
   }
+  return percelen
 }
 
 /**
  * Haalt de gekoppelde kadastrale percelen op via de PDOK Locatieserver lookup.
  * Leest het veld `gekoppeld_perceel` uit het response.
  */
-export async function haalGekoppeldePercelenOp(adresId: string): Promise<KadastraalPerceel[]> {
+export async function haalGekoppeldePercelenOp(adresId: string): Promise<PerceelData[]> {
   const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(adresId)}`
   const resp = await fetch(url)
   if (!resp.ok) throw new Error(`PDOK lookup mislukt: ${resp.status}`)
   const json = await resp.json()
   const doc = json?.response?.docs?.[0]
   if (!doc) return []
+  return extractPercelenUitPdokDoc(doc)
+}
 
-  // gekoppeld_perceel kan een string (1 perceel) of string[] (meerdere) zijn
-  const rawPercelen = doc.gekoppeld_perceel
-  const gekoppeld: string[] = Array.isArray(rawPercelen)
-    ? rawPercelen
-    : typeof rawPercelen === 'string'
-      ? [rawPercelen]
-      : []
-  const percelen: KadastraalPerceel[] = []
-  for (const id of gekoppeld) {
-    const parsed = parsePerceelIdentificatie(id)
-    if (parsed) percelen.push(parsed)
+/**
+ * Haal verrijkte perceeldata op via de PDOK Kadastrale Kaart OGC API.
+ * Endpoint: https://api.pdok.nl/kadaster/kadastrale-kaart/ogc/features/v1/collections/percelen/items
+ * Haalt oppervlakte en geometrie op.
+ * Geeft null terug bij een error of geen resultaten.
+ */
+export async function haalPerceelVerrijking(perceel: PerceelData): Promise<PerceelVerrijking | null> {
+  try {
+    const filter = `kadastralegemeentecode eq '${perceel.gemeente}' and sectie eq '${perceel.sectie}' and perceelnummer eq '${perceel.perceelnummer}'`
+    const url = `https://api.pdok.nl/kadaster/kadastrale-kaart/ogc/features/v1/collections/percelen/items?filter=${encodeURIComponent(filter)}&limit=1`
+    const resp = await fetch(url)
+    if (!resp.ok) {
+      console.warn(`PDOK Kadastrale Kaart API mislukt: ${resp.status}`)
+      return null
+    }
+    const json = await resp.json()
+    const feature = json?.features?.[0]
+    if (!feature) {
+      console.warn('Geen perceel gevonden via Kadastrale Kaart API')
+      return null
+    }
+    return {
+      ...perceel,
+      oppervlakte: feature.properties?.oppervlakte,
+      geometrie: feature.geometry,
+    }
+  } catch (err) {
+    console.warn('Fout bij ophalen perceelverrijking:', err)
+    return null
   }
-  return percelen
 }

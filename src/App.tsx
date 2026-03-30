@@ -45,7 +45,7 @@ function LoginForm({ onSignIn, onSignUp }: {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center">
-      <img src="/valyze-logo.svg" alt="Valyze" className="w-48 mb-8" />
+      <img src="/valyze_logo1.svg" alt="Valyze" className="w-48 mb-8" />
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>{isSignUp ? 'Account aanmaken' : 'Inloggen'}</CardTitle>

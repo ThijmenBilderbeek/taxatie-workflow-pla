@@ -26,6 +26,7 @@ import type {
   SimilarityInstellingen
 } from '@/types'
 import { calculateSimilarity, calculateAllSimilarities } from '@/lib/similarity'
+import { haalGekoppeldePercelenOp, type KadastraalPerceel } from '@/lib/pdokPerceel'
 import { getSuggestiesVoorStap, type VeldSuggestie } from '@/lib/suggestions'
 import { getAISuggestiesVoorStap } from '@/lib/aiSuggestions'
 import { generateAlleSecties } from '@/lib/templates'
@@ -694,6 +695,11 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [pdokSuggesties, setPdokSuggesties] = useState<Array<{ id: string; weergavenaam: string }>>([])
   const [toonSuggesties, setToonSuggesties] = useState(false)
   const [isLaden, setIsLaden] = useState(false)
+  // Kadastrale perceel state
+  const [percelenLaden, setPercelenLaden] = useState(false)
+  const [gevondenPercelen, setGevondenPercelen] = useState<KadastraalPerceel[]>([])
+  const [perceelFout, setPerceelFout] = useState<string | null>(null)
+  const [toonMeerPercelen, setToonMeerPercelen] = useState(false)
 
   useEffect(() => {
     const zoekterm = data.straatnaam || ''
@@ -741,6 +747,27 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           lat = parseFloat(match[2])
         }
       }
+
+      // Haal gekoppelde kadastrale percelen op uit het lookup-response
+      setPercelenLaden(true)
+      setPerceelFout(null)
+      setGevondenPercelen([])
+      setToonMeerPercelen(false)
+
+      let percelen: KadastraalPerceel[] = []
+      try {
+        percelen = await haalGekoppeldePercelenOp(id)
+      } catch (err) {
+        console.error('PDOK perceel lookup mislukt:', err)
+        setPerceelFout('Ophalen van kadastrale percelen mislukt.')
+      } finally {
+        setPercelenLaden(false)
+      }
+      setGevondenPercelen(percelen)
+
+      // Vul automatisch het eerste perceel in als er één of meer gevonden zijn
+      const eerstePerceel = percelen[0]
+
       onChange({
         ...data,
         straatnaam: doc.straatnaam || data.straatnaam || '',
@@ -750,6 +777,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         gemeente: doc.gemeentenaam || data.gemeente || '',
         provincie: doc.provincienaam || data.provincie || '',
         ...(lat !== undefined && lng !== undefined ? { coordinaten: { lat, lng } } : {}),
+        ...(eerstePerceel ? { kadasterAanduiding: eerstePerceel } : {}),
       })
     } catch {
       // silently ignore lookup errors
@@ -899,6 +927,82 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           />
         </div>
       </div>
+
+      {/* Kadastraal perceel sectie: toont automatisch gevonden percelen na adresselectie */}
+      {(percelenLaden || gevondenPercelen.length > 0 || perceelFout !== null) && (
+        <div className="grid gap-2">
+          <Label>Kadastraal perceel</Label>
+          {percelenLaden ? (
+            // Loading state: skeletons terwijl percelen worden opgehaald
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-4 w-2/3 rounded-md" />
+            </div>
+          ) : perceelFout ? (
+            // Foutmelding als de PDOK-call mislukt
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {perceelFout}
+            </div>
+          ) : gevondenPercelen.length === 0 ? (
+            // Geen percelen gevonden voor dit adres
+            <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+              Geen gekoppeld kadastraal perceel gevonden voor dit adres.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {gevondenPercelen.length === 1 ? (
+                // Eén perceel: bevestigingsmelding
+                <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+                  <Badge variant="secondary">Automatisch ingevuld</Badge>
+                  <span>
+                    {gevondenPercelen[0].gemeente} — {gevondenPercelen[0].sectie} — {gevondenPercelen[0].perceelnummer}
+                  </span>
+                </div>
+              ) : (
+                // Meerdere percelen: eerste ingevuld, knop om meer te tonen
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+                    <Badge variant="secondary">Automatisch ingevuld</Badge>
+                    <span>
+                      {gevondenPercelen[0].gemeente} — {gevondenPercelen[0].sectie} — {gevondenPercelen[0].perceelnummer}
+                    </span>
+                    <Badge variant="outline" className="ml-auto">{gevondenPercelen.length} percelen</Badge>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setToonMeerPercelen((v) => !v)}
+                  >
+                    {toonMeerPercelen ? 'Verberg percelen' : 'Toon meer percelen'}
+                  </Button>
+                  {toonMeerPercelen && (
+                    // Uitklapbare lijst met alle percelen als selecteerbare opties
+                    <div className="grid gap-2 pt-1">
+                      {gevondenPercelen.map((p, i) => {
+                        const isGeselecteerd =
+                          data.kadasterAanduiding?.gemeente === p.gemeente &&
+                          data.kadasterAanduiding?.sectie === p.sectie &&
+                          data.kadasterAanduiding?.perceelnummer === p.perceelnummer
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => onChange({ ...data, kadasterAanduiding: p })}
+                            className={`w-full text-left rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isGeselecteerd ? 'border-primary bg-primary/10 font-medium' : ''}`}
+                          >
+                            {p.gemeente} — sectie {p.sectie} — nr. {p.perceelnummer}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="kadastraalOppervlak">Kadastraal oppervlak (m²)</Label>

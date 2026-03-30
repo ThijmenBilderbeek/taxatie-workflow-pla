@@ -34,6 +34,11 @@ export interface AlgemeneGegevens {
   naamTaxateur: string
   waardepeildatum: string
   inspectiedatum: string
+  mateVanInspectie?: string
+  inspectieUitgevoerdDoor?: string
+  toelichtingInspectie?: string
+  huidigGebruik?: string
+  voorgenomenGebruik?: string
 }
 
 export interface AdresLocatie {
@@ -55,6 +60,10 @@ export interface AdresLocatie {
     lat: number
     lng: number
   }
+  omgevingEnBelendingen?: string
+  voorzieningen?: string
+  verwachteOntwikkelingen?: string
+  locatiescore?: string
 }
 
 export interface Oppervlaktes {
@@ -77,6 +86,7 @@ export interface Huurgegevens {
   indexering?: string
   markthuurPerJaar?: number
   leegstandsrisico?: string
+  huurbijzonderheden?: string
 }
 
 export interface JuridischeInfo {
@@ -86,6 +96,10 @@ export interface JuridischeInfo {
   kwalitatieveVerplichtingen: string
   bestemmingsplan: string
   teTaxerenBelang?: string
+  aantekeningenKadastraalObject?: string
+  toelichtingEigendomPerceel?: string
+  gebruikConformOmgevingsplan?: string
+  bijzonderePubliekrechtelijkeBepalingen?: string
 }
 
 export interface TechnischeStaat {
@@ -97,6 +111,15 @@ export interface TechnischeStaat {
   achterstalligOnderhoud: boolean
   achterstalligOnderhoudBeschrijving?: string
   onderhoudskosten: number
+  constructie?: string
+  terrein?: string
+  gevels?: string
+  afwerking?: string
+  beveiliging?: string
+  toelichtingOnderhoud?: string
+  toelichtingParkeren?: string
+  toelichtingFunctionaliteit?: string
+  omschrijvingMilieuaspecten?: string
 }
 
 export interface Vergunningen {
@@ -130,6 +153,28 @@ export interface Aannames {
   voorbehouden: string
   bijzondereOmstandigheden: string
   interneNotities: string
+  algemeneUitgangspunten?: string
+  bijzondereUitgangspunten?: string
+  ontvangenInformatie?: string
+  wezenlijkeVeranderingen?: string
+  taxatieOnnauwkeurigheid?: string
+}
+
+export interface DuurzaamheidGegevens {
+  klimaatrisicos?: string
+  aantalOplaadpunten?: number
+  dakoppervlakGeschiktVoorZonnepanelen?: string
+  duurzaamheidscertificaten?: string
+  isolatieDak?: string
+  isolatieGevel?: string
+  isolatieVloer?: string
+  isolatieGlas?: string
+  overwegendLedVerlichting?: boolean
+  greenLease?: boolean
+  flexibiliteit?: string
+  gebruikDuurzameMaterialen?: string
+  maatregelenVerduurzaming?: string
+  marktwaardeNaVerduurzaming?: number
 }
 
 export interface SimilarityScoreBreakdown {
@@ -175,6 +220,7 @@ export interface Dossier {
   stap7?: Vergunningen
   stap8?: Waardering
   stap9?: Aannames
+  stap10?: DuurzaamheidGegevens
   
   similarityResults: SimilarityResult[]
   geselecteerdeReferenties: string[]

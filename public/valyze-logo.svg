@@ -1,11 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" fill="none">
-  <!-- V with checkmark icon -->
-  <g transform="translate(4, 6)">
-    <!-- Circle background -->
-    <circle cx="24" cy="24" r="24" fill="#2563EB"/>
-    <!-- V shape / checkmark -->
-    <polyline points="10,22 20,34 38,14" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  </g>
-  <!-- Valyze text -->
-  <text x="66" y="40" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#1E293B" letter-spacing="-0.5">Valyze</text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3ddc97;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e3a8a;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Stylized V -->
+  <path d="M120 120 L256 360 L392 120 L330 120 L256 270 L182 120 Z" fill="url(#grad)"/>
+
+  <!-- Digital pixel accent -->
+  <rect x="360" y="90" width="12" height="12" fill="#1e3a8a"/>
+  <rect x="380" y="70" width="10" height="10" fill="#1e3a8a"/>
+  <rect x="400" y="90" width="8" height="8" fill="#1e3a8a"/>
+
+  <!-- Text -->
+  <text x="256" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" fill="#0f172a">
+    Valyze
+  </text>
 </svg>

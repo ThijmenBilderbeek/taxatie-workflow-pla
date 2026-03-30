@@ -27,6 +27,7 @@ function chunkToRow(chunk: DocumentChunk, userId: string) {
     city: chunk.city ?? null,
     region: chunk.region ?? null,
     metadata: chunk.metadata,
+    embedding: chunk.embedding ?? null,
     updated_at: new Date().toISOString(),
   }
 }
@@ -72,6 +73,7 @@ function rowToChunk(row: Record<string, unknown>): DocumentChunk {
     metadata: (row.metadata as Record<string, unknown>) ?? {},
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
+    embedding: (row.embedding as number[]) ?? undefined,
   }
 }
 

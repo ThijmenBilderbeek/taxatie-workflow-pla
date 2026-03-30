@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { SEMANTIC_MATCH_THRESHOLD } from '@/lib/kennisbankRetriever'
 import type { ChunkType, MarketSegment } from '@/types/kennisbank'
 import type { ObjectType } from '@/types'
 
@@ -13,6 +14,8 @@ export interface KennisbankSuggestie {
   reuseScore: number
   variablesDetected: string[]
   templateCandidate: boolean
+  /** Optional vector embedding for future semantic use. */
+  embedding?: number[]
 }
 
 export interface UseKennisbankSuggestiesOptions {
@@ -21,6 +24,8 @@ export interface UseKennisbankSuggestiesOptions {
   chapter?: string
   city?: string
   limit?: number
+  /** When provided, uses semantic search instead of exact column matching. */
+  queryText?: string
 }
 
 export function useKennisbankSuggestions() {
@@ -29,9 +34,9 @@ export function useKennisbankSuggestions() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchSuggesties = useCallback(async (options: UseKennisbankSuggestiesOptions) => {
-    const { objectType, marketSegment, chapter, city, limit = 10 } = options
+    const { objectType, marketSegment, chapter, city, limit = 10, queryText } = options
 
-    if (!objectType && !marketSegment) {
+    if (!objectType && !marketSegment && !queryText) {
       setIsLoading(false)
       return
     }
@@ -40,6 +45,54 @@ export function useKennisbankSuggestions() {
     setError(null)
 
     try {
+      // -------------------------------------------------------------------
+      // Semantic search path — when queryText is provided
+      // -------------------------------------------------------------------
+      if (queryText) {
+        const embeddingResponse = await supabase.functions.invoke<{ embedding?: number[] }>(
+          'openai-classify',
+          { body: { text: queryText, generateEmbedding: true } }
+        )
+
+        const embedding = embeddingResponse.data?.embedding
+        if (!embedding || !Array.isArray(embedding)) {
+          // Fallback to exact-match when embedding generation fails
+          console.warn('[useKennisbankSuggestions] geen embedding ontvangen, val terug op exacte zoekactie')
+        } else {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('match_document_chunks', {
+            query_embedding: embedding,
+            match_threshold: SEMANTIC_MATCH_THRESHOLD,
+            match_count: limit,
+            filter_object_type: objectType ?? null,
+            filter_market_segment: marketSegment ?? null,
+          })
+
+          if (rpcError) {
+            setError(rpcError.message)
+            return
+          }
+
+          const mapped: KennisbankSuggestie[] = (rpcData || []).map((row: Record<string, unknown>) => ({
+            id: row.id as string,
+            documentId: row.document_id as string,
+            cleanText: (row.clean_text as string) || '',
+            templateText: row.template_text as string | undefined,
+            chapter: (row.chapter as string) || '',
+            chunkType: row.chunk_type as ChunkType,
+            reuseScore: (row.reuse_score as number) || 0,
+            variablesDetected: (row.variables_detected as string[]) || [],
+            templateCandidate: (row.template_candidate as boolean) || false,
+            embedding: (row.embedding as number[]) ?? undefined,
+          }))
+
+          setSuggesties(mapped)
+          return
+        }
+      }
+
+      // -------------------------------------------------------------------
+      // Exact match path — existing behaviour
+      // -------------------------------------------------------------------
       let query = supabase
         .from('document_chunks')
         .select('id, document_id, clean_text, template_text, chapter, chunk_type, reuse_score, variables_detected, template_candidate')

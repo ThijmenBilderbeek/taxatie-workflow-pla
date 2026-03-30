@@ -191,6 +191,78 @@ export function useDocumentKnowledge() {
     }
   }, [saveDocumentChunks, saveDocumentProfile])
 
+  /**
+   * Updates the reuse_score of document_chunks in the Kennisbank based on
+   * the acceptance rates of sections with feedback data.
+   *
+   * Uses the formula: new_reuse_score = clamp(current + (acceptance_rate - 0.5) * 0.1, 0, 1)
+   * This means:
+   * - acceptance_rate = 1.0 → +0.05 per update cycle
+   * - acceptance_rate = 0.5 → no change
+   * - acceptance_rate = 0.0 → -0.05 per update cycle
+   */
+  const updateReuseScoresFromFeedback = useCallback(async () => {
+    try {
+      // Fetch all feedback in one query, then group by sectie_key in memory
+      const { data: allFeedback, error: feedbackError } = await supabase
+        .from('sectie_feedback')
+        .select('sectie_key, feedback_type')
+
+      if (feedbackError) {
+        console.warn('[useDocumentKnowledge] updateReuseScoresFromFeedback: could not fetch feedback:', feedbackError.message)
+        return
+      }
+
+      if (!allFeedback || allFeedback.length === 0) return
+
+      // Group feedback by sectie_key and compute acceptance rates in memory
+      const feedbackBySectie = new Map<string, { totaal: number; geaccepteerd: number }>()
+      for (const row of allFeedback) {
+        const key = row.sectie_key as string
+        const existing = feedbackBySectie.get(key) ?? { totaal: 0, geaccepteerd: 0 }
+        existing.totaal += 1
+        if (row.feedback_type === 'positief') existing.geaccepteerd += 1
+        feedbackBySectie.set(key, existing)
+      }
+
+      for (const [sectieKey, stats] of feedbackBySectie) {
+        if (stats.totaal === 0) continue
+        const acceptanceRate = stats.geaccepteerd / stats.totaal
+
+        // Derive chapter from sectie_key (e.g. 'b1-algemeen' → 'B')
+        const chapterMatch = sectieKey.match(/^([a-zA-Z]+)/i)
+        if (!chapterMatch) continue
+        const chapter = chapterMatch[1].toUpperCase()
+
+        // Fetch matching chunks
+        const { data: chunks, error: chunksError } = await supabase
+          .from('document_chunks')
+          .select('id, reuse_score')
+          .eq('chapter', chapter)
+
+        if (chunksError) {
+          console.warn('[useDocumentKnowledge] updateReuseScoresFromFeedback: could not fetch chunks for chapter', chapter)
+          continue
+        }
+
+        for (const chunk of chunks ?? []) {
+          const currentScore = chunk.reuse_score ?? 0.5
+          const delta = (acceptanceRate - 0.5) * 0.1
+          const newScore = Math.min(1.0, Math.max(0.0, currentScore + delta))
+
+          if (Math.abs(newScore - currentScore) > 0.001) {
+            await supabase
+              .from('document_chunks')
+              .update({ reuse_score: newScore })
+              .eq('id', chunk.id)
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[useDocumentKnowledge] updateReuseScoresFromFeedback failed silently:', err)
+    }
+  }, [])
+
   return {
     saveDocumentChunks,
     saveDocumentProfile,
@@ -198,5 +270,6 @@ export function useDocumentKnowledge() {
     getDocumentProfile,
     getChunksByRapportId,
     saveDocumentKnowledgeFromText,
+    updateReuseScoresFromFeedback,
   }
 }

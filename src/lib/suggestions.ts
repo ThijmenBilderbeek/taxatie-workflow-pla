@@ -7,6 +7,12 @@ export interface VeldSuggestie {
   suggestie: string
   bronAdres: string
   bronScore: number | null
+  isAIGenerated?: boolean
+  bronRapporten?: Array<{
+    adres: string
+    score: number
+    afstandKm: number
+  }>
 }
 
 type VeldConfig = {

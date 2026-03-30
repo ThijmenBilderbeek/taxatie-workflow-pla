@@ -17,6 +17,7 @@ import {
   cleanLabelRemnant,
   summarizeTechnicalField,
   summarizeAannames,
+  normalizeBooleanLike,
 } from './pdfNormalizers'
 import { extractAllFieldsWithConfidence, extractAantalBouwlagen, extractBar, extractNar, extractMarktwaarde } from './pdfFieldExtractors'
 
@@ -128,6 +129,16 @@ function extractSectionAfterKeyword(
 }
 
 /**
+ * Normalizes an optional raw string to a boolean via normalizeBooleanLike.
+ * Returns undefined when the raw value is undefined or resolves to 'unknown'.
+ */
+function normalizeOptionalBoolean(raw: string | undefined): boolean | undefined {
+  if (raw === undefined) return undefined
+  const b = normalizeBooleanLike(raw)
+  return b === 'unknown' ? undefined : b
+}
+
+/**
  * Extracts wizard-relevant fields from raw PDF text.
  * Returns a partial Dossier with the sections found.
  * This is best-effort: missing sections simply return undefined.
@@ -196,6 +207,46 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       stap1inspectiedatum = normalizeDutchDate(inspFallbackMatch[1]) ?? undefined
     }
   }
+
+  // Mate van inspectie
+  const stap1mateVanInspectie = extractSectionAfterKeyword(text, [
+    'mate van inspectie:',
+    'omvang inspectie:',
+    'inspectieomvang:',
+    'niveau van inspectie:',
+  ], 120, { singleLine: true })
+
+  // Inspectie uitgevoerd door
+  const stap1inspectieUitgevoerdDoor = extractSectionAfterKeyword(text, [
+    'inspectie uitgevoerd door:',
+    'inspectie door:',
+    'geïnspecteerd door:',
+  ], 80, { singleLine: true })
+
+  // Toelichting inspectie
+  const stap1toelichtingInspectie = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'toelichting inspectie:',
+      'toelichting op inspectie:',
+      'belemmeringen inspectie:',
+      'bijzonderheden inspectie:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Huidig gebruik
+  const stap1huidigGebruik = extractSectionAfterKeyword(text, [
+    'huidig gebruik:',
+    'huidige gebruik:',
+    'feitelijk gebruik:',
+  ], 150, { singleLine: true })
+
+  // Voorgenomen gebruik
+  const stap1voorgenomenGebruik = extractSectionAfterKeyword(text, [
+    'voorgenomen gebruik:',
+    'toekomstig gebruik:',
+    'beoogd gebruik:',
+  ], 150, { singleLine: true })
 
   // --- Stap 2: Adres & Locatie ---
   // Gemeente: strict label with colon only, use cleanGemeente to strip bestemmingsplan text
@@ -298,6 +349,45 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     ? cleanupLongFieldText(compactWhitespace(stap2bereikbaarheidRaw), 250)
     : undefined
 
+  // Omgeving en belendingen
+  const stap2omgevingEnBelendingen = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'omgeving en belendingen:',
+      'belendingen:',
+      'directe omgeving:',
+      'omgeving:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Voorzieningen
+  const stap2voorzieningen = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'nabije voorzieningen:',
+      'winkelvoorzieningen:',
+      'voorzieningen:',
+    ], 200)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 200) : undefined
+  })()
+
+  // Verwachte ontwikkelingen
+  const stap2verwachteOntwikkelingen = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'verwachte ontwikkelingen:',
+      'toekomstige ontwikkelingen:',
+      'gebiedsontwikkeling:',
+      'ontwikkelingen:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Locatiescore
+  const stap2locatiescore = extractSectionAfterKeyword(text, [
+    'locatiescore:',
+    'walkscore:',
+    'score locatie:',
+  ], 60, { singleLine: true })
+
   // --- Stap 3: Oppervlaktes ---
   // BVO: extended label synonyms including "Totaal BVO m² of stuks"
   const bvoMatch = text.match(
@@ -391,6 +481,17 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap4verhuurd = isEigenaarGebruiker
     ? (hasRentalPhrase && hasActiveTenant && hasActualRentAmount)
     : hasActiveRental && !hasPastRental
+
+  // Huurbijzonderheden
+  const stap4huurbijzonderheden = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'huurbijzonderheden:',
+      'bijzonderheden huur:',
+      'bijzonderheden huurovereenkomst:',
+      'huurovereenkomst bijzonderheden:',
+    ], 400)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 400) : undefined
+  })()
 
   // --- Stap 6: Technische Staat ---
   const ONDERHOUD_VALUES: Onderhoudsstaat[] = ['uitstekend', 'goed', 'redelijk', 'matig', 'slecht']
@@ -532,6 +633,95 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'onderhoudstoestand:',
   ], 100)
 
+  // Terrein
+  const stap6terrein = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'terrein:',
+      'terreinomschrijving:',
+      'buitenterrein:',
+      'terreinbeschrijving:',
+    ], 200)
+    return raw ? summarizeTechnicalField(raw, 200) || undefined : undefined
+  })()
+
+  // Gevels
+  const stap6gevels = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'gevels:',
+      'gevel:',
+      'gevelbeschrijving:',
+      'gevelafwerking:',
+    ], 150)
+    return raw ? summarizeTechnicalField(raw, 150) || undefined : undefined
+  })()
+
+  // Afwerking
+  const stap6afwerking = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'afwerking:',
+      'afwerkingsniveau:',
+      'interieurafwerking:',
+    ], 150)
+    return raw ? summarizeTechnicalField(raw, 150) || undefined : undefined
+  })()
+
+  // Beveiliging
+  const stap6beveiliging = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'beveiliging:',
+      'beveiligingsinstallatie:',
+      'toegangscontrole:',
+      'alarminstallatie:',
+    ], 150)
+    return raw ? summarizeTechnicalField(raw, 150) || undefined : undefined
+  })()
+
+  // Toelichting onderhoud
+  const stap6toelichtingOnderhoud = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'toelichting onderhoud:',
+      'onderhoudstoelichting:',
+      'toelichting onderhoudsstaat:',
+      'onderhoudssituatie:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Toelichting parkeren
+  const stap6toelichtingParkeren = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'toelichting parkeren:',
+      'parkeervoorzieningen:',
+      'parkeerplaatsen:',
+      'parkeergelegenheid:',
+      'parkeren:',
+    ], 200)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 200) : undefined
+  })()
+
+  // Toelichting functionaliteit
+  const stap6toelichtingFunctionaliteit = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'toelichting functionaliteit:',
+      'functionaliteit:',
+      'indeling:',
+      'plattegrond:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Omschrijving milieuaspecten
+  const stap6omschrijvingMilieuaspecten = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'milieuaspecten:',
+      'milieuomschrijving:',
+      'milieusituatie:',
+      'bodemloket:',
+      'milieu:',
+    ], 400)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 400) : undefined
+  })()
+
   // --- Stap 5: Juridische Info ---
   // Eigendomssituatie: limit to 100 chars, stop at unrelated field markers
   // stopAtInlineLabel stops before "Te taxeren belang:" and similar inline follow-up labels
@@ -624,6 +814,44 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       .trim()
     stap5bestemmingsplan = cleanupLongFieldText(stap5bestemmingsplan, 300) || undefined
   }
+
+  // Aantekeningen kadastraal object
+  const stap5aantekeningenKadastraalObject = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'aantekeningen kadastraal object:',
+      'kadastrale aantekeningen:',
+      'aantekeningen kadaster:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Toelichting eigendom perceel
+  const stap5toelichtingEigendomPerceel = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'toelichting eigendom:',
+      'toelichting perceel:',
+      'eigendom perceel:',
+      'perceelsituatie:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Gebruik conform omgevingsplan
+  const stap5gebruikConformOmgevingsplan = extractSectionAfterKeyword(text, [
+    'gebruik conform omgevingsplan:',
+    'conform omgevingsplan:',
+    'conform bestemmingsplan:',
+  ], 200, { singleLine: true })
+
+  // Bijzondere publiekrechtelijke bepalingen
+  const stap5bijzonderePubliekrechtelijkeBepalingen = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'bijzondere publiekrechtelijke bepalingen:',
+      'publiekrechtelijke bepalingen:',
+      'publiekrechtelijke beperkingen:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
 
   // --- Stap 7: Vergunningen ---
   // Energielabel: check for "Geen"/"-"/undefined values first
@@ -844,6 +1072,135 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'bijzonderheden:',
   ], 200)
 
+  // Algemene uitgangspunten
+  const stap9algemeneUitgangspunten = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'algemene uitgangspunten:',
+      'standaard uitgangspunten:',
+      'uitgangspunten:',
+    ], 500)
+    return raw ? summarizeAannames(raw, 450) || undefined : undefined
+  })()
+
+  // Bijzondere uitgangspunten
+  const stap9bijzondereUitgangspunten = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'bijzondere uitgangspunten:',
+      'specifieke uitgangspunten:',
+      'objectspecifieke uitgangspunten:',
+    ], 500)
+    return raw ? summarizeAannames(raw, 450) || undefined : undefined
+  })()
+
+  // Ontvangen informatie
+  const stap9ontvangenInformatie = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'ontvangen informatie:',
+      'ontvangen documenten:',
+      'beschikbare informatie:',
+      'ter beschikking gestelde informatie:',
+    ], 400)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 400) : undefined
+  })()
+
+  // Wezenlijke veranderingen
+  const stap9wezenlijkeVeranderingen = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'wezenlijke veranderingen:',
+      'veranderingen na taxatiedatum:',
+      'veranderingen voor taxatiedatum:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  // Taxatie onnauwkeurigheid
+  const stap9taxatieOnnauwkeurigheid = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'taxatieonnauwkeurigheid:',
+      'onnauwkeurigheidsmarge:',
+      'onnauwkeurigheid:',
+      'bandbreedte:',
+    ], 200)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 200) : undefined
+  })()
+
+  // --- Stap 10: Duurzaamheid ---
+  const stap10klimaatrisicos = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      "klimaatrisico's:",
+      'klimaatrisico:',
+      'klimaatbestendigheid:',
+    ], 300)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 300) : undefined
+  })()
+
+  const stap10duurzaamheidscertificaten = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'duurzaamheidscertificaten:',
+      'duurzaamheidscertificaat:',
+      'breeam:',
+      'gpr:',
+      'well:',
+    ], 200)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 200) : undefined
+  })()
+
+  const stap10isolatieDak = extractSectionAfterKeyword(text, [
+    'isolatie dak:',
+    'dakisolatie:',
+    'rc-waarde dak:',
+  ], 80, { singleLine: true })
+
+  const stap10isolatieGevel = extractSectionAfterKeyword(text, [
+    'isolatie gevel:',
+    'gevelisolatie:',
+    'rc-waarde gevel:',
+  ], 80, { singleLine: true })
+
+  const stap10isolatieVloer = extractSectionAfterKeyword(text, [
+    'isolatie vloer:',
+    'vloerisolatie:',
+    'rc-waarde vloer:',
+  ], 80, { singleLine: true })
+
+  const stap10isolatieGlas = extractSectionAfterKeyword(text, [
+    'isolatie glas:',
+    'beglazing:',
+    'hr glas:',
+    'hr++ glas:',
+    'triple glas:',
+  ], 80, { singleLine: true })
+
+  const stap10greenLeaseRaw = extractSectionAfterKeyword(text, [
+    'green lease:',
+    'groene huurovereenkomst:',
+  ], 40, { singleLine: true })
+  const stap10greenLease = normalizeOptionalBoolean(stap10greenLeaseRaw)
+
+  const stap10overwegendLedVerlichtingRaw = extractSectionAfterKeyword(text, [
+    'led verlichting:',
+    'overwegend led:',
+  ], 40, { singleLine: true })
+  const stap10overwegendLedVerlichting = normalizeOptionalBoolean(stap10overwegendLedVerlichtingRaw)
+
+  const stap10maatregelenVerduurzaming = (() => {
+    const raw = extractSectionAfterKeyword(text, [
+      'maatregelen verduurzaming:',
+      'verduurzamingsmaatregelen:',
+      'voorgestelde maatregelen:',
+      'verduurzaming:',
+    ], 500)
+    return raw ? cleanupLongFieldText(compactWhitespace(raw), 500) : undefined
+  })()
+
+  const stap10marktwaardeNaVerduurzamingRaw = extractSectionAfterKeyword(text, [
+    'marktwaarde na verduurzaming:',
+    'waarde na verduurzaming:',
+  ], 40, { singleLine: true })
+  const stap10marktwaardeNaVerduurzaming = stap10marktwaardeNaVerduurzamingRaw
+    ? normalizeEuro(stap10marktwaardeNaVerduurzamingRaw)
+    : undefined
+
   // --- Build wizardData ---
   // Field-length constants (Bug 24)
   const MAX_FIELD_LENGTH_SHORT = 120    // objectnaam, gemeente, provincie, huurder, contracttype
@@ -856,6 +1213,11 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap1objectnaam) stap1Fields.objectnaam = truncateField(stap1objectnaam, MAX_FIELD_LENGTH_SHORT)
   if (stap1naamTaxateur) stap1Fields.naamTaxateur = truncateField(stap1naamTaxateur, MAX_FIELD_LENGTH_SHORT)
   if (stap1inspectiedatum) stap1Fields.inspectiedatum = stap1inspectiedatum
+  if (stap1mateVanInspectie) stap1Fields.mateVanInspectie = truncateField(stap1mateVanInspectie, MAX_FIELD_LENGTH_SHORT)
+  if (stap1inspectieUitgevoerdDoor) stap1Fields.inspectieUitgevoerdDoor = truncateField(stap1inspectieUitgevoerdDoor, MAX_FIELD_LENGTH_SHORT)
+  if (stap1toelichtingInspectie) stap1Fields.toelichtingInspectie = truncateField(stap1toelichtingInspectie, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap1huidigGebruik) stap1Fields.huidigGebruik = truncateField(stap1huidigGebruik, MAX_FIELD_LENGTH_SHORT)
+  if (stap1voorgenomenGebruik) stap1Fields.voorgenomenGebruik = truncateField(stap1voorgenomenGebruik, MAX_FIELD_LENGTH_SHORT)
   if (Object.keys(stap1Fields).length > 0) {
     wizardData.stap1 = stap1Fields as Dossier['stap1']
   }
@@ -865,6 +1227,10 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap2gemeente) stap2Fields.gemeente = truncateField(stap2gemeente, MAX_FIELD_LENGTH_SHORT)
   if (stap2provincie) stap2Fields.provincie = truncateField(stap2provincie, MAX_FIELD_LENGTH_SHORT)
   if (stap2ligging) stap2Fields.ligging = stap2ligging
+  if (stap2omgevingEnBelendingen) stap2Fields.omgevingEnBelendingen = truncateField(stap2omgevingEnBelendingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap2voorzieningen) stap2Fields.voorzieningen = truncateField(stap2voorzieningen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap2verwachteOntwikkelingen) stap2Fields.verwachteOntwikkelingen = truncateField(stap2verwachteOntwikkelingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap2locatiescore) stap2Fields.locatiescore = truncateField(stap2locatiescore, MAX_FIELD_LENGTH_SHORT)
   if (Object.keys(stap2Fields).length > 0) {
     wizardData.stap2 = stap2Fields as Dossier['stap2']
   }
@@ -890,6 +1256,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (allowRentalFields && stap4huurprijsPerJaar !== undefined) stap4Fields.huurprijsPerJaar = stap4huurprijsPerJaar
   if (allowRentalFields && stap4contracttype) stap4Fields.contracttype = truncateField(stap4contracttype, MAX_FIELD_LENGTH_SHORT)
   if (stap4markthuurPerJaar !== undefined) stap4Fields.markthuurPerJaar = stap4markthuurPerJaar
+  if (stap4huurbijzonderheden) stap4Fields.huurbijzonderheden = truncateField(stap4huurbijzonderheden, MAX_FIELD_LENGTH_TEXTAREA)
   wizardData.stap4 = stap4Fields as Dossier['stap4']
 
   const stap5Fields: Partial<NonNullable<Dossier['stap5']>> = {}
@@ -899,6 +1266,10 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = truncateField(stap5kwalitatieveVerplichtingen, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = truncateField(stap5bestemmingsplan, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5teTaxerenBelang) stap5Fields.teTaxerenBelang = truncateField(stap5teTaxerenBelang, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5aantekeningenKadastraalObject) stap5Fields.aantekeningenKadastraalObject = truncateField(stap5aantekeningenKadastraalObject, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5toelichtingEigendomPerceel) stap5Fields.toelichtingEigendomPerceel = truncateField(stap5toelichtingEigendomPerceel, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5gebruikConformOmgevingsplan) stap5Fields.gebruikConformOmgevingsplan = truncateField(stap5gebruikConformOmgevingsplan, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5bijzonderePubliekrechtelijkeBepalingen) stap5Fields.bijzonderePubliekrechtelijkeBepalingen = truncateField(stap5bijzonderePubliekrechtelijkeBepalingen, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap5Fields).length > 0) {
     wizardData.stap5 = stap5Fields as Dossier['stap5']
   }
@@ -911,6 +1282,15 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap6exterieurStaat) stap6Fields.exterieurStaat = stap6exterieurStaat
   if (stap6interieurStaat) stap6Fields.interieurStaat = stap6interieurStaat
   if (stap6onderhoudskosten !== undefined) stap6Fields.onderhoudskosten = stap6onderhoudskosten
+  if (stap6constructie) stap6Fields.constructie = truncateField(stap6constructie, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6terrein) stap6Fields.terrein = truncateField(stap6terrein, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6gevels) stap6Fields.gevels = truncateField(stap6gevels, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6afwerking) stap6Fields.afwerking = truncateField(stap6afwerking, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6beveiliging) stap6Fields.beveiliging = truncateField(stap6beveiliging, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6toelichtingOnderhoud) stap6Fields.toelichtingOnderhoud = truncateField(stap6toelichtingOnderhoud, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6toelichtingParkeren) stap6Fields.toelichtingParkeren = truncateField(stap6toelichtingParkeren, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6toelichtingFunctionaliteit) stap6Fields.toelichtingFunctionaliteit = truncateField(stap6toelichtingFunctionaliteit, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6omschrijvingMilieuaspecten) stap6Fields.omschrijvingMilieuaspecten = truncateField(stap6omschrijvingMilieuaspecten, MAX_FIELD_LENGTH_TEXTAREA)
   if (Object.keys(stap6Fields).length > 0) {
     wizardData.stap6 = stap6Fields as Dossier['stap6']
   }
@@ -944,8 +1324,28 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap9aannames) stap9Fields.aannames = truncateField(stap9aannames, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap9voorbehouden) stap9Fields.voorbehouden = truncateField(stap9voorbehouden, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap9bijzondereOmstandigheden) stap9Fields.bijzondereOmstandigheden = truncateField(stap9bijzondereOmstandigheden, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9algemeneUitgangspunten) stap9Fields.algemeneUitgangspunten = truncateField(stap9algemeneUitgangspunten, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9bijzondereUitgangspunten) stap9Fields.bijzondereUitgangspunten = truncateField(stap9bijzondereUitgangspunten, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9ontvangenInformatie) stap9Fields.ontvangenInformatie = truncateField(stap9ontvangenInformatie, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9wezenlijkeVeranderingen) stap9Fields.wezenlijkeVeranderingen = truncateField(stap9wezenlijkeVeranderingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap9taxatieOnnauwkeurigheid) stap9Fields.taxatieOnnauwkeurigheid = truncateField(stap9taxatieOnnauwkeurigheid, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap9Fields).length > 0) {
     wizardData.stap9 = stap9Fields as Dossier['stap9']
+  }
+
+  const stap10Fields: Partial<NonNullable<Dossier['stap10']>> = {}
+  if (stap10klimaatrisicos) stap10Fields.klimaatrisicos = truncateField(stap10klimaatrisicos, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap10duurzaamheidscertificaten) stap10Fields.duurzaamheidscertificaten = truncateField(stap10duurzaamheidscertificaten, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap10isolatieDak) stap10Fields.isolatieDak = truncateField(stap10isolatieDak, MAX_FIELD_LENGTH_SHORT)
+  if (stap10isolatieGevel) stap10Fields.isolatieGevel = truncateField(stap10isolatieGevel, MAX_FIELD_LENGTH_SHORT)
+  if (stap10isolatieVloer) stap10Fields.isolatieVloer = truncateField(stap10isolatieVloer, MAX_FIELD_LENGTH_SHORT)
+  if (stap10isolatieGlas) stap10Fields.isolatieGlas = truncateField(stap10isolatieGlas, MAX_FIELD_LENGTH_SHORT)
+  if (stap10greenLease !== undefined) stap10Fields.greenLease = stap10greenLease
+  if (stap10overwegendLedVerlichting !== undefined) stap10Fields.overwegendLedVerlichting = stap10overwegendLedVerlichting
+  if (stap10maatregelenVerduurzaming) stap10Fields.maatregelenVerduurzaming = truncateField(stap10maatregelenVerduurzaming, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap10marktwaardeNaVerduurzaming !== undefined) stap10Fields.marktwaardeNaVerduurzaming = stap10marktwaardeNaVerduurzaming
+  if (Object.keys(stap10Fields).length > 0) {
+    wizardData.stap10 = stap10Fields as Dossier['stap10']
   }
 
   return wizardData

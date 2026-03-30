@@ -4,11 +4,12 @@ import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { Separator } from './ui/separator'
 import { Badge } from './ui/badge'
-import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download, CheckCircle, Books } from '@phosphor-icons/react'
+import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download, CheckCircle, Books, Sparkle } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant } from '@/types'
 import { formatForFlux, createFluxReport } from '@/lib/fluxFormatter'
 import { generateAlleSecties } from '@/lib/templates'
+import { generateAlleSectiesMetAI } from '@/lib/aiRapportGenerator'
 import { extractDocumentKnowledge, deriveMarketSegment } from '@/lib/documentKnowledgeExtractor'
 import { useDocumentKnowledge } from '@/hooks/useDocumentKnowledge'
 import { KennisbankSuggestiesPanel } from './KennisbankSuggestiesPanel'
@@ -94,6 +95,9 @@ export function RapportView({
   const { saveDocumentChunks, saveDocumentProfile } = useDocumentKnowledge()
   const [editingStates, setEditingStates] = useState<Record<string, string>>({})
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
+  const [aiProgress, setAiProgress] = useState<{ current: number; total: number; sectie: string } | null>(null)
+  const [kennisbankSecties, setKennisbankSecties] = useState<Set<string>>(new Set())
   const [isAfronden, setIsAfronden] = useState(false)
   const [suggestiePanelOpen, setSuggestiePanelOpen] = useState(false)
   const [suggestiePanelChapter, setSuggestiePanelChapter] = useState<string | undefined>()
@@ -199,6 +203,68 @@ export function RapportView({
     })
 
     toast.success('Sectie geregenereerd')
+  }
+
+  const handleGenereerMetAI = async () => {
+    if (isGeneratingAI) return
+    setIsGeneratingAI(true)
+    setAiProgress(null)
+
+    try {
+      const objectType = activeDossier.stap1?.typeObject
+      const marketSegment = deriveMarketSegment(objectType)
+
+      const aiResultaten = await generateAlleSectiesMetAI(
+        activeDossier,
+        historischeRapporten || [],
+        (sectieKey, current, total) => {
+          setAiProgress({ current, total, sectie: sectieKey })
+        },
+        objectType,
+        marketSegment
+      )
+
+      const nieuweKennisbankSecties = new Set<string>()
+      const nieuweRapportSecties = { ...activeDossier.rapportSecties }
+
+      Object.entries(aiResultaten).forEach(([key, resultaat]) => {
+        const sectieDefinitie = ALLE_SECTIES.find((s) => s.key === key)
+        nieuweRapportSecties[key] = {
+          titel: sectieDefinitie?.titel || key,
+          inhoud: resultaat.tekst,
+          gegenereerdeInhoud: resultaat.tekst,
+          fluxKlaarTekst: formatForFlux(resultaat.tekst),
+          gebaseerdOpReferentie: nieuweRapportSecties[key]?.gebaseerdOpReferentie,
+        }
+        if (resultaat.hasKennisbankContext) {
+          nieuweKennisbankSecties.add(key)
+        }
+      })
+
+      setKennisbankSecties(nieuweKennisbankSecties)
+      setEditingStates(
+        Object.fromEntries(Object.entries(nieuweRapportSecties).map(([k, v]) => [k, v.inhoud]))
+      )
+
+      onUpdateDossier({
+        ...activeDossier,
+        rapportSecties: nieuweRapportSecties,
+        updatedAt: new Date().toISOString(),
+      })
+
+      const metKennisbank = nieuweKennisbankSecties.size
+      if (metKennisbank > 0) {
+        toast.success(`Rapport gegenereerd met AI — ${metKennisbank} sectie(s) verrijkt met Kennisbank`)
+      } else {
+        toast.success('Rapport gegenereerd met AI')
+      }
+    } catch (err) {
+      console.error('[RapportView] AI generatie mislukt:', err)
+      toast.error('AI generatie mislukt')
+    } finally {
+      setIsGeneratingAI(false)
+      setAiProgress(null)
+    }
   }
 
   const handleFeedback = (key: string, score: 'positief' | 'negatief') => {
@@ -396,6 +462,19 @@ export function RapportView({
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGenereerMetAI}
+            disabled={isGeneratingAI}
+          >
+            <Sparkle className="mr-2" />
+            {isGeneratingAI
+              ? aiProgress
+                ? `AI bezig… ${aiProgress.current}/${aiProgress.total}`
+                : 'AI generatie starten…'
+              : 'Genereer met AI + Kennisbank'}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExportTxt}>
             <Download className="mr-2" />
             Exporteer TXT
@@ -457,6 +536,11 @@ export function RapportView({
                       {hasBeenEdited && (
                         <Badge variant="outline" className="text-xs border-accent text-accent">
                           Aangepast
+                        </Badge>
+                      )}
+                      {kennisbankSecties.has(sectie.key) && (
+                        <Badge variant="secondary" className="text-xs" aria-label="Gegenereerd met Kennisbank-context">
+                          📚 Kennisbank
                         </Badge>
                       )}
                     </div>

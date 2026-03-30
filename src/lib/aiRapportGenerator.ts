@@ -1,7 +1,10 @@
 import { supabase } from './supabaseClient'
 import { generateAlleSecties } from './templates'
 import type { Dossier, HistorischRapport } from '@/types'
+import type { ObjectType } from '@/types'
+import type { MarketSegment } from '@/types/kennisbank'
 import { calculateSimilarity } from './similarity'
+import { getKennisbankContextForSectie } from './kennisbankRetriever'
 
 // ---------------------------------------------------------------------------
 // Section configuration: maps sectieKey → relevant dossier stappen + titel
@@ -59,11 +62,14 @@ export interface GenerateSectieOptions {
   dossier: Partial<Dossier>
   referenties?: HistorischRapport[]
   templateTekst?: string
+  objectType?: ObjectType
+  marketSegment?: MarketSegment
 }
 
 export interface GenerateSectieResult {
   tekst: string
   isAIGenerated: boolean
+  hasKennisbankContext?: boolean
   error?: string
 }
 
@@ -183,7 +189,7 @@ function getSectieTekstUitRapport(rapport: HistorischRapport, sectieKey: string)
 export async function generateSectieMetAI(
   options: GenerateSectieOptions
 ): Promise<GenerateSectieResult> {
-  const { sectieKey, sectieTitel, dossier, referenties = [], templateTekst } = options
+  const { sectieKey, sectieTitel, dossier, referenties = [], templateTekst, objectType, marketSegment } = options
 
   const config = SECTIE_CONFIG[sectieKey]
   const stappen = config?.stappen ?? []
@@ -208,6 +214,36 @@ export async function generateSectieMetAI(
       }
     : undefined
 
+  // Haal Kennisbank-context op voor deze sectie
+  const kennisbankCtx = await getKennisbankContextForSectie(sectieKey, objectType, marketSegment)
+
+  const heeftKennisbankContext =
+    kennisbankCtx.templateChunks.length > 0 ||
+    kennisbankCtx.styleExamples.length > 0 ||
+    kennisbankCtx.writingProfile !== null
+
+  // Bouw de kennisbankContext payload voor de Edge Function
+  const kennisbankContext = heeftKennisbankContext
+    ? {
+        templateChunks: kennisbankCtx.templateChunks.map((c) => ({
+          text: c.cleanText || c.rawText,
+          chapter: c.chapter,
+          chunkType: c.chunkType,
+        })),
+        styleExamples: kennisbankCtx.styleExamples.map((c) => ({
+          text: c.cleanText || c.rawText,
+          tones: c.tones,
+        })),
+        writingGuidance: kennisbankCtx.writingProfile
+          ? {
+              toneOfVoice: kennisbankCtx.writingProfile.toneOfVoice,
+              detailLevel: kennisbankCtx.writingProfile.detailLevel,
+              standardizationLevel: kennisbankCtx.writingProfile.standardizationLevel,
+            }
+          : null,
+      }
+    : undefined
+
   try {
     const { data, error } = await supabase.functions.invoke('openai-generate-section', {
       body: {
@@ -217,6 +253,7 @@ export async function generateSectieMetAI(
         referenties: referentiesPayload,
         templateTekst,
         schrijfstijl,
+        kennisbankContext,
       },
     })
 
@@ -224,12 +261,13 @@ export async function generateSectieMetAI(
       throw new Error(error?.message ?? 'No text returned from edge function')
     }
 
-    return { tekst: data.tekst, isAIGenerated: true }
+    return { tekst: data.tekst, isAIGenerated: true, hasKennisbankContext: heeftKennisbankContext }
   } catch (err) {
     console.warn(`[aiRapportGenerator] AI generation failed for "${sectieKey}", using template fallback:`, err)
     return {
       tekst: templateTekst ?? '',
       isAIGenerated: false,
+      hasKennisbankContext: false,
       error: err instanceof Error ? err.message : String(err),
     }
   }
@@ -243,14 +281,16 @@ export async function generateSectieMetAI(
 export async function generateAlleSectiesMetAI(
   dossier: Dossier,
   historischeRapporten: HistorischRapport[],
-  onProgress?: (sectieKey: string, progress: number, total: number) => void
-): Promise<Record<string, { tekst: string; isAIGenerated: boolean }>> {
+  onProgress?: (sectieKey: string, progress: number, total: number) => void,
+  objectType?: ObjectType,
+  marketSegment?: MarketSegment
+): Promise<Record<string, { tekst: string; isAIGenerated: boolean; hasKennisbankContext?: boolean }>> {
   // Get template fallbacks for all sections at once
   const templateSecties = generateAlleSecties(dossier, historischeRapporten)
 
   const sectieKeys = Object.keys(templateSecties)
   const total = sectieKeys.length
-  const result: Record<string, { tekst: string; isAIGenerated: boolean }> = {}
+  const result: Record<string, { tekst: string; isAIGenerated: boolean; hasKennisbankContext?: boolean }> = {}
 
   // Find top-3 reference reports once for all sections
   const top3 = getTop3Referenties(dossier, historischeRapporten)
@@ -268,11 +308,14 @@ export async function generateAlleSectiesMetAI(
       dossier,
       referenties: referentieRapporten,
       templateTekst,
+      objectType,
+      marketSegment,
     })
 
     result[sectieKey] = {
       tekst: sectieResult.tekst,
       isAIGenerated: sectieResult.isAIGenerated,
+      hasKennisbankContext: sectieResult.hasKennisbankContext,
     }
 
     onProgress?.(sectieKey, i + 1, total)

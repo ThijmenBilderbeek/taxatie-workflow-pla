@@ -24,6 +24,15 @@ vi.mock('../similarity', () => ({
   calculateSimilarity: vi.fn(),
 }))
 
+vi.mock('../kennisbankRetriever', () => ({
+  getKennisbankContextForSectie: vi.fn().mockResolvedValue({
+    templateChunks: [],
+    styleExamples: [],
+    writingProfile: null,
+    toneGuidance: '',
+  }),
+}))
+
 import { supabase } from '../supabaseClient'
 import { generateSectieMetAI, generateAlleSectiesMetAI } from '../aiRapportGenerator'
 

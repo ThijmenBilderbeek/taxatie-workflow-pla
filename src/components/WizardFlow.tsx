@@ -759,7 +759,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   }
 
   // --- PDOK Perceel: verwerk percelen uit een reeds opgehaald PDOK doc ---
-  const verwerkPercelenUitDoc = (doc: any) => {
+  const verwerkPercelenUitDoc = (doc: any, baseData?: Partial<AdresLocatie>) => {
     // Detecteer appartementsrecht
     setIsAppartementsrecht(!!doc.gekoppeld_appartement)
 
@@ -771,7 +771,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     const eerstePerceel = percelen[0]
     if (eerstePerceel) {
       onChange({
-        ...dataRef.current,
+        ...(baseData ?? dataRef.current),
         kadasterAanduiding: {
           gemeente: eerstePerceel.gemeente,
           sectie: eerstePerceel.sectie,
@@ -828,7 +828,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         }
       }
 
-      onChange({
+      const newAdresData: Partial<AdresLocatie> = {
         ...data,
         straatnaam: doc.straatnaam || data.straatnaam || '',
         huisnummer: doc.huis_nlt || data.huisnummer || '',
@@ -837,7 +837,8 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         gemeente: doc.gemeentenaam || data.gemeente || '',
         provincie: doc.provincienaam || data.provincie || '',
         ...(lat !== undefined && lng !== undefined ? { coordinaten: { lat, lng } } : {}),
-      })
+      }
+      onChange(newAdresData)
 
       // --- PDOK Perceel: verwerk percelen uit het reeds opgehaalde doc (geen extra API-call) ---
       lastPdokIdRef.current = id
@@ -847,7 +848,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       setPerceelVerrijking(null)
       setIsVerrijkingLaden(false)
       setIsAppartementsrecht(false)
-      verwerkPercelenUitDoc(doc)
+      verwerkPercelenUitDoc(doc, newAdresData)
     } catch {
       // silently ignore lookup errors
     }
@@ -1045,7 +1046,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
             {/* Eén of meerdere percelen: toon eerste perceel met badge */}
             <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
               <Badge variant="secondary">✓ Automatisch ingevuld via PDOK</Badge>
-              <span>{gevondenPercelen[0].volledigeAanduiding}</span>
+              <span>{gevondenPercelen.map(p => p.volledigeAanduiding).join(' | ')}</span>
               {gevondenPercelen.length > 1 && (
                 <Badge variant="outline" className="ml-auto">{gevondenPercelen.length} percelen</Badge>
               )}
@@ -1160,7 +1161,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                       gemeente: g,
                       sectie: s,
                       perceelnummer: p,
-                      volledigeAanduiding: `${g} ${s} ${p}`,
+                      volledigeAanduiding: `${g}-${s}-${p}`,
                     }
                     setGevondenPercelen((prev) => [...prev, nieuwPerceel])
                   }

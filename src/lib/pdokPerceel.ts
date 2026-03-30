@@ -9,7 +9,7 @@ export interface PerceelData {
   gemeente: string             // bijv. "VLO00"
   sectie: string               // bijv. "E"
   perceelnummer: string        // bijv. "600"
-  volledigeAanduiding: string  // bijv. "VLO00 E 600"
+  volledigeAanduiding: string  // bijv. "VLO00-E-600"
 }
 
 /** Verrijkte perceeldata met oppervlakte en geometrie */
@@ -34,7 +34,7 @@ export function parsePerceelString(perceelStr: string): PerceelData | null {
     const gemeente = matchDash[1]
     const sectie = matchDash[2]
     const perceelnummer = matchDash[3]
-    return { gemeente, sectie, perceelnummer, volledigeAanduiding: `${gemeente} ${sectie} ${perceelnummer}` }
+    return { gemeente, sectie, perceelnummer, volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}` }
   }
   // Probeer formaat "GEMEENTE SECTIE NUMMER" (spatie als separator)
   const matchSpace = perceelStr.trim().match(/^(.+)\s+([A-Z]{1,2})\s+(\d+)$/)
@@ -42,7 +42,7 @@ export function parsePerceelString(perceelStr: string): PerceelData | null {
     const gemeente = matchSpace[1]
     const sectie = matchSpace[2]
     const perceelnummer = matchSpace[3]
-    return { gemeente, sectie, perceelnummer, volledigeAanduiding: `${gemeente} ${sectie} ${perceelnummer}` }
+    return { gemeente, sectie, perceelnummer, volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}` }
   }
   return null
 }

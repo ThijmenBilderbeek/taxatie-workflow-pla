@@ -102,6 +102,7 @@ export function RapportView({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
   const [aiProgress, setAiProgress] = useState<{ current: number; total: number; sectie: string } | null>(null)
   const [kennisbankSecties, setKennisbankSecties] = useState<Set<string>>(new Set())
+  const [cachedSecties, setCachedSecties] = useState<Set<string>>(new Set())
   const [isAfronden, setIsAfronden] = useState(false)
   const [suggestiePanelOpen, setSuggestiePanelOpen] = useState(false)
   const [suggestiePanelChapter, setSuggestiePanelChapter] = useState<string | undefined>()
@@ -251,6 +252,7 @@ export function RapportView({
       )
 
       const nieuweKennisbankSecties = new Set<string>()
+      const nieuweCachedSecties = new Set<string>()
       const nieuweRapportSecties = { ...activeDossier.rapportSecties }
 
       Object.entries(aiResultaten).forEach(([key, resultaat]) => {
@@ -265,9 +267,13 @@ export function RapportView({
         if (resultaat.hasKennisbankContext) {
           nieuweKennisbankSecties.add(key)
         }
+        if (resultaat.isCached) {
+          nieuweCachedSecties.add(key)
+        }
       })
 
       setKennisbankSecties(nieuweKennisbankSecties)
+      setCachedSecties(nieuweCachedSecties)
       setEditingStates(
         Object.fromEntries(Object.entries(nieuweRapportSecties).map(([k, v]) => [k, v.inhoud]))
       )
@@ -720,6 +726,11 @@ export function RapportView({
                       {kennisbankSecties.has(sectie.key) && (
                         <Badge variant="secondary" className="text-xs" aria-label="Gegenereerd met Kennisbank-context">
                           📚 Kennisbank
+                        </Badge>
+                      )}
+                      {cachedSecties.has(sectie.key) && (
+                        <Badge variant="outline" className="text-xs border-blue-400 text-blue-600" aria-label="Geserveerd vanuit cache">
+                          ⚡ Cache
                         </Badge>
                       )}
                       {allStats[sectie.key] && allStats[sectie.key].totaal >= 3 && (

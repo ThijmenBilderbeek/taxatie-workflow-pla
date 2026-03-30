@@ -100,6 +100,15 @@ interface RequestBody {
   kennisbankContext?: KennisbankContext
   eerdereFeedback?: EerdereFeedback[]
   previousSectionsSummary?: string
+  model?: string
+  batchSecties?: BatchSectie[]
+}
+
+interface BatchSectie {
+  sectieKey: string
+  sectieTitel: string
+  dossierData: DossierData
+  templateTekst?: string
 }
 
 function buildUserPrompt(
@@ -226,7 +235,78 @@ serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as RequestBody
-    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback, previousSectionsSummary } = body
+    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback, previousSectionsSummary, model, batchSecties } = body
+
+    // -----------------------------------------------------------------------
+    // Batch mode: generate multiple short sections in one call
+    // -----------------------------------------------------------------------
+    if (batchSecties && Array.isArray(batchSecties) && batchSecties.length > 0) {
+      const batchModel = model ?? 'gpt-4o-mini' // Batched sections are always non-complex
+
+      const batchPrompt = batchSecties
+        .map(({ sectieKey: bKey, sectieTitel: bTitel, dossierData: bData, templateTekst: bTemplate }) => {
+          let part = `\n=== SECTIE "${bTitel}" (key: ${bKey}) ===\n`
+          const dossierSections = Object.entries(bData ?? {}).filter(([, v]) => v && Object.keys(v as object).length > 0)
+          if (dossierSections.length > 0) {
+            part += 'Dossiergegevens:\n'
+            for (const [stap, data] of dossierSections) {
+              part += `[${stap}]\n`
+              for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+                if (value !== null && value !== undefined && value !== '') {
+                  const formatted = typeof value === 'object' ? JSON.stringify(value) : String(value)
+                  part += `- ${key}: ${formatted}\n`
+                }
+              }
+            }
+          }
+          if (bTemplate && bTemplate.trim()) {
+            const truncated = bTemplate.length > 300 ? bTemplate.slice(0, 300) + '…' : bTemplate
+            part += `Structuurhint: "${truncated}"\n`
+          }
+          return part
+        })
+        .join('\n')
+
+      const batchKeys = batchSecties.map((s) => s.sectieKey)
+      const batchUserPrompt = `Genereer tekst voor de volgende secties van een taxatierapport.
+Geef het resultaat terug als geldig JSON-object in dit formaat (geen extra tekst erbuiten):
+{"secties": {"sectieKey1": "tekst voor sectie 1", "sectieKey2": "tekst voor sectie 2"}}
+
+De sectie-keys zijn: ${batchKeys.join(', ')}
+${batchPrompt}
+
+Schrijf voor elke sectie beknopte, professionele tekst zonder opmaak. Retourneer alleen het JSON-object.`
+
+      const truncatedBatchPrompt = batchUserPrompt.length > MAX_PROMPT_CHARS
+        ? batchUserPrompt.slice(0, MAX_PROMPT_CHARS) + '\n…[ingekort voor token-budget]'
+        : batchUserPrompt
+
+      console.log(`[openai-generate-section] Batch generating ${batchSecties.length} sections`)
+
+      const batchResponse = await openai.chat.completions.create({
+        model: batchModel,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: truncatedBatchPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+      })
+
+      const batchContent = batchResponse.choices[0]?.message?.content?.trim()
+      if (!batchContent) {
+        throw new Error('OpenAI returned an empty response for batch generation')
+      }
+
+      const batchParsed = JSON.parse(batchContent) as { secties?: Record<string, string> }
+      const results = batchParsed.secties ?? {}
+
+      return new Response(JSON.stringify({ results }), {
+        status: 200,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      })
+    }
 
     if (!sectieKey || typeof sectieKey !== 'string') {
       return new Response(JSON.stringify({ error: 'sectieKey is required' }), {
@@ -235,7 +315,7 @@ serve(async (req: Request) => {
       })
     }
 
-    // Handle coherence check special case
+    // Handle coherence check special case — always use gpt-4o-mini
     if (sectieKey === '__coherence_check') {
       const allSectionsSummary = (dossierData as unknown as { allSectionsSummary?: string }).allSectionsSummary ?? ''
 
@@ -263,7 +343,7 @@ Als er geen inconsistenties zijn, geef dan isCoherent: true met een lege inconsi
       console.log('[openai-generate-section] Running coherence check')
 
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o-mini', // Coherence check always uses gpt-4o-mini
         messages: [
           { role: 'system', content: coherenceSystemPrompt },
           { role: 'user', content: coherenceUserPrompt },
@@ -315,10 +395,12 @@ Als er geen inconsistenties zijn, geef dan isCoherent: true met een lege inconsi
       previousSectionsSummary
     )
 
-    console.log(`[openai-generate-section] Generating section "${sectieKey}"${kennisbankContext ? ' (met Kennisbank-context)' : ''}`)
+    // Use provided model or fall back to gpt-4o-mini
+    const selectedModel = (model && typeof model === 'string') ? model : 'gpt-4o-mini'
+    console.log(`[openai-generate-section] Generating section "${sectieKey}" with model "${selectedModel}"${kennisbankContext ? ' (met Kennisbank-context)' : ''}`)
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: selectedModel,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },

@@ -54,6 +54,61 @@ const SECTIE_CONFIG: Record<string, SectieConfig> = {
 }
 
 // ---------------------------------------------------------------------------
+// Model selection & batching constants
+// ---------------------------------------------------------------------------
+
+/** Sections that require the more capable gpt-4o model due to their complexity. */
+export const COMPLEX_SECTIES = ['b6-toelichting-waardering', 'b9-taxatiemethodiek', 'b10-plausibiliteit']
+
+/** Template text shorter than this threshold qualifies a section for batch processing. */
+const SHORT_TEMPLATE_THRESHOLD = 200
+
+/** Maximum number of sections to group in a single batch API call. */
+const MAX_BATCH_SIZE = 5
+
+/** Maximum number of entries in the in-memory section cache. */
+const MAX_CACHE_SIZE = 500
+
+// ---------------------------------------------------------------------------
+// In-memory response cache
+// ---------------------------------------------------------------------------
+
+const sectieCache = new Map<string, GenerateSectieResult>()
+
+/** Simple djb2-based string hash — synchronous and dependency-free. */
+function hashString(str: string): string {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i)
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(36)
+}
+
+function getCacheKey(sectieKey: string, dossierData: Record<string, unknown>): string {
+  return `${sectieKey}:${hashString(JSON.stringify(dossierData))}`
+}
+
+function getSectieFromCache(sectieKey: string, dossierData: Record<string, unknown>): GenerateSectieResult | undefined {
+  return sectieCache.get(getCacheKey(sectieKey, dossierData))
+}
+
+function setSectieInCache(sectieKey: string, dossierData: Record<string, unknown>, result: GenerateSectieResult): void {
+  if (sectieCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = sectieCache.keys().next().value
+    if (firstKey !== undefined) sectieCache.delete(firstKey)
+  }
+  // Store without isCached flag — the flag is added when the value is returned from cache
+  const { isCached: _omit, ...toStore } = result
+  sectieCache.set(getCacheKey(sectieKey, dossierData), toStore)
+}
+
+/** Clears the entire in-memory section cache. Useful for testing or forced refresh. */
+export function clearSectieCache(): void {
+  sectieCache.clear()
+}
+
+// ---------------------------------------------------------------------------
 // Public interfaces
 // ---------------------------------------------------------------------------
 
@@ -81,7 +136,15 @@ export interface GenerateSectieResult {
   tekst: string
   isAIGenerated: boolean
   hasKennisbankContext?: boolean
+  isCached?: boolean
   error?: string
+}
+
+interface BatchSectieInput {
+  sectieKey: string
+  sectieTitel: string
+  dossierData: Record<string, unknown>
+  templateTekst: string
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +275,7 @@ export async function getSectieFeedbackVoorGeneratie(
 
 /**
  * Generates a single rapport section using AI.
- * Falls back to the template text if AI fails.
+ * Checks the in-memory cache first; falls back to the template text if AI fails.
  */
 export async function generateSectieMetAI(
   options: GenerateSectieOptions
@@ -223,6 +286,12 @@ export async function generateSectieMetAI(
   const stappen = config?.stappen ?? []
 
   const dossierData = buildDossierData(dossier, stappen)
+
+  // Check in-memory cache before any expensive operations
+  const cached = getSectieFromCache(sectieKey, dossierData)
+  if (cached) {
+    return { ...cached, isCached: true }
+  }
 
   const referentiesPayload = referenties
     .map((rapport) => {
@@ -275,6 +344,9 @@ export async function generateSectieMetAI(
   // Haal eerdere feedback op voor deze sectie (wordt meegestuurd naar Edge Function)
   const eerdereFeedback = options.eerdereFeedback ?? await getSectieFeedbackVoorGeneratie(sectieKey)
 
+  // Select model based on section complexity
+  const model = COMPLEX_SECTIES.includes(sectieKey) ? 'gpt-4o' : 'gpt-4o-mini'
+
   try {
     const { data, error } = await supabase.functions.invoke('openai-generate-section', {
       body: {
@@ -287,6 +359,7 @@ export async function generateSectieMetAI(
         kennisbankContext,
         eerdereFeedback: eerdereFeedback.length > 0 ? eerdereFeedback : undefined,
         previousSectionsSummary: options.previousSectionsSummary || undefined,
+        model,
       },
     })
 
@@ -294,7 +367,9 @@ export async function generateSectieMetAI(
       throw new Error(error?.message ?? 'No text returned from edge function')
     }
 
-    return { tekst: data.tekst, isAIGenerated: true, hasKennisbankContext: heeftKennisbankContext }
+    const successResult: GenerateSectieResult = { tekst: data.tekst, isAIGenerated: true, hasKennisbankContext: heeftKennisbankContext }
+    setSectieInCache(sectieKey, dossierData, successResult)
+    return successResult
   } catch (err) {
     console.warn(`[aiRapportGenerator] AI generation failed for "${sectieKey}", using template fallback:`, err)
     return {
@@ -307,8 +382,73 @@ export async function generateSectieMetAI(
 }
 
 /**
+ * Generates multiple short sections in a single API call to reduce overhead.
+ * Falls back to template text per section if the batch call fails or returns no result.
+ */
+async function generateBatchMetAI(
+  inputs: BatchSectieInput[],
+  referenties: HistorischRapport[],
+  dossier: Partial<Dossier>,
+  objectType?: ObjectType,
+  marketSegment?: MarketSegment
+): Promise<Record<string, GenerateSectieResult>> {
+  if (inputs.length === 0) return {}
+
+  // Single-item batches are handled more efficiently as regular calls
+  if (inputs.length === 1) {
+    const input = inputs[0]
+    const result = await generateSectieMetAI({
+      sectieKey: input.sectieKey,
+      sectieTitel: input.sectieTitel,
+      dossier,
+      referenties,
+      templateTekst: input.templateTekst,
+      objectType,
+      marketSegment,
+    })
+    return { [input.sectieKey]: result }
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('openai-generate-section', {
+      body: {
+        batchSecties: inputs.map(({ sectieKey, sectieTitel, dossierData, templateTekst }) => ({
+          sectieKey,
+          sectieTitel,
+          dossierData,
+          templateTekst,
+        })),
+        model: 'gpt-4o-mini', // Batched sections are always non-complex
+      },
+    })
+
+    if (error || !data?.results || typeof data.results !== 'object') {
+      throw new Error(error?.message ?? 'No results returned from batch edge function')
+    }
+
+    const results: Record<string, GenerateSectieResult> = {}
+    for (const input of inputs) {
+      const tekst = (data.results as Record<string, unknown>)[input.sectieKey]
+      if (typeof tekst === 'string' && tekst.trim()) {
+        results[input.sectieKey] = { tekst, isAIGenerated: true, hasKennisbankContext: false }
+      } else {
+        results[input.sectieKey] = { tekst: input.templateTekst, isAIGenerated: false, hasKennisbankContext: false }
+      }
+    }
+    return results
+  } catch (err) {
+    console.warn('[aiRapportGenerator] Batch generation failed, falling back to template for batch sections:', err)
+    return Object.fromEntries(
+      inputs.map((input) => [input.sectieKey, { tekst: input.templateTekst, isAIGenerated: false, hasKennisbankContext: false }])
+    )
+  }
+}
+
+/**
  * Generates all rapport sections using AI, with fallback to templates.
- * Processes sections sequentially to avoid rate limiting.
+ * Short non-complex sections are batched in Phase 1 to reduce API overhead.
+ * Complex/long sections are processed sequentially in Phase 2 to maintain
+ * coherence via previousSectionsSummary context passing.
  * Calls the provided onProgress callback after each section completes.
  */
 export async function generateAlleSectiesMetAI(
@@ -317,26 +457,84 @@ export async function generateAlleSectiesMetAI(
   onProgress?: (sectieKey: string, progress: number, total: number) => void,
   objectType?: ObjectType,
   marketSegment?: MarketSegment
-): Promise<Record<string, { tekst: string; isAIGenerated: boolean; hasKennisbankContext?: boolean }>> {
+): Promise<Record<string, { tekst: string; isAIGenerated: boolean; hasKennisbankContext?: boolean; isCached?: boolean }>> {
   // Get template fallbacks for all sections at once
   const templateSecties = generateAlleSecties(dossier, historischeRapporten)
 
   const sectieKeys = Object.keys(templateSecties)
   const total = sectieKeys.length
-  const result: Record<string, { tekst: string; isAIGenerated: boolean; hasKennisbankContext?: boolean }> = {}
+  const result: Record<string, { tekst: string; isAIGenerated: boolean; hasKennisbankContext?: boolean; isCached?: boolean }> = {}
 
   // Find top-3 reference reports once for all sections
   const top3 = getTop3Referenties(dossier, historischeRapporten)
   const referentieRapporten = top3.map((r) => r.rapport)
 
+  let progressIndex = 0
   let previousSectionsSummary = ''
   const MAX_SUMMARY_CHARS = 3000
 
-  for (let i = 0; i < sectieKeys.length; i++) {
-    const sectieKey = sectieKeys[i]
+  // -------------------------------------------------------------------------
+  // Phase 1: Batch short, non-complex uncached sections
+  // -------------------------------------------------------------------------
+  const batchCandidates: BatchSectieInput[] = []
+  const processedInPhase1 = new Set<string>()
+
+  for (const sectieKey of sectieKeys) {
+    const templateTekst = templateSecties[sectieKey] ?? ''
+    const isComplex = COMPLEX_SECTIES.includes(sectieKey)
+    if (isComplex || templateTekst.length >= SHORT_TEMPLATE_THRESHOLD) continue
+
+    const config = SECTIE_CONFIG[sectieKey]
+    const stappen = config?.stappen ?? []
+    const dossierData = buildDossierData(dossier, stappen)
+
+    const cached = getSectieFromCache(sectieKey, dossierData)
+    if (cached) {
+      result[sectieKey] = { tekst: cached.tekst, isAIGenerated: cached.isAIGenerated, hasKennisbankContext: cached.hasKennisbankContext, isCached: true }
+      processedInPhase1.add(sectieKey)
+      progressIndex++
+      onProgress?.(sectieKey, progressIndex, total)
+    } else {
+      batchCandidates.push({ sectieKey, sectieTitel: config?.titel ?? sectieKey, dossierData, templateTekst })
+    }
+  }
+
+  for (let i = 0; i < batchCandidates.length; i += MAX_BATCH_SIZE) {
+    const batch = batchCandidates.slice(i, i + MAX_BATCH_SIZE)
+    const batchResults = await generateBatchMetAI(batch, referentieRapporten, dossier, objectType, marketSegment)
+
+    for (const input of batch) {
+      const sectieKey = input.sectieKey
+      const batchResult = batchResults[sectieKey]
+      result[sectieKey] = { tekst: batchResult.tekst, isAIGenerated: batchResult.isAIGenerated, hasKennisbankContext: batchResult.hasKennisbankContext }
+      if (batchResult.isAIGenerated) {
+        setSectieInCache(sectieKey, input.dossierData, batchResult)
+      }
+      processedInPhase1.add(sectieKey)
+      progressIndex++
+      onProgress?.(sectieKey, progressIndex, total)
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 2: Process remaining (complex/long) sections sequentially
+  // -------------------------------------------------------------------------
+  for (const sectieKey of sectieKeys) {
+    if (processedInPhase1.has(sectieKey)) continue
+
     const config = SECTIE_CONFIG[sectieKey]
     const sectieTitel = config?.titel ?? sectieKey
     const templateTekst = templateSecties[sectieKey] ?? ''
+    const stappen = config?.stappen ?? []
+    const dossierData = buildDossierData(dossier, stappen)
+
+    const cached = getSectieFromCache(sectieKey, dossierData)
+    if (cached) {
+      result[sectieKey] = { tekst: cached.tekst, isAIGenerated: cached.isAIGenerated, hasKennisbankContext: cached.hasKennisbankContext, isCached: true }
+      progressIndex++
+      onProgress?.(sectieKey, progressIndex, total)
+      continue
+    }
 
     const sectieResult = await generateSectieMetAI({
       sectieKey,
@@ -355,6 +553,10 @@ export async function generateAlleSectiesMetAI(
       hasKennisbankContext: sectieResult.hasKennisbankContext,
     }
 
+    if (sectieResult.isAIGenerated) {
+      setSectieInCache(sectieKey, dossierData, sectieResult)
+    }
+
     // Accumulate summary for subsequent sections
     if (sectieResult.isAIGenerated && sectieResult.tekst) {
       const excerpt = sectieResult.tekst.slice(0, 200)
@@ -371,7 +573,8 @@ export async function generateAlleSectiesMetAI(
       }
     }
 
-    onProgress?.(sectieKey, i + 1, total)
+    progressIndex++
+    onProgress?.(sectieKey, progressIndex, total)
   }
 
   return result

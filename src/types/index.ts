@@ -300,3 +300,22 @@ export interface KennisbankStats {
   }>
   rapportenPerRegio: Record<string, number>
 }
+
+/** Result of an AI coherence check across rapport sections */
+export interface CoherentieResultaat {
+  /** Whether the rapport is coherent overall */
+  isCoherent: boolean
+  /** List of detected inconsistencies */
+  inconsistenties: CoherentieInconsistentie[]
+  /** Timestamp of the check */
+  checkedAt: string
+}
+
+export interface CoherentieInconsistentie {
+  /** The section keys involved (e.g., ['b1-algemeen', 'b6-toelichting-waardering']) */
+  sectieKeys: string[]
+  /** Description of the inconsistency in Dutch */
+  beschrijving: string
+  /** Severity: 'hoog' = contradictory facts, 'gemiddeld' = style mismatch, 'laag' = minor */
+  ernst: 'hoog' | 'gemiddeld' | 'laag'
+}

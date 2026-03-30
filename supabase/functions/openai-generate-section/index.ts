@@ -99,6 +99,7 @@ interface RequestBody {
   schrijfstijl?: SchrijfStijl
   kennisbankContext?: KennisbankContext
   eerdereFeedback?: EerdereFeedback[]
+  previousSectionsSummary?: string
 }
 
 function buildUserPrompt(
@@ -109,7 +110,8 @@ function buildUserPrompt(
   templateTekst: string | undefined,
   schrijfstijl: SchrijfStijl | undefined,
   kennisbankContext: KennisbankContext | undefined,
-  eerdereFeedback: EerdereFeedback[] | undefined
+  eerdereFeedback: EerdereFeedback[] | undefined,
+  previousSectionsSummary?: string
 ): string {
   let prompt = `Genereer de tekst voor sectie "${sectieTitel}" (key: ${sectieKey}) van een taxatierapport.\n`
 
@@ -199,6 +201,13 @@ function buildUserPrompt(
     }
   }
 
+  // Voeg eerder gegenereerde secties toe als context voor consistentie
+  if (previousSectionsSummary && previousSectionsSummary.trim()) {
+    prompt += '\n--- EERDER GEGENEREERDE SECTIES (SAMENVATTING) ---\n'
+    prompt += previousSectionsSummary.trim()
+    prompt += '\n\nLet op: Zorg dat de tekst die je genereert consistent is met bovenstaande eerder gegenereerde secties. Vermijd tegenstrijdige informatie.\n'
+  }
+
   prompt += `\nSchrijf nu de tekst voor sectie "${sectieTitel}". Geef alleen de sectietekst, zonder opmaak, headers of uitleg.`
 
   // Trunceer de volledige prompt als die te lang is
@@ -217,11 +226,65 @@ serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as RequestBody
-    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback } = body
+    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback, previousSectionsSummary } = body
 
     if (!sectieKey || typeof sectieKey !== 'string') {
       return new Response(JSON.stringify({ error: 'sectieKey is required' }), {
         status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Handle coherence check special case
+    if (sectieKey === '__coherence_check') {
+      const allSectionsSummary = (dossierData as unknown as { allSectionsSummary?: string }).allSectionsSummary ?? ''
+
+      const coherenceSystemPrompt = 'Je bent een expert taxateur die taxatierapporten controleert op interne consistentie.'
+      const coherenceUserPrompt = `Controleer het volgende taxatierapport op interne inconsistenties. Geef de uitkomst als JSON.
+
+Sectie-samenvattingen:
+${allSectionsSummary}
+
+Geef een JSON-antwoord in dit formaat:
+{
+  "isCoherent": boolean,
+  "inconsistenties": [
+    {
+      "sectieKeys": ["sectie-key-1", "sectie-key-2"],
+      "beschrijving": "Beschrijving van de inconsistentie in het Nederlands",
+      "ernst": "hoog" | "gemiddeld" | "laag"
+    }
+  ]
+}
+
+Gebruik ernst "hoog" voor tegenstrijdige feiten, "gemiddeld" voor stijlverschillen, "laag" voor kleine afwijkingen.
+Als er geen inconsistenties zijn, geef dan isCoherent: true met een lege inconsistenties-array.`
+
+      console.log('[openai-generate-section] Running coherence check')
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: coherenceSystemPrompt },
+          { role: 'user', content: coherenceUserPrompt },
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+        response_format: { type: 'json_object' },
+      })
+
+      const content = response.choices[0]?.message?.content?.trim()
+      if (!content) {
+        throw new Error('OpenAI returned an empty response for coherence check')
+      }
+
+      const parsed = JSON.parse(content) as {
+        isCoherent: boolean
+        inconsistenties: Array<{ sectieKeys: string[]; beschrijving: string; ernst: 'hoog' | 'gemiddeld' | 'laag' }>
+      }
+
+      return new Response(JSON.stringify(parsed), {
+        status: 200,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       })
     }
@@ -248,7 +311,8 @@ serve(async (req: Request) => {
       templateTekst,
       schrijfstijl,
       kennisbankContext,
-      eerdereFeedback
+      eerdereFeedback,
+      previousSectionsSummary
     )
 
     console.log(`[openai-generate-section] Generating section "${sectieKey}"${kennisbankContext ? ' (met Kennisbank-context)' : ''}`)

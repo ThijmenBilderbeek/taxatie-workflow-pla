@@ -6,10 +6,10 @@ import { Separator } from './ui/separator'
 import { Badge } from './ui/badge'
 import { Copy, ThumbsUp, ThumbsDown, ArrowCounterClockwise, FileText, Download, CheckCircle, Books, Sparkle } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant } from '@/types'
+import type { Dossier, HistorischRapport, RapportSectie, SimilarityFeedback, RapportVariant, CoherentieResultaat } from '@/types'
 import { formatForFlux, createFluxReport } from '@/lib/fluxFormatter'
 import { generateAlleSecties } from '@/lib/templates'
-import { generateAlleSectiesMetAI } from '@/lib/aiRapportGenerator'
+import { generateAlleSectiesMetAI, checkRapportCoherentie } from '@/lib/aiRapportGenerator'
 import { extractDocumentKnowledge, deriveMarketSegment } from '@/lib/documentKnowledgeExtractor'
 import { useDocumentKnowledge } from '@/hooks/useDocumentKnowledge'
 import { invalidateKennisbankCache } from '@/lib/kennisbankRetriever'
@@ -106,6 +106,8 @@ export function RapportView({
   const [suggestiePanelOpen, setSuggestiePanelOpen] = useState(false)
   const [suggestiePanelChapter, setSuggestiePanelChapter] = useState<string | undefined>()
   const [suggestiePanelSectieKey, setSuggestiePanelSectieKey] = useState<string | undefined>()
+  const [coherentieResultaat, setCoherentieResultaat] = useState<CoherentieResultaat | null>(null)
+  const [isCheckingCoherentie, setIsCheckingCoherentie] = useState(false)
 
   useEffect(() => {
     if (!activeDossier) return
@@ -275,6 +277,26 @@ export function RapportView({
         rapportSecties: nieuweRapportSecties,
         updatedAt: new Date().toISOString(),
       })
+
+      // Non-blocking coherence check after all sections are generated
+      void (async () => {
+        setIsCheckingCoherentie(true)
+        try {
+          const result = await checkRapportCoherentie(
+            Object.fromEntries(
+              Object.entries(nieuweRapportSecties).map(([k, v]) => [k, { titel: v.titel, inhoud: v.inhoud }])
+            )
+          )
+          setCoherentieResultaat(result)
+          if (!result.isCoherent) {
+            toast.warning(`${result.inconsistenties.length} inconsistentie(s) gevonden in het rapport`)
+          }
+        } catch {
+          // Silently ignore coherence check failures
+        } finally {
+          setIsCheckingCoherentie(false)
+        }
+      })()
 
       const metKennisbank = nieuweKennisbankSecties.size
       if (metKennisbank > 0) {
@@ -506,6 +528,27 @@ export function RapportView({
     }
   }
 
+  const handleCoherentieCheck = async () => {
+    if (isCheckingCoherentie || !activeDossier) return
+    setIsCheckingCoherentie(true)
+    try {
+      const sectieSummaries = Object.fromEntries(
+        Object.entries(activeDossier.rapportSecties).map(([k, v]) => [k, { titel: v.titel, inhoud: v.inhoud }])
+      )
+      const result = await checkRapportCoherentie(sectieSummaries)
+      setCoherentieResultaat(result)
+      if (result.isCoherent) {
+        toast.success('Rapport is intern consistent — geen inconsistenties gevonden')
+      } else {
+        toast.warning(`${result.inconsistenties.length} inconsistentie(s) gevonden`)
+      }
+    } catch {
+      toast.error('Coherentie check mislukt')
+    } finally {
+      setIsCheckingCoherentie(false)
+    }
+  }
+
   const getReferentieInfo = (referentieId?: string) => {
     if (!referentieId) return null
     const rapport = (historischeRapporten || []).find(r => r.id === referentieId)
@@ -565,6 +608,14 @@ export function RapportView({
                 : 'AI generatie starten…'
               : 'Genereer met AI + Kennisbank'}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCoherentieCheck}
+            disabled={isCheckingCoherentie || secties.length === 0}
+          >
+            {isCheckingCoherentie ? 'Coherentie check bezig...' : 'Coherentie check'}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExportTxt}>
             <Download className="mr-2" />
             Exporteer TXT
@@ -594,6 +645,44 @@ export function RapportView({
           )}
         </div>
       </div>
+
+      {coherentieResultaat && coherentieResultaat.isCoherent && (
+        <Badge variant="outline" className="border-green-500 text-green-700">
+          ✓ Rapport coherent
+        </Badge>
+      )}
+
+      {coherentieResultaat && !coherentieResultaat.isCoherent && (
+        <Card className="border-orange-300 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="text-orange-800">
+              ⚠️ Coherentie-check: {coherentieResultaat.inconsistenties.length} inconsistentie(s) gevonden
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {coherentieResultaat.inconsistenties.map((inc, idx) => (
+                <div key={idx} className="flex items-start gap-3 p-3 rounded-lg border border-orange-200 bg-white">
+                  <Badge
+                    variant={inc.ernst === 'hoog' ? 'destructive' : inc.ernst === 'gemiddeld' ? 'secondary' : 'outline'}
+                    className="mt-0.5"
+                  >
+                    {inc.ernst}
+                  </Badge>
+                  <div>
+                    <p className="text-sm font-medium">
+                      Secties: {inc.sectieKeys.join(', ')}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {inc.beschrijving}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-6">
         {secties.length === 0 ? (

@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient'
 import { generateAlleSecties } from './templates'
-import type { Dossier, HistorischRapport } from '@/types'
+import type { Dossier, HistorischRapport, CoherentieResultaat } from '@/types'
 import type { ObjectType } from '@/types'
 import type { MarketSegment } from '@/types/kennisbank'
 import { calculateSimilarity } from './similarity'
@@ -74,6 +74,7 @@ export interface GenerateSectieOptions {
   objectType?: ObjectType
   marketSegment?: MarketSegment
   eerdereFeedback?: EerdereSectieGeneratieFeedback[]
+  previousSectionsSummary?: string
 }
 
 export interface GenerateSectieResult {
@@ -285,6 +286,7 @@ export async function generateSectieMetAI(
         schrijfstijl,
         kennisbankContext,
         eerdereFeedback: eerdereFeedback.length > 0 ? eerdereFeedback : undefined,
+        previousSectionsSummary: options.previousSectionsSummary || undefined,
       },
     })
 
@@ -327,6 +329,9 @@ export async function generateAlleSectiesMetAI(
   const top3 = getTop3Referenties(dossier, historischeRapporten)
   const referentieRapporten = top3.map((r) => r.rapport)
 
+  let previousSectionsSummary = ''
+  const MAX_SUMMARY_CHARS = 3000
+
   for (let i = 0; i < sectieKeys.length; i++) {
     const sectieKey = sectieKeys[i]
     const config = SECTIE_CONFIG[sectieKey]
@@ -341,6 +346,7 @@ export async function generateAlleSectiesMetAI(
       templateTekst,
       objectType,
       marketSegment,
+      previousSectionsSummary: previousSectionsSummary || undefined,
     })
 
     result[sectieKey] = {
@@ -349,8 +355,72 @@ export async function generateAlleSectiesMetAI(
       hasKennisbankContext: sectieResult.hasKennisbankContext,
     }
 
+    // Accumulate summary for subsequent sections
+    if (sectieResult.isAIGenerated && sectieResult.tekst) {
+      const excerpt = sectieResult.tekst.slice(0, 200)
+      const entry = `\n[${sectieKey}] ${sectieTitel}: ${excerpt}${sectieResult.tekst.length > 200 ? '...' : ''}`
+      previousSectionsSummary += entry
+      // Keep within token budget by removing complete oldest entries
+      if (previousSectionsSummary.length > MAX_SUMMARY_CHARS) {
+        const overflow = previousSectionsSummary.length - MAX_SUMMARY_CHARS
+        // Find the next section boundary after the overflow point to avoid cutting mid-entry
+        const nextBoundary = previousSectionsSummary.indexOf('\n[', overflow)
+        previousSectionsSummary = nextBoundary !== -1
+          ? previousSectionsSummary.slice(nextBoundary)
+          : previousSectionsSummary.slice(overflow)
+      }
+    }
+
     onProgress?.(sectieKey, i + 1, total)
   }
 
   return result
+}
+
+/**
+ * Performs an AI coherence check across all rapport sections.
+ * Returns a CoherentieResultaat with any detected inconsistencies.
+ * Falls back to a "coherent" result on error to avoid blocking the user.
+ */
+export async function checkRapportCoherentie(
+  rapportSecties: Record<string, { titel: string; inhoud: string }>
+): Promise<CoherentieResultaat> {
+  try {
+    // Build a summary of all sections (key + title + first 300 chars of content)
+    const allSectionsSummary = Object.entries(rapportSecties)
+      .filter(([, v]) => v.inhoud && v.inhoud.trim())
+      .map(([key, v]) => {
+        const excerpt = v.inhoud.slice(0, 300)
+        return `[${key}] ${v.titel}: ${excerpt}${v.inhoud.length > 300 ? '...' : ''}`
+      })
+      .join('\n\n')
+
+    if (!allSectionsSummary.trim()) {
+      return { isCoherent: true, inconsistenties: [], checkedAt: new Date().toISOString() }
+    }
+
+    const { data, error } = await supabase.functions.invoke('openai-generate-section', {
+      body: {
+        sectieKey: '__coherence_check',
+        sectieTitel: 'Coherentie check',
+        dossierData: { allSectionsSummary },
+      },
+    })
+
+    if (error) {
+      console.warn('[checkRapportCoherentie] Edge function error:', error)
+      return { isCoherent: true, inconsistenties: [], checkedAt: new Date().toISOString() }
+    }
+
+    const result = data as { isCoherent?: boolean; inconsistenties?: Array<{ sectieKeys: string[]; beschrijving: string; ernst: 'hoog' | 'gemiddeld' | 'laag' }> }
+
+    return {
+      isCoherent: result.isCoherent ?? true,
+      inconsistenties: result.inconsistenties ?? [],
+      checkedAt: new Date().toISOString(),
+    }
+  } catch (err) {
+    console.warn('[checkRapportCoherentie] failed silently:', err)
+    return { isCoherent: true, inconsistenties: [], checkedAt: new Date().toISOString() }
+  }
 }

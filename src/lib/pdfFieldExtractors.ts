@@ -21,6 +21,7 @@ import {
   postcodeToProvincie,
   dutchNumberWordToDigit,
   summarizeAannames,
+  normalizeBooleanLike,
 } from './pdfNormalizers'
 
 export interface ExtractionResult<T> {
@@ -1030,6 +1031,173 @@ export function extractVoorbehouden(text: string): ExtractionResult<string> | un
 }
 
 // ---------------------------------------------------------------------------
+// Group 1 — Inspectieblok (Stap 1)
+// ---------------------------------------------------------------------------
+
+export function extractMateVanInspectie(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['mate van inspectie', 'omvang inspectie', 'inspectieomvang', 'niveau van inspectie'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 120)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
+  }
+  return undefined
+}
+
+export function extractInspectieUitgevoerdDoor(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['inspectie uitgevoerd door', 'inspectie door', 'geïnspecteerd door'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 80)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
+  }
+  return undefined
+}
+
+export function extractToelichtingInspectie(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['toelichting inspectie', 'toelichting op inspectie', 'belemmeringen inspectie', 'bijzonderheden inspectie'])
+  if (exact) {
+    const value = cleanupLongFieldText(compactWhitespace(exact.raw.slice(0, 300)), 300)
+    if (value && value.length > 2) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
+  }
+  return undefined
+}
+
+export function extractHuidigGebruik(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['huidig gebruik', 'huidige gebruik', 'feitelijk gebruik'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 150)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
+  }
+  return undefined
+}
+
+export function extractVoorgenomenGebruik(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['voorgenomen gebruik', 'toekomstig gebruik', 'beoogd gebruik'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 150)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 1' }
+  }
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
+// Group 3 — Juridisch uitbreiden (Stap 5)
+// ---------------------------------------------------------------------------
+
+export function extractAantekeningenKadastraalObject(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['aantekeningen kadastraal object', 'kadastrale aantekeningen', 'aantekeningen kadaster'])
+  if (exact) {
+    const value = cleanupLongFieldText(compactWhitespace(exact.raw.slice(0, 300)), 300)
+    if (value && value.length > 2) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 5' }
+  }
+  return undefined
+}
+
+export function extractGebruikConformOmgevingsplan(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['gebruik conform omgevingsplan', 'conform omgevingsplan', 'conform bestemmingsplan'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 200)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 5' }
+  }
+  return undefined
+}
+
+export function extractBijzonderePubliekrechtelijkeBepalingen(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['bijzondere publiekrechtelijke bepalingen', 'publiekrechtelijke bepalingen', 'publiekrechtelijke beperkingen'])
+  if (exact) {
+    const value = cleanupLongFieldText(compactWhitespace(exact.raw.slice(0, 300)), 300)
+    if (value && value.length > 2) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 5' }
+  }
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
+// Group 7 — Duurzaamheid (Stap 10)
+// ---------------------------------------------------------------------------
+
+export function extractKlimaatrisicos(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ["klimaatrisico's", 'klimaatrisico', 'klimaatbestendigheid'])
+  if (exact) {
+    const value = cleanupLongFieldText(compactWhitespace(exact.raw.slice(0, 300)), 300)
+    if (value && value.length > 2) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10' }
+  }
+  return undefined
+}
+
+export function extractDuurzaamheidscertificaten(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['duurzaamheidscertificaten', 'duurzaamheidscertificaat', 'breeam', 'gpr', 'well'])
+  if (exact) {
+    const value = cleanupLongFieldText(compactWhitespace(exact.raw.slice(0, 200)), 200)
+    if (value && value.length > 2) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10' }
+  }
+  return undefined
+}
+
+export function extractIsolatieDak(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['isolatie dak', 'dakisolatie', 'rc-waarde dak'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 80)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10' }
+  }
+  return undefined
+}
+
+export function extractIsolatieGevel(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['isolatie gevel', 'gevelisolatie', 'rc-waarde gevel'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 80)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10' }
+  }
+  return undefined
+}
+
+export function extractIsolatieVloer(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['isolatie vloer', 'vloerisolatie', 'rc-waarde vloer'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 80)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10' }
+  }
+  return undefined
+}
+
+export function extractIsolatieGlas(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['isolatie glas', 'beglazing', 'hr glas', 'hr++ glas', 'triple glas'])
+  if (exact) {
+    const value = exact.raw.split('\n')[0].trim().slice(0, 80)
+    if (value) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10' }
+  }
+  return undefined
+}
+
+export function extractGreenLease(text: string): ExtractionResult<boolean> | undefined {
+  const exact = tryExactLabel(text, ['green lease', 'groene huurovereenkomst'])
+  if (exact) {
+    const raw = exact.raw.split('\n')[0].trim().slice(0, 40)
+    const b = normalizeBooleanLike(raw)
+    if (b !== 'unknown') return { value: b, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10', wasNormalized: true }
+  }
+  return undefined
+}
+
+export function extractOverwegendLedVerlichting(text: string): ExtractionResult<boolean> | undefined {
+  const exact = tryExactLabel(text, ['led verlichting', 'overwegend led'])
+  if (exact) {
+    const raw = exact.raw.split('\n')[0].trim().slice(0, 40)
+    const b = normalizeBooleanLike(raw)
+    if (b !== 'unknown') return { value: b, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10', wasNormalized: true }
+  }
+  return undefined
+}
+
+export function extractMaatregelenVerduurzaming(text: string): ExtractionResult<string> | undefined {
+  const exact = tryExactLabel(text, ['maatregelen verduurzaming', 'verduurzamingsmaatregelen', 'voorgestelde maatregelen', 'verduurzaming'])
+  if (exact) {
+    const value = cleanupLongFieldText(compactWhitespace(exact.raw.slice(0, 500)), 500)
+    if (value && value.length > 2) return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 10' }
+  }
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
 // Master function
 // ---------------------------------------------------------------------------
 
@@ -1093,6 +1261,23 @@ export function extractAllFieldsWithConfidence(text: string): ExtractionDebugRec
   add('kapitalisatiefactor', extractKapitalisatiefactor(text))
   add('aannames', extractAannames(text))
   add('voorbehouden', extractVoorbehouden(text))
+  add('mateVanInspectie', extractMateVanInspectie(text))
+  add('inspectieUitgevoerdDoor', extractInspectieUitgevoerdDoor(text))
+  add('toelichtingInspectie', extractToelichtingInspectie(text))
+  add('huidigGebruik', extractHuidigGebruik(text))
+  add('voorgenomenGebruik', extractVoorgenomenGebruik(text))
+  add('aantekeningenKadastraalObject', extractAantekeningenKadastraalObject(text))
+  add('gebruikConformOmgevingsplan', extractGebruikConformOmgevingsplan(text))
+  add('bijzonderePubliekrechtelijkeBepalingen', extractBijzonderePubliekrechtelijkeBepalingen(text))
+  add('klimaatrisicos', extractKlimaatrisicos(text))
+  add('duurzaamheidscertificaten', extractDuurzaamheidscertificaten(text))
+  add('isolatieDak', extractIsolatieDak(text))
+  add('isolatieGevel', extractIsolatieGevel(text))
+  add('isolatieVloer', extractIsolatieVloer(text))
+  add('isolatieGlas', extractIsolatieGlas(text))
+  add('greenLease', extractGreenLease(text))
+  add('overwegendLedVerlichting', extractOverwegendLedVerlichting(text))
+  add('maatregelenVerduurzaming', extractMaatregelenVerduurzaming(text))
 
   if (import.meta.env.DEV) {
     console.debug('[pdfFieldExtractors] extractAllFieldsWithConfidence', debug)

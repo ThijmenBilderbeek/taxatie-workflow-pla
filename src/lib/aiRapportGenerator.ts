@@ -129,6 +129,7 @@ export interface GenerateSectieOptions {
   marketSegment?: MarketSegment
   eerdereFeedback?: EerdereSectieGeneratieFeedback[]
   previousSectionsSummary?: string
+  dossierId?: string
 }
 
 export interface GenerateSectieResult {
@@ -359,6 +360,7 @@ export async function generateSectieMetAI(
         eerdereFeedback: eerdereFeedback.length > 0 ? eerdereFeedback : undefined,
         previousSectionsSummary: options.previousSectionsSummary || undefined,
         model,
+        dossierId: options.dossierId,
       },
     })
 
@@ -404,6 +406,7 @@ async function generateBatchMetAI(
       templateTekst: input.templateTekst,
       objectType,
       marketSegment,
+      dossierId: dossier.id,
     })
     return { [input.sectieKey]: result }
   }
@@ -418,6 +421,7 @@ async function generateBatchMetAI(
           templateTekst,
         })),
         model: 'gpt-4o-mini', // Batched sections are always non-complex
+        dossierId: dossier.id,
       },
     })
 
@@ -557,6 +561,7 @@ export async function generateAlleSectiesMetAI(
       objectType,
       marketSegment,
       previousSectionsSummary: previousSectionsSummary || undefined,
+      dossierId: dossier.id,
     })
 
     result[sectieKey] = buildResultEntry(sectieResult)

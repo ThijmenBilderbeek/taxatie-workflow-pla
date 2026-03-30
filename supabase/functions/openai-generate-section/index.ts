@@ -5,6 +5,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 // @deno-types="https://esm.sh/openai@4/types"
 import OpenAI from 'https://esm.sh/openai@4'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const apiKey = Deno.env.get('OPENAI_API_KEY')
 if (!apiKey) {
@@ -12,6 +13,65 @@ if (!apiKey) {
 }
 
 const openai = new OpenAI({ apiKey: apiKey ?? '' })
+
+// ---------------------------------------------------------------------------
+// Model pricing (USD per 1M tokens)
+// ---------------------------------------------------------------------------
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'gpt-4o':      { input: 2.50, output: 10.00 },
+}
+
+function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
+  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['gpt-4o-mini']
+  return (promptTokens / 1_000_000) * pricing.input + (completionTokens / 1_000_000) * pricing.output
+}
+
+async function logUsage(
+  req: Request,
+  sectieKey: string,
+  model: string,
+  promptTokens: number,
+  completionTokens: number,
+  totalTokens: number,
+  dossierId: string | null,
+  isBatch: boolean
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (!supabaseUrl || !serviceRoleKey) return
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
+
+    // Extract user_id from JWT if present
+    let userId: string | null = null
+    const authHeader = req.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const { data } = await supabaseAdmin.auth.getUser(token)
+      userId = data.user?.id ?? null
+    }
+
+    const estimatedCost = estimateCost(model, promptTokens, completionTokens)
+
+    await supabaseAdmin.from('ai_usage_log').insert({
+      user_id: userId,
+      dossier_id: dossierId,
+      sectie_key: sectieKey,
+      model,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+      estimated_cost_usd: estimatedCost,
+      is_cached: false,
+      is_batch: isBatch,
+    })
+  } catch (err) {
+    // Usage logging is non-critical — never block the main response
+    console.warn('[openai-generate-section] Failed to log usage:', err instanceof Error ? err.message : err)
+  }
+}
 
 const MAX_REFERENCE_TEXT_LENGTH = 800
 
@@ -102,6 +162,7 @@ interface RequestBody {
   previousSectionsSummary?: string
   model?: string
   batchSecties?: BatchSectie[]
+  dossierId?: string
 }
 
 interface BatchSectie {
@@ -235,7 +296,8 @@ serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as RequestBody
-    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback, previousSectionsSummary, model, batchSecties } = body
+    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback, previousSectionsSummary, model, batchSecties, dossierId } = body
+    const dossierIdValue = (dossierId && typeof dossierId === 'string') ? dossierId : null
 
     // -----------------------------------------------------------------------
     // Batch mode: generate multiple short sections in one call
@@ -297,6 +359,13 @@ Schrijf voor elke sectie beknopte, professionele tekst zonder opmaak. Retourneer
       const batchContent = batchResponse.choices[0]?.message?.content?.trim()
       if (!batchContent) {
         throw new Error('OpenAI returned an empty response for batch generation')
+      }
+
+      // Log usage for batch generation
+      if (batchResponse.usage) {
+        await logUsage(req, `__batch(${batchKeys.join(',')})`, batchModel,
+          batchResponse.usage.prompt_tokens, batchResponse.usage.completion_tokens,
+          batchResponse.usage.total_tokens, dossierIdValue, true)
       }
 
       let batchParsed: { secties?: Record<string, string> }
@@ -363,6 +432,13 @@ Als er geen inconsistenties zijn, geef dan isCoherent: true met een lege inconsi
         throw new Error('OpenAI returned an empty response for coherence check')
       }
 
+      // Log usage for coherence check
+      if (response.usage) {
+        await logUsage(req, '__coherence_check', 'gpt-4o-mini',
+          response.usage.prompt_tokens, response.usage.completion_tokens,
+          response.usage.total_tokens, dossierIdValue, false)
+      }
+
       const parsed = JSON.parse(content) as {
         isCoherent: boolean
         inconsistenties: Array<{ sectieKeys: string[]; beschrijving: string; ernst: 'hoog' | 'gemiddeld' | 'laag' }>
@@ -417,6 +493,13 @@ Als er geen inconsistenties zijn, geef dan isCoherent: true met een lege inconsi
     const tekst = response.choices[0]?.message?.content?.trim()
     if (!tekst) {
       throw new Error('OpenAI returned an empty response')
+    }
+
+    // Log usage for single section generation
+    if (response.usage) {
+      await logUsage(req, sectieKey, selectedModel,
+        response.usage.prompt_tokens, response.usage.completion_tokens,
+        response.usage.total_tokens, dossierIdValue, false)
     }
 
     return new Response(JSON.stringify({ tekst }), {

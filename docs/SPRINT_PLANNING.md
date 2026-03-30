@@ -77,7 +77,7 @@ Dit document beschrijft de geplande sprints na Sprint 4 (Kennisbank-context inte
 - Caching van AI-responses per `sectieKey` + `dossierHash` combinatie — identieke dossiers genereren geen nieuwe API calls
 - Batch meerdere korte secties in één API call om overhead te verminderen
 - Migreer van `gpt-4o-mini` naar `gpt-4o` alleen voor complexe secties (B.6, B.9, B.10) om kosten te beheersen
-- Rate limiting dashboard voor OpenAI kosten monitoring — toon verbruik per gebruiker/dossier
+- Rate limiting dashboard voor OpenAI kosten monitoring — toon verbruik per gebruiker/dossier ✅
 
 **Relevante bestanden:**
 - `src/lib/aiRapportGenerator.ts` — caching en batching implementeren

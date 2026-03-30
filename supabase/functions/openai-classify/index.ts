@@ -5,6 +5,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 // @deno-types="https://esm.sh/openai@4/types"
 import OpenAI from 'https://esm.sh/openai@4'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const apiKey = Deno.env.get('OPENAI_API_KEY')
 if (!apiKey) {
@@ -12,6 +13,57 @@ if (!apiKey) {
 }
 
 const openai = new OpenAI({ apiKey: apiKey ?? '' })
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'gpt-4o':      { input: 2.50, output: 10.00 },
+}
+
+function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
+  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['gpt-4o-mini']
+  return (promptTokens / 1_000_000) * pricing.input + (completionTokens / 1_000_000) * pricing.output
+}
+
+async function logUsage(
+  req: Request,
+  model: string,
+  promptTokens: number,
+  completionTokens: number,
+  totalTokens: number
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (!supabaseUrl || !serviceRoleKey) return
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
+
+    let userId: string | null = null
+    const authHeader = req.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const { data } = await supabaseAdmin.auth.getUser(token)
+      userId = data.user?.id ?? null
+    }
+
+    const estimatedCost = estimateCost(model, promptTokens, completionTokens)
+
+    await supabaseAdmin.from('ai_usage_log').insert({
+      user_id: userId,
+      dossier_id: null,
+      sectie_key: '__classify',
+      model,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+      estimated_cost_usd: estimatedCost,
+      is_cached: false,
+      is_batch: false,
+    })
+  } catch (err) {
+    console.warn('[openai-classify] Failed to log usage:', err instanceof Error ? err.message : err)
+  }
+}
 
 const SYSTEM_PROMPT = `Je bent een expert in Nederlandse taxatierapporten (vastgoedwaardering).
 Analyseer de gegeven tekstpassage en retourneer een JSON-object met de volgende velden:
@@ -68,6 +120,13 @@ serve(async (req: Request) => {
       throw new Error('OpenAI returned an empty response')
     }
     const classification = JSON.parse(raw)
+
+    // Log usage
+    if (response.usage) {
+      await logUsage(req, 'gpt-4o-mini',
+        response.usage.prompt_tokens, response.usage.completion_tokens,
+        response.usage.total_tokens)
+    }
 
     // Optionally generate a vector embedding for semantic search
     if (generateEmbedding) {

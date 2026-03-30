@@ -8,6 +8,7 @@ import { WizardFlow } from './components/WizardFlow'
 import { RapportView } from './components/RapportView'
 import { Instellingen } from './components/Instellingen'
 import { Kennisbank } from './components/Kennisbank'
+import { AIUsageDashboard } from './components/AIUsageDashboard'
 import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Toaster } from './components/ui/sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog'
@@ -17,7 +18,7 @@ import { Button } from './components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import type { Dossier, SimilarityFeedback } from './types'
 
-type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen'
+type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen' | 'ai-usage'
 
 function LoginForm({ onSignIn, onSignUp }: {
   onSignIn: (email: string, password: string) => Promise<{ error: unknown }>
@@ -219,6 +220,7 @@ function App() {
                   </TabsTrigger>
                   <TabsTrigger value="kennisbank">Kennisbank</TabsTrigger>
                   <TabsTrigger value="instellingen">Instellingen</TabsTrigger>
+                  <TabsTrigger value="ai-usage">AI Gebruik</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Button variant="outline" size="sm" onClick={signOut}>
@@ -290,6 +292,10 @@ function App() {
               nieuweRapporten.forEach(addRapport)
             }
           />
+        )}
+
+        {currentView === 'ai-usage' && (
+          <AIUsageDashboard />
         )}
       </main>
 

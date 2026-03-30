@@ -15,6 +15,9 @@ const openai = new OpenAI({ apiKey: apiKey ?? '' })
 
 const MAX_REFERENCE_TEXT_LENGTH = 800
 
+// Maximale tekens voor de volledige user-prompt (voorkomt overschrijding ~3000 tokens)
+const MAX_PROMPT_CHARS = 10000
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -56,6 +59,29 @@ interface SchrijfStijl {
   detailLevel?: string
 }
 
+interface TemplateChunk {
+  text: string
+  chapter: string
+  chunkType: string
+}
+
+interface StyleExample {
+  text: string
+  tones: string[]
+}
+
+interface WritingGuidance {
+  toneOfVoice: string
+  detailLevel: string
+  standardizationLevel: string
+}
+
+interface KennisbankContext {
+  templateChunks: TemplateChunk[]
+  styleExamples: StyleExample[]
+  writingGuidance: WritingGuidance | null
+}
+
 interface RequestBody {
   sectieKey: string
   sectieTitel: string
@@ -63,6 +89,7 @@ interface RequestBody {
   referenties?: Referentie[]
   templateTekst?: string
   schrijfstijl?: SchrijfStijl
+  kennisbankContext?: KennisbankContext
 }
 
 function buildUserPrompt(
@@ -71,11 +98,12 @@ function buildUserPrompt(
   dossierData: DossierData,
   referenties: Referentie[],
   templateTekst: string | undefined,
-  schrijfstijl: SchrijfStijl | undefined
+  schrijfstijl: SchrijfStijl | undefined,
+  kennisbankContext: KennisbankContext | undefined
 ): string {
   let prompt = `Genereer de tekst voor sectie "${sectieTitel}" (key: ${sectieKey}) van een taxatierapport.\n`
 
-  // Add dossier data
+  // Voeg dossierdata toe
   const dossierSections = Object.entries(dossierData).filter(([, v]) => v && Object.keys(v).length > 0)
   if (dossierSections.length > 0) {
     prompt += '\nDossiergegevens:\n'
@@ -90,8 +118,15 @@ function buildUserPrompt(
     }
   }
 
-  // Add writing style hints
-  if (schrijfstijl?.toneOfVoice || schrijfstijl?.detailLevel) {
+  // Voeg kennisbank schrijfstijl toe (prioriteit boven schrijfstijl uit referenties)
+  if (kennisbankContext?.writingGuidance) {
+    const g = kennisbankContext.writingGuidance
+    prompt += '\nSchrijfstijl (vanuit Kennisbank):\n'
+    prompt += `- Toon: ${g.toneOfVoice}\n`
+    prompt += `- Detailniveau: ${g.detailLevel}\n`
+    prompt += `- Standaardisatieniveau: ${g.standardizationLevel}\n`
+  } else if (schrijfstijl?.toneOfVoice || schrijfstijl?.detailLevel) {
+    // Fallback: schrijfstijl uit referentierapporten
     prompt += '\nSchrijfstijl:\n'
     if (schrijfstijl.toneOfVoice) {
       prompt += `- Toon: ${schrijfstijl.toneOfVoice}\n`
@@ -101,7 +136,24 @@ function buildUserPrompt(
     }
   }
 
-  // Add reference reports
+  // Voeg kennisbank template-chunks toe
+  if (kennisbankContext?.templateChunks && kennisbankContext.templateChunks.length > 0) {
+    prompt += '\nTemplate-teksten uit vergelijkbare rapporten (gebruik als basis):\n'
+    for (const chunk of kennisbankContext.templateChunks) {
+      prompt += `\n[Hoofdstuk: ${chunk.chapter}, Type: ${chunk.chunkType}]\n"${chunk.text}"\n`
+    }
+  }
+
+  // Voeg kennisbank stijlvoorbeelden toe
+  if (kennisbankContext?.styleExamples && kennisbankContext.styleExamples.length > 0) {
+    prompt += '\nVoorbeelden van de gewenste schrijfstijl:\n'
+    for (const example of kennisbankContext.styleExamples) {
+      const tonenLabel = example.tones.length > 0 ? ` [${example.tones.join(', ')}]` : ''
+      prompt += `\n[Stijlvoorbeeld${tonenLabel}]\n"${example.text}"\n`
+    }
+  }
+
+  // Voeg referentierapporten toe
   if (referenties.length > 0) {
     prompt += '\nVergelijkbare rapporten als stijlreferentie:\n'
     for (const ref of referenties) {
@@ -113,7 +165,7 @@ function buildUserPrompt(
     }
   }
 
-  // Add template as structural hint
+  // Voeg template toe als structuurhint
   if (templateTekst && templateTekst.trim()) {
     const truncatedTemplate =
       templateTekst.length > 600 ? templateTekst.slice(0, 600) + '…' : templateTekst
@@ -121,6 +173,11 @@ function buildUserPrompt(
   }
 
   prompt += `\nSchrijf nu de tekst voor sectie "${sectieTitel}". Geef alleen de sectietekst, zonder opmaak, headers of uitleg.`
+
+  // Trunceer de volledige prompt als die te lang is
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    prompt = prompt.slice(0, MAX_PROMPT_CHARS) + '\n…[ingekort voor token-budget]'
+  }
 
   return prompt
 }
@@ -133,7 +190,7 @@ serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as RequestBody
-    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl } = body
+    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext } = body
 
     if (!sectieKey || typeof sectieKey !== 'string') {
       return new Response(JSON.stringify({ error: 'sectieKey is required' }), {
@@ -162,10 +219,11 @@ serve(async (req: Request) => {
       dossierData,
       referenties ?? [],
       templateTekst,
-      schrijfstijl
+      schrijfstijl,
+      kennisbankContext
     )
 
-    console.log(`[openai-generate-section] Generating section "${sectieKey}"`)
+    console.log(`[openai-generate-section] Generating section "${sectieKey}"${kennisbankContext ? ' (met Kennisbank-context)' : ''}`)
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',

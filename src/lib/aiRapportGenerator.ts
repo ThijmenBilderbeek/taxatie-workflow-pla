@@ -79,8 +79,7 @@ const sectieCache = new Map<string, GenerateSectieResult>()
 function hashString(str: string): string {
   let hash = 5381
   for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) + str.charCodeAt(i)
-    hash = hash & hash // Convert to 32-bit integer
+    hash = (hash * 33 + str.charCodeAt(i)) | 0 // Keep within 32-bit signed integer range
   }
   return Math.abs(hash).toString(36)
 }
@@ -99,7 +98,7 @@ function setSectieInCache(sectieKey: string, dossierData: Record<string, unknown
     if (firstKey !== undefined) sectieCache.delete(firstKey)
   }
   // Store without isCached flag — the flag is added when the value is returned from cache
-  const { isCached: _omit, ...toStore } = result
+  const { isCached: _isCached, ...toStore } = result
   sectieCache.set(getCacheKey(sectieKey, dossierData), toStore)
 }
 
@@ -444,6 +443,19 @@ async function generateBatchMetAI(
   }
 }
 
+/** Builds the result entry for a section, optionally marking it as served from cache. */
+function buildResultEntry(
+  sectieResult: Pick<GenerateSectieResult, 'tekst' | 'isAIGenerated' | 'hasKennisbankContext'>,
+  isCached = false
+): { tekst: string; isAIGenerated: boolean; hasKennisbankContext?: boolean; isCached?: boolean } {
+  return {
+    tekst: sectieResult.tekst,
+    isAIGenerated: sectieResult.isAIGenerated,
+    hasKennisbankContext: sectieResult.hasKennisbankContext,
+    ...(isCached ? { isCached: true } : {}),
+  }
+}
+
 /**
  * Generates all rapport sections using AI, with fallback to templates.
  * Short non-complex sections are batched in Phase 1 to reduce API overhead.
@@ -490,7 +502,7 @@ export async function generateAlleSectiesMetAI(
 
     const cached = getSectieFromCache(sectieKey, dossierData)
     if (cached) {
-      result[sectieKey] = { tekst: cached.tekst, isAIGenerated: cached.isAIGenerated, hasKennisbankContext: cached.hasKennisbankContext, isCached: true }
+      result[sectieKey] = buildResultEntry(cached, true)
       processedInPhase1.add(sectieKey)
       progressIndex++
       onProgress?.(sectieKey, progressIndex, total)
@@ -506,7 +518,7 @@ export async function generateAlleSectiesMetAI(
     for (const input of batch) {
       const sectieKey = input.sectieKey
       const batchResult = batchResults[sectieKey]
-      result[sectieKey] = { tekst: batchResult.tekst, isAIGenerated: batchResult.isAIGenerated, hasKennisbankContext: batchResult.hasKennisbankContext }
+      result[sectieKey] = buildResultEntry(batchResult)
       if (batchResult.isAIGenerated) {
         setSectieInCache(sectieKey, input.dossierData, batchResult)
       }
@@ -530,7 +542,7 @@ export async function generateAlleSectiesMetAI(
 
     const cached = getSectieFromCache(sectieKey, dossierData)
     if (cached) {
-      result[sectieKey] = { tekst: cached.tekst, isAIGenerated: cached.isAIGenerated, hasKennisbankContext: cached.hasKennisbankContext, isCached: true }
+      result[sectieKey] = buildResultEntry(cached, true)
       progressIndex++
       onProgress?.(sectieKey, progressIndex, total)
       continue
@@ -547,11 +559,7 @@ export async function generateAlleSectiesMetAI(
       previousSectionsSummary: previousSectionsSummary || undefined,
     })
 
-    result[sectieKey] = {
-      tekst: sectieResult.tekst,
-      isAIGenerated: sectieResult.isAIGenerated,
-      hasKennisbankContext: sectieResult.hasKennisbankContext,
-    }
+    result[sectieKey] = buildResultEntry(sectieResult)
 
     if (sectieResult.isAIGenerated) {
       setSectieInCache(sectieKey, dossierData, sectieResult)

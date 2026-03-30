@@ -299,7 +299,12 @@ Schrijf voor elke sectie beknopte, professionele tekst zonder opmaak. Retourneer
         throw new Error('OpenAI returned an empty response for batch generation')
       }
 
-      const batchParsed = JSON.parse(batchContent) as { secties?: Record<string, string> }
+      let batchParsed: { secties?: Record<string, string> }
+      try {
+        batchParsed = JSON.parse(batchContent) as { secties?: Record<string, string> }
+      } catch {
+        throw new Error('OpenAI returned invalid JSON for batch generation')
+      }
       const results = batchParsed.secties ?? {}
 
       return new Response(JSON.stringify({ results }), {

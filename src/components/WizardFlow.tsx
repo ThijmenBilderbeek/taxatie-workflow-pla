@@ -7,6 +7,8 @@ import { Textarea } from './ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Switch } from './ui/switch'
 import { Progress } from './ui/progress'
+import { Badge } from './ui/badge'
+import { Skeleton } from './ui/skeleton'
 import { ArrowLeft, ArrowRight, Check, Lightbulb } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { 
@@ -25,8 +27,11 @@ import type {
 } from '@/types'
 import { calculateSimilarity, calculateAllSimilarities } from '@/lib/similarity'
 import { getSuggestiesVoorStap, type VeldSuggestie } from '@/lib/suggestions'
+import { getAISuggestiesVoorStap } from '@/lib/aiSuggestions'
 import { generateAlleSecties } from '@/lib/templates'
 import { formatBedrag, formatOppervlakte, formatDatum } from '@/lib/fluxFormatter'
+import { SuggestieFeedbackDialog } from './SuggestieFeedbackDialog'
+import { supabase } from '@/lib/supabaseClient'
 
 export function WizardFlow({
   activeDossierId,
@@ -59,6 +64,13 @@ export function WizardFlow({
   const [stap9, setStap9] = useState<Partial<Aannames>>(activeDossier?.stap9 || {})
   const [selectedReferenties, setSelectedReferenties] = useState<string[]>(activeDossier?.geselecteerdeReferenties || [])
   const [dismissedSuggesties, setDismissedSuggesties] = useState<Set<string>>(new Set())
+  const [suggestiesHuidigeStap, setSuggestiesHuidigeStap] = useState<VeldSuggestie[]>([])
+  const [isLoadingSuggesties, setIsLoadingSuggesties] = useState(false)
+  const [feedbackDialog, setFeedbackDialog] = useState<{
+    open: boolean
+    veldNaam: string
+    gesuggeerdeTekst: string
+  }>({ open: false, veldNaam: '', gesuggeerdeTekst: '' })
 
   useEffect(() => {
     if (activeDossier) {
@@ -125,7 +137,40 @@ export function WizardFlow({
 
   useEffect(() => {
     setDismissedSuggesties(new Set())
+    setSuggestiesHuidigeStap([])
   }, [currentStep])
+
+  useEffect(() => {
+    if (!activeDossier) return
+    const stapsMetSuggesties = [2, 5, 6, 7, 9]
+    if (!stapsMetSuggesties.includes(currentStep)) return
+    if ((historischeRapporten || []).length === 0) return
+
+    let cancelled = false
+    const huidigeDossierSnapshot = { stap1, stap2, stap3, stap4, stap5, stap6, stap7, stap8, stap9 } as Partial<Dossier>
+
+    setIsLoadingSuggesties(true)
+    getAISuggestiesVoorStap(
+      currentStep,
+      huidigeDossierSnapshot,
+      historischeRapporten || [],
+      similarityInstellingen
+    ).then((result) => {
+      if (!cancelled) {
+        setSuggestiesHuidigeStap(result)
+        setIsLoadingSuggesties(false)
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setIsLoadingSuggesties(false)
+      }
+    })
+
+    return () => { cancelled = true }
+  // Intentionally only re-fetches when the step or dossier changes, not on every field edit.
+  // This avoids triggering AI calls on each keystroke while still refreshing when navigating.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, activeDossier?.id])
 
   const validateStep = (step: number): boolean => {
     switch (step) {
@@ -324,20 +369,37 @@ export function WizardFlow({
         break
     }
     setDismissedSuggesties((prev) => new Set([...prev, veldNaam]))
+
+    // Save positive feedback
+    if (activeDossier) {
+      const suggestie = suggestiesHuidigeStap.find((s) => s.veldNaam === veldNaam)
+      if (suggestie) {
+        supabase.from('suggestie_feedback').insert({
+          dossier_id: activeDossier.id,
+          stap: currentStep,
+          veld_naam: veldNaam,
+          gesuggereerde_tekst: suggestie.suggestie,
+          feedback_type: 'positief',
+        }).then(() => {
+          // Positive feedback stored silently — no user notification needed
+        })
+      }
+    }
   }
 
   const handleSuggestieDismiss = (veldNaam: string) => {
-    setDismissedSuggesties((prev) => new Set([...prev, veldNaam]))
+    const suggestie = suggestiesHuidigeStap.find((s) => s.veldNaam === veldNaam)
+    if (suggestie) {
+      setFeedbackDialog({ open: true, veldNaam, gesuggeerdeTekst: suggestie.suggestie })
+    } else {
+      setDismissedSuggesties((prev) => new Set([...prev, veldNaam]))
+    }
   }
 
-  const suggestiesHuidigeStap = activeDossier
-    ? getSuggestiesVoorStap(
-        currentStep,
-        { stap1, stap2, stap3, stap4, stap5, stap6, stap7, stap8, stap9 } as Partial<Dossier>,
-        historischeRapporten || [],
-        similarityInstellingen
-      )
-    : []
+  const handleFeedbackDialogClose = () => {
+    setFeedbackDialog((prev) => ({ ...prev, open: false }))
+    setDismissedSuggesties((prev) => new Set([...prev, feedbackDialog.veldNaam]))
+  }
 
   if (!activeDossier) {
     return (
@@ -365,14 +427,14 @@ export function WizardFlow({
         </CardHeader>
         <CardContent className="space-y-6">
           {currentStep === 1 && <Stap1 data={stap1} onChange={setStap1} />}
-          {currentStep === 2 && <Stap2 data={stap2} onChange={setStap2} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 2 && <Stap2 data={stap2} onChange={setStap2} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 3 && <Stap3 data={stap3} onChange={setStap3} />}
           {currentStep === 4 && <Stap4 data={stap4} onChange={setStap4} />}
-          {currentStep === 5 && <Stap5 data={stap5} onChange={setStap5} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
-          {currentStep === 6 && <Stap6 data={stap6} onChange={setStap6} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
-          {currentStep === 7 && <Stap7 data={stap7} onChange={setStap7} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 5 && <Stap5 data={stap5} onChange={setStap5} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 6 && <Stap6 data={stap6} onChange={setStap6} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 7 && <Stap7 data={stap7} onChange={setStap7} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 8 && <Stap8 data={stap8} onChange={setStap8} />}
-          {currentStep === 9 && <Stap9 data={stap9} onChange={setStap9} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 9 && <Stap9 data={stap9} onChange={setStap9} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 10 && (
             <Stap10
               results={similarityResults}
@@ -406,6 +468,17 @@ export function WizardFlow({
           </div>
         </CardContent>
       </Card>
+
+      {activeDossier && feedbackDialog.open && (
+        <SuggestieFeedbackDialog
+          open={feedbackDialog.open}
+          dossierId={activeDossier.id}
+          stap={currentStep}
+          veldNaam={feedbackDialog.veldNaam}
+          gesuggeerdeTekst={feedbackDialog.gesuggeerdeTekst}
+          onClose={handleFeedbackDialogClose}
+        />
+      )}
     </div>
   )
 }
@@ -430,24 +503,38 @@ function SuggestieBanner({
   suggestie,
   bronAdres,
   bronScore,
+  isAIGenerated,
+  bronRapporten,
   onAccept,
   onDismiss,
 }: {
   suggestie: string
   bronAdres: string
   bronScore: number | null
+  isAIGenerated?: boolean
+  bronRapporten?: Array<{ adres: string; score: number; afstandKm: number }>
   onAccept: () => void
   onDismiss: () => void
 }) {
   const preview = suggestie.length > 150 ? suggestie.slice(0, 150) + '...' : suggestie
+  const aantalBronnen = bronRapporten?.length ?? 1
   return (
     <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 space-y-2">
-      <div className="flex items-center gap-2 text-sm text-accent-foreground font-medium">
-        <Lightbulb className="h-4 w-4" />
-        <span>
-          Suggestie op basis van {bronAdres}
-          {bronScore !== null ? ` (score: ${bronScore})` : ''}
-        </span>
+      <div className="flex items-center gap-2 text-sm text-accent-foreground font-medium flex-wrap">
+        <Lightbulb className="h-4 w-4 shrink-0" />
+        {isAIGenerated ? (
+          <>
+            <Badge variant="secondary" className="text-xs">AI-gegenereerd</Badge>
+            <span>
+              Op basis van {aantalBronnen} vergelijkbare rapport{aantalBronnen !== 1 ? 'en' : ''}
+            </span>
+          </>
+        ) : (
+          <span>
+            Suggestie op basis van {bronAdres}
+            {bronScore !== null ? ` (score: ${bronScore})` : ''}
+          </span>
+        )}
       </div>
       <p className="text-sm text-muted-foreground italic">"{preview}"</p>
       <div className="flex gap-2">
@@ -455,7 +542,7 @@ function SuggestieBanner({
           ✓ Overnemen
         </Button>
         <Button size="sm" variant="ghost" onClick={onDismiss}>
-          ✗ Negeren
+          ✗ Niet goed
         </Button>
       </div>
     </div>
@@ -465,6 +552,7 @@ function SuggestieBanner({
 interface SuggestieProps {
   suggesties?: VeldSuggestie[]
   dismissedSuggesties?: Set<string>
+  isLoadingSuggesties?: boolean
   onSuggestieAccept?: (veldNaam: string, waarde: string) => void
   onSuggestieDismiss?: (veldNaam: string) => void
 }
@@ -602,7 +690,7 @@ function Stap1({ data, onChange }: { data: Partial<AlgemeneGegevens>; onChange: 
   )
 }
 
-function Stap2({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<AdresLocatie>; onChange: (data: Partial<AdresLocatie>) => void } & SuggestieProps) {
+function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<AdresLocatie>; onChange: (data: Partial<AdresLocatie>) => void } & SuggestieProps) {
   const [pdokSuggesties, setPdokSuggesties] = useState<Array<{ id: string; weergavenaam: string }>>([])
   const [toonSuggesties, setToonSuggesties] = useState(false)
   const [isLaden, setIsLaden] = useState(false)
@@ -673,8 +761,11 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
   }
 
   const renderSuggestie = (veldNaam: string) => {
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     if (dismissedSuggesties?.has(veldNaam)) return null
+    if (isLoadingSuggesties) {
+      return <Skeleton className="h-20 w-full rounded-lg" />
+    }
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
     if (!s) return null
     return (
@@ -682,6 +773,8 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
         suggestie={s.suggestie}
         bronAdres={s.bronAdres}
         bronScore={s.bronScore}
+        isAIGenerated={s.isAIGenerated}
+        bronRapporten={s.bronRapporten}
         onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
         onDismiss={() => onSuggestieDismiss(veldNaam)}
       />
@@ -1051,10 +1144,13 @@ function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (dat
   )
 }
 
-function Stap5({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<JuridischeInfo>; onChange: (data: Partial<JuridischeInfo>) => void } & SuggestieProps) {
+function Stap5({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<JuridischeInfo>; onChange: (data: Partial<JuridischeInfo>) => void } & SuggestieProps) {
   const renderSuggestie = (veldNaam: string) => {
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     if (dismissedSuggesties?.has(veldNaam)) return null
+    if (isLoadingSuggesties) {
+      return <Skeleton className="h-20 w-full rounded-lg" />
+    }
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
     if (!s) return null
     return (
@@ -1062,6 +1158,8 @@ function Stap5({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
         suggestie={s.suggestie}
         bronAdres={s.bronAdres}
         bronScore={s.bronScore}
+        isAIGenerated={s.isAIGenerated}
+        bronRapporten={s.bronRapporten}
         onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
         onDismiss={() => onSuggestieDismiss(veldNaam)}
       />
@@ -1127,10 +1225,13 @@ function Stap5({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
   )
 }
 
-function Stap6({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<TechnischeStaat>; onChange: (data: Partial<TechnischeStaat>) => void } & SuggestieProps) {
+function Stap6({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<TechnischeStaat>; onChange: (data: Partial<TechnischeStaat>) => void } & SuggestieProps) {
   const renderSuggestie = (veldNaam: string) => {
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     if (dismissedSuggesties?.has(veldNaam)) return null
+    if (isLoadingSuggesties) {
+      return <Skeleton className="h-20 w-full rounded-lg" />
+    }
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
     if (!s) return null
     return (
@@ -1138,6 +1239,8 @@ function Stap6({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
         suggestie={s.suggestie}
         bronAdres={s.bronAdres}
         bronScore={s.bronScore}
+        isAIGenerated={s.isAIGenerated}
+        bronRapporten={s.bronRapporten}
         onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
         onDismiss={() => onSuggestieDismiss(veldNaam)}
       />
@@ -1253,10 +1356,13 @@ function Stap6({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
   )
 }
 
-function Stap7({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Vergunningen>; onChange: (data: Partial<Vergunningen>) => void } & SuggestieProps) {
+function Stap7({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Vergunningen>; onChange: (data: Partial<Vergunningen>) => void } & SuggestieProps) {
   const renderSuggestie = (veldNaam: string) => {
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     if (dismissedSuggesties?.has(veldNaam)) return null
+    if (isLoadingSuggesties) {
+      return <Skeleton className="h-20 w-full rounded-lg" />
+    }
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
     if (!s) return null
     return (
@@ -1264,6 +1370,8 @@ function Stap7({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
         suggestie={s.suggestie}
         bronAdres={s.bronAdres}
         bronScore={s.bronScore}
+        isAIGenerated={s.isAIGenerated}
+        bronRapporten={s.bronRapporten}
         onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
         onDismiss={() => onSuggestieDismiss(veldNaam)}
       />
@@ -1524,10 +1632,13 @@ function Stap8({ data, onChange }: { data: Partial<Waardering>; onChange: (data:
   )
 }
 
-function Stap9({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void } & SuggestieProps) {
+function Stap9({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void } & SuggestieProps) {
   const renderSuggestie = (veldNaam: string) => {
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     if (dismissedSuggesties?.has(veldNaam)) return null
+    if (isLoadingSuggesties) {
+      return <Skeleton className="h-20 w-full rounded-lg" />
+    }
+    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
     if (!s) return null
     return (
@@ -1535,6 +1646,8 @@ function Stap9({ data, onChange, suggesties, dismissedSuggesties, onSuggestieAcc
         suggestie={s.suggestie}
         bronAdres={s.bronAdres}
         bronScore={s.bronScore}
+        isAIGenerated={s.isAIGenerated}
+        bronRapporten={s.bronRapporten}
         onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
         onDismiss={() => onSuggestieDismiss(veldNaam)}
       />

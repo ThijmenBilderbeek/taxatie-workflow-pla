@@ -36,7 +36,13 @@ export async function haalGekoppeldePercelenOp(adresId: string): Promise<Kadastr
   const doc = json?.response?.docs?.[0]
   if (!doc) return []
 
-  const gekoppeld: string[] = Array.isArray(doc.gekoppeld_perceel) ? doc.gekoppeld_perceel : []
+  // gekoppeld_perceel kan een string (1 perceel) of string[] (meerdere) zijn
+  const rawPercelen = doc.gekoppeld_perceel
+  const gekoppeld: string[] = Array.isArray(rawPercelen)
+    ? rawPercelen
+    : typeof rawPercelen === 'string'
+      ? [rawPercelen]
+      : []
   const percelen: KadastraalPerceel[] = []
   for (const id of gekoppeld) {
     const parsed = parsePerceelIdentificatie(id)

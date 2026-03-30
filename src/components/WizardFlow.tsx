@@ -931,7 +931,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       {/* Kadastraal perceel sectie: toont automatisch gevonden percelen na adresselectie */}
       {(percelenLaden || gevondenPercelen.length > 0 || perceelFout !== null) && (
         <div className="grid gap-2">
-          <Label>Kadastraal perceel</Label>
+          <Label>{gevondenPercelen.length > 1 ? 'Kadastrale percelen' : 'Kadastraal perceel'}</Label>
           {percelenLaden ? (
             // Loading state: skeletons terwijl percelen worden opgehaald
             <div className="space-y-2">

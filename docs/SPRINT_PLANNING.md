@@ -59,7 +59,7 @@ Dit document beschrijft de geplande sprints na Sprint 4 (Kennisbank-context inte
 **Doel:** Zorg dat eerder gegenereerde secties invloed hebben op latere secties, zodat het rapport intern consistent blijft zonder tegenstrijdige omschrijvingen.
 
 - Stuur een samenvatting van eerder gegenereerde secties mee bij het genereren van latere secties (bijv. een `previousSectionsSummary` parameter in de Edge Function)
-- Voorkomt contradicts (bijv. B.1 zegt "kantoor" maar B.6 beschrijft een bedrijfshal)
+- Voorkomt contradicties (bijv. B.1 zegt "kantoor" maar B.6 beschrijft een bedrijfshal)
 - Voeg een "Rapport coherentie check" toe die na volledige generatie een snelle AI-check uitvoert en eventuele inconsistenties markeert
 
 **Relevante bestanden:**

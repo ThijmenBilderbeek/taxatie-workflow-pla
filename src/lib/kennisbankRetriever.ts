@@ -4,6 +4,20 @@ import type { ObjectType } from '@/types'
 import type { MarketSegment } from '@/types/kennisbank'
 
 // ---------------------------------------------------------------------------
+// Cache invalidation
+// ---------------------------------------------------------------------------
+
+let _lastInvalidation = Date.now()
+
+export function invalidateKennisbankCache(): void {
+  _lastInvalidation = Date.now()
+}
+
+export function getLastCacheInvalidation(): number {
+  return _lastInvalidation
+}
+
+// ---------------------------------------------------------------------------
 // Constanten
 // ---------------------------------------------------------------------------
 

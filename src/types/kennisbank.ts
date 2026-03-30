@@ -1,6 +1,6 @@
 import type { ObjectType } from './index'
 
-export type ChunkType = 'narratief' | 'opsomming' | 'tabel' | 'conclusie' | 'inleiding' | 'juridisch' | 'technisch' | 'financieel' | 'beschrijving'
+export type ChunkType = 'narratief' | 'opsomming' | 'tabel' | 'conclusie' | 'inleiding' | 'juridisch' | 'technisch' | 'financieel' | 'beschrijving' | 'style_example'
 
 export type WritingFunction = 'beschrijvend' | 'analyserend' | 'concluderend' | 'opsommend' | 'vergelijkend' | 'normatief'
 

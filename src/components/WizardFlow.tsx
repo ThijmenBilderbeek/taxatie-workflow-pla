@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -26,7 +26,7 @@ import type {
   SimilarityInstellingen
 } from '@/types'
 import { calculateSimilarity, calculateAllSimilarities } from '@/lib/similarity'
-import { haalGekoppeldePercelenOp, type KadastraalPerceel } from '@/lib/pdokPerceel'
+import { extractPercelenUitPdokDoc, haalPerceelVerrijking, type PerceelData, type PerceelVerrijking } from '@/lib/pdokPerceel'
 import { getSuggestiesVoorStap, type VeldSuggestie } from '@/lib/suggestions'
 import { getAISuggestiesVoorStap } from '@/lib/aiSuggestions'
 import { generateAlleSecties } from '@/lib/templates'
@@ -695,11 +695,19 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [pdokSuggesties, setPdokSuggesties] = useState<Array<{ id: string; weergavenaam: string }>>([])
   const [toonSuggesties, setToonSuggesties] = useState(false)
   const [isLaden, setIsLaden] = useState(false)
-  // Kadastrale perceel state
+  // --- PDOK Perceel: kadastrale perceel state ---
   const [percelenLaden, setPercelenLaden] = useState(false)
-  const [gevondenPercelen, setGevondenPercelen] = useState<KadastraalPerceel[]>([])
+  const [gevondenPercelen, setGevondenPercelen] = useState<PerceelData[]>([])
   const [perceelFout, setPerceelFout] = useState<string | null>(null)
   const [toonMeerPercelen, setToonMeerPercelen] = useState(false)
+  const [perceelVerrijking, setPerceelVerrijking] = useState<PerceelVerrijking | null>(null)
+  const [isVerrijkingLaden, setIsVerrijkingLaden] = useState(false)
+  const [isAppartementsrecht, setIsAppartementsrecht] = useState(false)
+  // Sla het laatste geselecteerde PDOK-id op voor retry
+  const lastPdokIdRef = useRef<string | null>(null)
+  // Altijd de meest recente data beschikbaar in async callbacks
+  const dataRef = useRef(data)
+  dataRef.current = data
 
   useEffect(() => {
     const zoekterm = data.straatnaam || ''
@@ -730,6 +738,73 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
   const DROPDOWN_CLOSE_DELAY = 200
 
+  // --- PDOK Perceel: verrijking starten voor een geselecteerd perceel ---
+  const startVerrijkingVoorPerceel = (perceel: PerceelData) => {
+    setIsVerrijkingLaden(true)
+    setPerceelVerrijking(null)
+    haalPerceelVerrijking(perceel).then((verrijking) => {
+      setIsVerrijkingLaden(false)
+      setPerceelVerrijking(verrijking)
+      if (verrijking?.oppervlakte) {
+        onChange({ ...dataRef.current, kadastraalOppervlak: verrijking.oppervlakte })
+      }
+    }).catch(() => {
+      setIsVerrijkingLaden(false)
+    })
+  }
+
+  // --- PDOK Perceel: verwerk percelen uit een reeds opgehaald PDOK doc ---
+  const verwerkPercelenUitDoc = (doc: any) => {
+    // Detecteer appartementsrecht
+    setIsAppartementsrecht(!!doc.gekoppeld_appartement)
+
+    // Normaliseer gekoppeld_perceel naar PerceelData[]
+    const percelen = extractPercelenUitPdokDoc(doc)
+    setGevondenPercelen(percelen)
+
+    // Vul automatisch het eerste perceel in als er één of meer gevonden zijn
+    const eerstePerceel = percelen[0]
+    if (eerstePerceel) {
+      onChange({
+        ...dataRef.current,
+        kadasterAanduiding: {
+          gemeente: eerstePerceel.gemeente,
+          sectie: eerstePerceel.sectie,
+          perceelnummer: eerstePerceel.perceelnummer,
+        },
+      })
+      // Start verrijking voor het eerste perceel
+      startVerrijkingVoorPerceel(eerstePerceel)
+    }
+  }
+
+  // --- PDOK Perceel: helper om percelen op te halen via id (gebruikt voor retry) ---
+  const laadPercelenVoorId = async (id: string) => {
+    lastPdokIdRef.current = id
+    setPercelenLaden(true)
+    setPerceelFout(null)
+    setGevondenPercelen([])
+    setToonMeerPercelen(false)
+    setPerceelVerrijking(null)
+    setIsVerrijkingLaden(false)
+    setIsAppartementsrecht(false)
+
+    try {
+      const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error(`PDOK lookup mislukt: ${resp.status}`)
+      const json = await resp.json()
+      const doc = json?.response?.docs?.[0]
+      if (!doc) return
+      verwerkPercelenUitDoc(doc)
+    } catch (err) {
+      console.error('Fout bij ophalen perceelgegevens:', err)
+      setPerceelFout('Kon kadastrale gegevens niet ophalen')
+    } finally {
+      setPercelenLaden(false)
+    }
+  }
+
   const selecteerPdokSuggestie = async (id: string) => {
     setToonSuggesties(false)
     try {
@@ -748,26 +823,6 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         }
       }
 
-      // Haal gekoppelde kadastrale percelen op uit het lookup-response
-      setPercelenLaden(true)
-      setPerceelFout(null)
-      setGevondenPercelen([])
-      setToonMeerPercelen(false)
-
-      let percelen: KadastraalPerceel[] = []
-      try {
-        percelen = await haalGekoppeldePercelenOp(id)
-      } catch (err) {
-        console.error('PDOK perceel lookup mislukt:', err)
-        setPerceelFout('Ophalen van kadastrale percelen mislukt.')
-      } finally {
-        setPercelenLaden(false)
-      }
-      setGevondenPercelen(percelen)
-
-      // Vul automatisch het eerste perceel in als er één of meer gevonden zijn
-      const eerstePerceel = percelen[0]
-
       onChange({
         ...data,
         straatnaam: doc.straatnaam || data.straatnaam || '',
@@ -777,8 +832,17 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         gemeente: doc.gemeentenaam || data.gemeente || '',
         provincie: doc.provincienaam || data.provincie || '',
         ...(lat !== undefined && lng !== undefined ? { coordinaten: { lat, lng } } : {}),
-        ...(eerstePerceel ? { kadasterAanduiding: eerstePerceel } : {}),
       })
+
+      // --- PDOK Perceel: verwerk percelen uit het reeds opgehaalde doc (geen extra API-call) ---
+      lastPdokIdRef.current = id
+      setPercelenLaden(false)
+      setPerceelFout(null)
+      setToonMeerPercelen(false)
+      setPerceelVerrijking(null)
+      setIsVerrijkingLaden(false)
+      setIsAppartementsrecht(false)
+      verwerkPercelenUitDoc(doc)
     } catch {
       // silently ignore lookup errors
     }
@@ -929,9 +993,17 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       </div>
 
       {/* Kadastraal perceel sectie: toont automatisch gevonden percelen na adresselectie */}
-      {(percelenLaden || gevondenPercelen.length > 0 || perceelFout !== null) && (
+      {(percelenLaden || gevondenPercelen.length > 0 || perceelFout !== null || isAppartementsrecht) && (
         <div className="grid gap-2">
           <Label>{gevondenPercelen.length > 1 ? 'Kadastrale percelen' : 'Kadastraal perceel'}</Label>
+
+          {/* --- PDOK Perceel: appartementsrecht melding --- */}
+          {isAppartementsrecht && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              ℹ️ Dit adres betreft een appartementsrecht
+            </div>
+          )}
+
           {percelenLaden ? (
             // Loading state: skeletons terwijl percelen worden opgehaald
             <div className="space-y-2">
@@ -939,9 +1011,23 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
               <Skeleton className="h-4 w-2/3 rounded-md" />
             </div>
           ) : perceelFout ? (
-            // Foutmelding als de PDOK-call mislukt
-            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {perceelFout}
+            // Foutmelding als de PDOK-call mislukt, met retry knop
+            <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <span>{perceelFout}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto shrink-0"
+                onClick={() => {
+                  // --- PDOK Perceel: retry ophalen percelen ---
+                  if (lastPdokIdRef.current) {
+                    laadPercelenVoorId(lastPdokIdRef.current)
+                  }
+                }}
+              >
+                Opnieuw proberen
+              </Button>
             </div>
           ) : gevondenPercelen.length === 0 ? (
             // Geen percelen gevonden voor dit adres
@@ -950,31 +1036,38 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
             </div>
           ) : (
             <div className="space-y-2">
-              {gevondenPercelen.length === 1 ? (
-                // Eén perceel: bevestigingsmelding
-                <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                  <Badge variant="secondary">Automatisch ingevuld</Badge>
-                  <span>
-                    {gevondenPercelen[0].gemeente} — {gevondenPercelen[0].sectie} — {gevondenPercelen[0].perceelnummer}
-                  </span>
+              {/* Eén of meerdere percelen: toon eerste perceel met badge */}
+              <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+                <Badge variant="secondary">✓ Automatisch ingevuld via PDOK</Badge>
+                <span>{gevondenPercelen[0].volledigeAanduiding}</span>
+                {gevondenPercelen.length > 1 && (
+                  <Badge variant="outline" className="ml-auto">{gevondenPercelen.length} percelen</Badge>
+                )}
+              </div>
+
+              {/* --- PDOK Perceel: verrijking loading en oppervlakte badge --- */}
+              {isVerrijkingLaden && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Skeleton className="h-4 w-4 rounded-full" />
+                  <span>Oppervlakte ophalen…</span>
                 </div>
-              ) : (
-                // Meerdere percelen: eerste ingevuld, knop om meer te tonen
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                    <Badge variant="secondary">Automatisch ingevuld</Badge>
-                    <span>
-                      {gevondenPercelen[0].gemeente} — {gevondenPercelen[0].sectie} — {gevondenPercelen[0].perceelnummer}
-                    </span>
-                    <Badge variant="outline" className="ml-auto">{gevondenPercelen.length} percelen</Badge>
-                  </div>
+              )}
+              {!isVerrijkingLaden && perceelVerrijking?.oppervlakte && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Badge variant="outline">Oppervlakte via Kadaster: {perceelVerrijking.oppervlakte} m²</Badge>
+                </div>
+              )}
+
+              {/* --- PDOK Perceel: meerdere percelen knop en uitklapbare lijst --- */}
+              {gevondenPercelen.length > 1 && (
+                <>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => setToonMeerPercelen((v) => !v)}
                   >
-                    {toonMeerPercelen ? 'Verberg percelen' : 'Toon meer percelen'}
+                    {toonMeerPercelen ? 'Verberg percelen' : `Toon meer percelen (${gevondenPercelen.length})`}
                   </Button>
                   {toonMeerPercelen && (
                     // Uitklapbare lijst met alle percelen als selecteerbare opties
@@ -986,18 +1079,30 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                           data.kadasterAanduiding?.perceelnummer === p.perceelnummer
                         return (
                           <button
-                            key={i}
+                            key={p.volledigeAanduiding}
                             type="button"
-                            onClick={() => onChange({ ...data, kadasterAanduiding: p })}
+                            onClick={() => {
+                              onChange({
+                                ...data,
+                                kadasterAanduiding: {
+                                  gemeente: p.gemeente,
+                                  sectie: p.sectie,
+                                  perceelnummer: p.perceelnummer,
+                                },
+                              })
+                              // --- PDOK Perceel: verrijking voor geselecteerd perceel ---
+                              startVerrijkingVoorPerceel(p)
+                            }}
                             className={`w-full text-left rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isGeselecteerd ? 'border-primary bg-primary/10 font-medium' : ''}`}
                           >
-                            {p.gemeente} — sectie {p.sectie} — nr. {p.perceelnummer}
+                            {p.volledigeAanduiding}
+                            {i === 0 && <span className="ml-2 text-muted-foreground">(standaard)</span>}
                           </button>
                         )
                       })}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           )}

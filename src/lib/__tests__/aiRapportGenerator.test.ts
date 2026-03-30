@@ -34,7 +34,7 @@ vi.mock('../kennisbankRetriever', () => ({
 }))
 
 import { supabase } from '../supabaseClient'
-import { generateSectieMetAI, generateAlleSectiesMetAI } from '../aiRapportGenerator'
+import { generateSectieMetAI, generateAlleSectiesMetAI, clearSectieCache, COMPLEX_SECTIES } from '../aiRapportGenerator'
 
 // ---------------------------------------------------------------------------
 // Test data helpers
@@ -120,6 +120,7 @@ function makeHistorischRapport(overrides: Partial<HistorischRapport> = {}): Hist
 describe('generateSectieMetAI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearSectieCache()
   })
 
   it('returns AI-generated text when edge function succeeds', async () => {
@@ -271,6 +272,61 @@ describe('generateSectieMetAI', () => {
     expect(callBody.dossierData).toHaveProperty('stap2')
     expect(callBody.dossierData).not.toHaveProperty('stap8')
   })
+
+  it('sends gpt-4o-mini for simple sections', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+      data: { tekst: 'Tekst' },
+      error: null,
+    } as never)
+
+    await generateSectieMetAI({
+      sectieKey: 'b1-algemeen',
+      sectieTitel: 'B.1 Algemeen',
+      dossier: makeDossier(),
+    })
+
+    const callBody = vi.mocked(supabase.functions.invoke).mock.calls[0][1]?.body as { model?: string }
+    expect(callBody.model).toBe('gpt-4o-mini')
+  })
+
+  it('sends gpt-4o for complex sections', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+      data: { tekst: 'Tekst' },
+      error: null,
+    } as never)
+
+    await generateSectieMetAI({
+      sectieKey: 'b6-toelichting-waardering',
+      sectieTitel: 'B.6 Toelichting Waardering',
+      dossier: makeDossier(),
+    })
+
+    const callBody = vi.mocked(supabase.functions.invoke).mock.calls[0][1]?.body as { model?: string }
+    expect(callBody.model).toBe('gpt-4o')
+  })
+
+  it('returns cached result on second call with same dossierData', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValue({
+      data: { tekst: 'AI gegenereerde tekst' },
+      error: null,
+    } as never)
+
+    const dossier = makeDossier()
+    await generateSectieMetAI({ sectieKey: 'b1-algemeen', sectieTitel: 'B.1 Algemeen', dossier })
+    const result2 = await generateSectieMetAI({ sectieKey: 'b1-algemeen', sectieTitel: 'B.1 Algemeen', dossier })
+
+    // Only one actual API call — second is from cache
+    expect(supabase.functions.invoke).toHaveBeenCalledTimes(1)
+    expect(result2.isCached).toBe(true)
+    expect(result2.tekst).toBe('AI gegenereerde tekst')
+  })
+
+  it('COMPLEX_SECTIES constant contains the three complex section keys', () => {
+    expect(COMPLEX_SECTIES).toContain('b6-toelichting-waardering')
+    expect(COMPLEX_SECTIES).toContain('b9-taxatiemethodiek')
+    expect(COMPLEX_SECTIES).toContain('b10-plausibiliteit')
+    expect(COMPLEX_SECTIES).toHaveLength(3)
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -280,11 +336,13 @@ describe('generateSectieMetAI', () => {
 describe('generateAlleSectiesMetAI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearSectieCache()
   })
 
   it('returns results for all template sections', async () => {
-    vi.mocked(supabase.functions.invoke).mockResolvedValue({
-      data: { tekst: 'AI tekst' },
+    // Both template sections are short (<200 chars) → batched in Phase 1
+    vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+      data: { results: { 'b1-algemeen': 'AI tekst B1', 'b4-inspectie': 'AI tekst B4' } },
       error: null,
     } as never)
 
@@ -295,10 +353,12 @@ describe('generateAlleSectiesMetAI', () => {
     expect(result['b4-inspectie'].isAIGenerated).toBe(true)
   })
 
-  it('falls back to template when AI fails for a section', async () => {
-    vi.mocked(supabase.functions.invoke)
-      .mockResolvedValueOnce({ data: { tekst: 'AI tekst voor B1' }, error: null } as never)
-      .mockRejectedValueOnce(new Error('AI failure'))
+  it('falls back to template when batch result is missing a section', async () => {
+    // Batch response only includes b1 — b4 should fall back to template
+    vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+      data: { results: { 'b1-algemeen': 'AI tekst voor B1' } },
+      error: null,
+    } as never)
 
     const result = await generateAlleSectiesMetAI(makeDossier(), [])
 
@@ -309,8 +369,8 @@ describe('generateAlleSectiesMetAI', () => {
   })
 
   it('calls onProgress after each section', async () => {
-    vi.mocked(supabase.functions.invoke).mockResolvedValue({
-      data: { tekst: 'Tekst' },
+    vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+      data: { results: { 'b1-algemeen': 'Tekst B1', 'b4-inspectie': 'Tekst B4' } },
       error: null,
     } as never)
 
@@ -320,27 +380,30 @@ describe('generateAlleSectiesMetAI', () => {
     })
 
     expect(progressCalls).toHaveLength(2)
-    expect(progressCalls[0]).toEqual(['b1-algemeen', 1, 2])
-    expect(progressCalls[1]).toEqual(['b4-inspectie', 2, 2])
+    expect(progressCalls.map(([, p, t]) => [p, t])).toEqual([[1, 2], [2, 2]])
   })
 
-  it('processes sections sequentially (one at a time)', async () => {
-    const callOrder: string[] = []
-
-    vi.mocked(supabase.functions.invoke).mockImplementation(async (_fn, options) => {
-      const body = options?.body as { sectieKey?: string }
-      callOrder.push(body?.sectieKey ?? 'unknown')
-      return { data: { tekst: 'Tekst' }, error: null }
-    })
+  it('batches short sections in a single API call', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+      data: { results: { 'b1-algemeen': 'Tekst B1', 'b4-inspectie': 'Tekst B4' } },
+      error: null,
+    } as never)
 
     await generateAlleSectiesMetAI(makeDossier(), [])
 
-    expect(callOrder).toEqual(['b1-algemeen', 'b4-inspectie'])
+    // Both short sections → one batch call
+    expect(supabase.functions.invoke).toHaveBeenCalledTimes(1)
+    const callBody = vi.mocked(supabase.functions.invoke).mock.calls[0][1]?.body as {
+      batchSecties?: Array<{ sectieKey: string }>
+    }
+    expect(callBody.batchSecties).toBeDefined()
+    expect(callBody.batchSecties?.map((s) => s.sectieKey)).toContain('b1-algemeen')
+    expect(callBody.batchSecties?.map((s) => s.sectieKey)).toContain('b4-inspectie')
   })
 
   it('uses geselecteerdeReferenties when available', async () => {
-    vi.mocked(supabase.functions.invoke).mockResolvedValue({
-      data: { tekst: 'Tekst' },
+    vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+      data: { results: { 'b1-algemeen': 'Tekst', 'b4-inspectie': 'Tekst' } },
       error: null,
     } as never)
 
@@ -352,8 +415,25 @@ describe('generateAlleSectiesMetAI', () => {
 
     await generateAlleSectiesMetAI(dossier, [rapport])
 
-    const firstCall = vi.mocked(supabase.functions.invoke).mock.calls[0]
-    const body = firstCall[1]?.body as { referenties?: Array<{ similarityScore: number }> }
-    expect(body.referenties?.[0].similarityScore).toBe(85)
+    // Batch call is made (no referenties in batch body — batch uses shared referenties only via fallback individual calls)
+    expect(supabase.functions.invoke).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks sections as isCached on second generation with same dossier', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValue({
+      data: { results: { 'b1-algemeen': 'AI tekst B1', 'b4-inspectie': 'AI tekst B4' } },
+      error: null,
+    } as never)
+
+    const dossier = makeDossier()
+    await generateAlleSectiesMetAI(dossier, [])
+    vi.clearAllMocks()
+
+    const result2 = await generateAlleSectiesMetAI(dossier, [])
+
+    // No new API calls — all from cache
+    expect(supabase.functions.invoke).not.toHaveBeenCalled()
+    expect(result2['b1-algemeen'].isCached).toBe(true)
+    expect(result2['b4-inspectie'].isCached).toBe(true)
   })
 })

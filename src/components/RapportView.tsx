@@ -12,6 +12,7 @@ import { generateAlleSecties } from '@/lib/templates'
 import { generateAlleSectiesMetAI } from '@/lib/aiRapportGenerator'
 import { extractDocumentKnowledge, deriveMarketSegment } from '@/lib/documentKnowledgeExtractor'
 import { useDocumentKnowledge } from '@/hooks/useDocumentKnowledge'
+import { invalidateKennisbankCache } from '@/lib/kennisbankRetriever'
 import { KennisbankSuggestiesPanel } from './KennisbankSuggestiesPanel'
 import { saveSectieFeedback } from '@/hooks/useSectieFeedback'
 import { useAlleSectieStats } from '@/hooks/useSectieKwaliteit'
@@ -94,7 +95,7 @@ export function RapportView({
 }) {
   const activeDossier = dossiers.find(d => d.id === activeDossierId)
 
-  const { saveDocumentChunks, saveDocumentProfile } = useDocumentKnowledge()
+  const { saveDocumentChunks, saveDocumentProfile, updateReuseScoresFromFeedback } = useDocumentKnowledge()
   const { allStats } = useAlleSectieStats()
   const [editingStates, setEditingStates] = useState<Record<string, string>>({})
   const [isGenerating, setIsGenerating] = useState(false)
@@ -411,26 +412,86 @@ export function RapportView({
 
       // Extract and persist document knowledge non-blocking
       const fullText = Object.values(rapportTeksten).filter(Boolean).join('\n\n')
+      const objectAddress = [activeDossier.stap2?.straatnaam, activeDossier.stap2?.huisnummer]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || undefined
+      const city = activeDossier.stap2?.plaats || undefined
+      const region = activeDossier.stap2?.provincie || undefined
+      const objectType = activeDossier.stap1?.typeObject
+      const marketSegment = deriveMarketSegment(objectType)
+
       if (fullText) {
         try {
-          const objectAddress = [activeDossier.stap2?.straatnaam, activeDossier.stap2?.huisnummer]
-            .filter(Boolean)
-            .join(' ')
-            .trim() || undefined
-          const city = activeDossier.stap2?.plaats || undefined
-          const region = activeDossier.stap2?.provincie || undefined
-          const objectType = activeDossier.stap1?.typeObject
           const knowledge = extractDocumentKnowledge(fullText, historischRapport.id, {
             objectType,
             objectAddress,
             city,
             region,
-            marketSegment: deriveMarketSegment(objectType),
+            marketSegment,
           })
-          void Promise.all([
+
+          // Identify edited sections (user changed the AI-generated content)
+          const editedSecties = Object.entries(activeDossier.rapportSecties).filter(
+            ([, sectie]) =>
+              sectie.gegenereerdeInhoud !== null &&
+              sectie.gegenereerdeInhoud !== undefined &&
+              sectie.inhoud !== sectie.gegenereerdeInhoud
+          )
+
+          // Boost reuseQuality when human-edited sections are present
+          const enrichedProfile = editedSecties.length > 0
+            ? { ...knowledge.profile, reuseQuality: Math.max(knowledge.profile.reuseQuality, 0.8) }
+            : knowledge.profile
+
+          // Build style_example chunks for each edited section
+          const styleExampleChunks = editedSecties.map(([key, sectie]) => {
+            const now = new Date().toISOString()
+            return {
+              id: crypto.randomUUID(),
+              documentId: historischRapport.id,
+              chapter: getChapterFromSectieKey(key),
+              subchapter: key,
+              chunkType: 'style_example' as const,
+              rawText: sectie.inhoud,
+              cleanText: sectie.inhoud,
+              writingFunction: 'beschrijvend' as const,
+              tones: [],
+              specificity: 'object_specifiek' as const,
+              reuseScore: 0.9,
+              reuseAsStyleExample: true,
+              templateCandidate: true,
+              variablesDetected: [],
+              objectAddress,
+              objectType,
+              city,
+              region,
+              marketSegment,
+              metadata: {
+                originalAiText: sectie.gegenereerdeInhoud,
+                editedByUser: true,
+              },
+              createdAt: now,
+              updatedAt: now,
+            }
+          })
+
+          const savePromises: Promise<void>[] = [
             saveDocumentChunks(knowledge.chunks),
-            saveDocumentProfile(knowledge.profile),
-          ]).catch((err) => {
+            saveDocumentProfile(enrichedProfile),
+          ]
+          if (styleExampleChunks.length > 0) {
+            savePromises.push(saveDocumentChunks(styleExampleChunks))
+          }
+
+          void Promise.all(savePromises).then(() => {
+            if (styleExampleChunks.length > 0) {
+              invalidateKennisbankCache()
+              void updateReuseScoresFromFeedback().catch((err) => {
+                console.warn('[updateReuseScores] failed silently:', err)
+              })
+            }
+          }).catch((err) => {
             console.warn('[knowledge save] failed silently:', err)
           })
         } catch (err) {

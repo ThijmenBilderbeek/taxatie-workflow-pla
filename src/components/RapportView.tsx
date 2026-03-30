@@ -171,7 +171,8 @@ export function RapportView({
     const nieuweInhoud = editingStates[key]
 
     // Sla 'bewerkt' feedback op als de inhoud afwijkt van de AI-gegenereerde tekst
-    if (sectie?.gegenereerdeInhoud && nieuweInhoud !== sectie.gegenereerdeInhoud) {
+    const isBewerkt = !!sectie?.gegenereerdeInhoud && nieuweInhoud !== sectie.gegenereerdeInhoud
+    if (isBewerkt) {
       void saveSectieFeedback(
         activeDossier.id,
         key,
@@ -193,7 +194,12 @@ export function RapportView({
       },
       updatedAt: new Date().toISOString(),
     })
-    toast.success('Sectie opgeslagen')
+
+    if (isBewerkt) {
+      toast.success('Feedback opgeslagen — dit helpt toekomstige AI-suggesties verbeteren')
+    } else {
+      toast.success('Sectie opgeslagen')
+    }
   }
 
   const handleRegenereerSectie = async (key: string) => {

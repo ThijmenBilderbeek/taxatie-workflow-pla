@@ -708,6 +708,12 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [handmatigGemeente, setHandmatigGemeente] = useState('')
   const [handmatigSectie, setHandmatigSectie] = useState('')
   const [handmatigPerceelnummer, setHandmatigPerceelnummer] = useState('')
+  // Validatie state voor handmatig toevoegen
+  const [isHandmatigValideren, setIsHandmatigValideren] = useState(false)
+  const [handmatigValidatieFout, setHandmatigValidatieFout] = useState<string | null>(null)
+  const [handmatigApiError, setHandmatigApiError] = useState(false)
+  // Set van volledigeAanduiding van handmatig gevalideerde percelen (voor badge)
+  const [handmatigGevalideerdSet, setHandmatigGevalideerdSet] = useState<Set<string>>(new Set())
   // Sla het laatste geselecteerde PDOK-id op voor retry
   const lastPdokIdRef = useRef<string | null>(null)
   // Altijd de meest recente data beschikbaar in async callbacks
@@ -793,6 +799,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     setPerceelVerrijking(null)
     setIsVerrijkingLaden(false)
     setIsAppartementsrecht(false)
+    setHandmatigGevalideerdSet(new Set())
 
     try {
       const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`
@@ -848,6 +855,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       setPerceelVerrijking(null)
       setIsVerrijkingLaden(false)
       setIsAppartementsrecht(false)
+      setHandmatigGevalideerdSet(new Set())
       verwerkPercelenUitDoc(doc, newAdresData)
     } catch {
       // silently ignore lookup errors
@@ -856,6 +864,32 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
   const handleStraatnaamBlur = () => {
     setTimeout(() => setToonSuggesties(false), DROPDOWN_CLOSE_DELAY)
+  }
+
+  // --- Handmatig perceel: helper om perceel toe te voegen (met of zonder validatie) ---
+  const voegHandmatigPerceelToe = (g: string, s: string, p: string, oppervlakte?: number, gevalideerd = false) => {
+    const volledigeAanduiding = `${g}-${s}-${p}`
+    const isDuplicaat = gevondenPercelen.some(
+      (existing) => existing.gemeente === g && existing.sectie === s && existing.perceelnummer === p
+    )
+    if (!isDuplicaat) {
+      const nieuwPerceel: PerceelData = { gemeente: g, sectie: s, perceelnummer: p, volledigeAanduiding }
+      setGevondenPercelen((prev) => [...prev, nieuwPerceel])
+      if (gevalideerd) {
+        setHandmatigGevalideerdSet((prev) => new Set([...prev, volledigeAanduiding]))
+      }
+    }
+    onChange({
+      ...dataRef.current,
+      kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
+      ...(oppervlakte ? { kadastraalOppervlak: oppervlakte } : {}),
+    })
+    setHandmatigGemeente('')
+    setHandmatigSectie('')
+    setHandmatigPerceelnummer('')
+    setHandmatigValidatieFout(null)
+    setHandmatigApiError(false)
+    setToonHandmatigInvoer(false)
   }
 
   const renderSuggestie = (veldNaam: string) => {
@@ -1043,9 +1077,14 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           </div>
         ) : (
           <div className="space-y-2">
-            {/* Eén of meerdere percelen: toon eerste perceel met badge */}
+            {/* Eén of meerdere percelen: toon badge op basis van herkomst */}
             <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-              <Badge variant="secondary">✓ Automatisch ingevuld via PDOK</Badge>
+              {gevondenPercelen.every(p => handmatigGevalideerdSet.has(p.volledigeAanduiding))
+                ? <Badge variant="secondary">✓ Handmatig gevalideerd</Badge>
+                : gevondenPercelen.some(p => handmatigGevalideerdSet.has(p.volledigeAanduiding))
+                  ? <Badge variant="secondary">✓ Automatisch + handmatig gevalideerd</Badge>
+                  : <Badge variant="secondary">✓ Automatisch ingevuld via PDOK</Badge>
+              }
               <span>{gevondenPercelen.map(p => p.volledigeAanduiding).join(' | ')}</span>
               {gevondenPercelen.length > 1 && (
                 <Badge variant="outline" className="ml-auto">{gevondenPercelen.length} percelen</Badge>
@@ -1103,7 +1142,8 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                           className={`w-full text-left rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isGeselecteerd ? 'border-primary bg-primary/10 font-medium' : ''}`}
                         >
                           {p.volledigeAanduiding}
-                          {i === 0 && <span className="ml-2 text-muted-foreground">(standaard)</span>}
+                          {i === 0 && !handmatigGevalideerdSet.has(p.volledigeAanduiding) && <span className="ml-2 text-muted-foreground">(standaard)</span>}
+                          {handmatigGevalideerdSet.has(p.volledigeAanduiding) && <span className="ml-2 text-muted-foreground">(handmatig)</span>}
                         </button>
                       )
                     })}
@@ -1130,52 +1170,90 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                 <Input
                   placeholder="Gemeente (bijv. VLO00)"
                   value={handmatigGemeente}
-                  onChange={(e) => setHandmatigGemeente(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    setHandmatigGemeente(e.target.value.toUpperCase())
+                    setHandmatigValidatieFout(null)
+                    setHandmatigApiError(false)
+                  }}
                 />
                 <Input
                   placeholder="Sectie (bijv. E)"
                   value={handmatigSectie}
-                  onChange={(e) => setHandmatigSectie(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    setHandmatigSectie(e.target.value.toUpperCase())
+                    setHandmatigValidatieFout(null)
+                    setHandmatigApiError(false)
+                  }}
                 />
                 <Input
                   placeholder="Perceelnummer (bijv. 600)"
                   value={handmatigPerceelnummer}
-                  onChange={(e) => setHandmatigPerceelnummer(e.target.value)}
+                  onChange={(e) => {
+                    setHandmatigPerceelnummer(e.target.value)
+                    setHandmatigValidatieFout(null)
+                    setHandmatigApiError(false)
+                  }}
                 />
               </div>
+
+              {/* Foutmelding: perceel niet gevonden in kadaster */}
+              {handmatigValidatieFout && (
+                <p className="text-sm text-destructive">{handmatigValidatieFout}</p>
+              )}
+
+              {/* Waarschuwing: PDOK API onbereikbaar, bied fallback aan */}
+              {handmatigApiError && (
+                <div className="rounded-md border border-yellow-300 bg-yellow-50 p-2 text-sm text-yellow-800">
+                  <p>De PDOK-service is tijdelijk niet beschikbaar. Het perceel kon niet worden gevalideerd.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => {
+                      const g = handmatigGemeente.trim()
+                      const s = handmatigSectie.trim()
+                      const p = handmatigPerceelnummer.trim()
+                      voegHandmatigPerceelToe(g, s, p, undefined, false)
+                    }}
+                  >
+                    Toch toevoegen zonder validatie
+                  </Button>
+                </div>
+              )}
+
+              {/* Perceel toevoegen knop — roept PDOK validatie aan */}
               <Button
                 type="button"
                 size="sm"
-                disabled={!handmatigGemeente || !handmatigSectie || !handmatigPerceelnummer}
-                onClick={() => {
-                  // --- Handmatig perceel: toevoegen aan percelen lijst en invullen in kadasterAanduiding ---
+                disabled={!handmatigGemeente || !handmatigSectie || !handmatigPerceelnummer || isHandmatigValideren}
+                onClick={async () => {
                   const g = handmatigGemeente.trim()
                   const s = handmatigSectie.trim()
                   const p = handmatigPerceelnummer.trim()
-                  // Voorkom duplicaten op basis van gemeente/sectie/perceelnummer
-                  const isDuplicaat = gevondenPercelen.some(
-                    (existing) => existing.gemeente === g && existing.sectie === s && existing.perceelnummer === p
-                  )
-                  if (!isDuplicaat) {
-                    const nieuwPerceel: PerceelData = {
-                      gemeente: g,
-                      sectie: s,
-                      perceelnummer: p,
-                      volledigeAanduiding: `${g}-${s}-${p}`,
+                  // Reset feedback en start validatie
+                  setHandmatigValidatieFout(null)
+                  setHandmatigApiError(false)
+                  setIsHandmatigValideren(true)
+                  try {
+                    const perceel: PerceelData = { gemeente: g, sectie: s, perceelnummer: p, volledigeAanduiding: `${g}-${s}-${p}` }
+                    const verrijking = await haalPerceelVerrijking(perceel)
+                    setIsHandmatigValideren(false)
+                    if (verrijking === null) {
+                      // Perceel bestaat niet in het kadaster
+                      setHandmatigValidatieFout('Dit kadastraal perceel is niet gevonden in het kadaster. Controleer de gemeente, sectie en het perceelnummer.')
+                      return
                     }
-                    setGevondenPercelen((prev) => [...prev, nieuwPerceel])
+                    // Perceel gevonden: voeg toe met validatie-markering en eventuele oppervlakte
+                    voegHandmatigPerceelToe(g, s, p, verrijking.oppervlakte, true)
+                  } catch {
+                    setIsHandmatigValideren(false)
+                    // API-fout: toon fallback knop
+                    setHandmatigApiError(true)
                   }
-                  onChange({
-                    ...data,
-                    kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
-                  })
-                  setHandmatigGemeente('')
-                  setHandmatigSectie('')
-                  setHandmatigPerceelnummer('')
-                  setToonHandmatigInvoer(false)
                 }}
               >
-                Perceel toevoegen
+                {isHandmatigValideren ? 'Valideren…' : 'Perceel toevoegen'}
               </Button>
             </div>
           )}

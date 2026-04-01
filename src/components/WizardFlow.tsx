@@ -928,7 +928,12 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const renderSuggestie = (veldNaam: string) => {
     if (dismissedSuggesties?.has(veldNaam)) return null
     if (isLoadingSuggesties) {
-      return <Skeleton className="h-20 w-full rounded-lg" />
+      return (
+        <div className="flex items-center gap-2 py-2">
+          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
+          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        </div>
+      )
     }
     if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
@@ -1630,7 +1635,12 @@ function Stap5({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const renderSuggestie = (veldNaam: string) => {
     if (dismissedSuggesties?.has(veldNaam)) return null
     if (isLoadingSuggesties) {
-      return <Skeleton className="h-20 w-full rounded-lg" />
+      return (
+        <div className="flex items-center gap-2 py-2">
+          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
+          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        </div>
+      )
     }
     if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
@@ -1711,7 +1721,12 @@ function Stap6({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const renderSuggestie = (veldNaam: string) => {
     if (dismissedSuggesties?.has(veldNaam)) return null
     if (isLoadingSuggesties) {
-      return <Skeleton className="h-20 w-full rounded-lg" />
+      return (
+        <div className="flex items-center gap-2 py-2">
+          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
+          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        </div>
+      )
     }
     if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
@@ -1842,7 +1857,12 @@ function Stap7({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const renderSuggestie = (veldNaam: string) => {
     if (dismissedSuggesties?.has(veldNaam)) return null
     if (isLoadingSuggesties) {
-      return <Skeleton className="h-20 w-full rounded-lg" />
+      return (
+        <div className="flex items-center gap-2 py-2">
+          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
+          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        </div>
+      )
     }
     if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
@@ -2118,7 +2138,12 @@ function Stap9({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const renderSuggestie = (veldNaam: string) => {
     if (dismissedSuggesties?.has(veldNaam)) return null
     if (isLoadingSuggesties) {
-      return <Skeleton className="h-20 w-full rounded-lg" />
+      return (
+        <div className="flex items-center gap-2 py-2">
+          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
+          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        </div>
+      )
     }
     if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
     const s = suggesties.find((sg) => sg.veldNaam === veldNaam)

@@ -801,7 +801,7 @@ export function RapportView({
                       <img
                         src="/valyze_logo2.svg"
                         alt="Valyze logo"
-                        className="h-6 w-auto animate-pulse"
+                        className="h-6 w-auto valyze-generating"
                       />
                       <span className="text-sm text-muted-foreground">AI genereert...</span>
                     </div>

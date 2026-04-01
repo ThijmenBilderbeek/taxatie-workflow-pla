@@ -929,7 +929,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     if (isLoadingSuggesties) {
       return (
         <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
-          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto valyze-generating" />
         </div>
       )
     }
@@ -1639,7 +1639,7 @@ function Stap5({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     if (isLoadingSuggesties) {
       return (
         <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
-          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto valyze-generating" />
         </div>
       )
     }
@@ -1732,7 +1732,7 @@ function Stap6({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     if (isLoadingSuggesties) {
       return (
         <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
-          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto valyze-generating" />
         </div>
       )
     }
@@ -1874,7 +1874,7 @@ function Stap7({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     if (isLoadingSuggesties) {
       return (
         <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
-          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto valyze-generating" />
         </div>
       )
     }
@@ -2158,7 +2158,7 @@ function Stap9({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     if (isLoadingSuggesties) {
       return (
         <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
-          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto valyze-generating" />
         </div>
       )
     }

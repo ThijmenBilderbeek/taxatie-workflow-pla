@@ -184,3 +184,11 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes valyze-pulse {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.05); }
+}
+.valyze-generating {
+  animation: valyze-pulse 2s ease-in-out infinite;
+}

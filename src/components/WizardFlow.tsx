@@ -429,7 +429,7 @@ export function WizardFlow({
         <CardContent className="space-y-6">
           {currentStep === 1 && <Stap1 data={stap1} onChange={setStap1} />}
           {currentStep === 2 && <Stap2 data={stap2} onChange={setStap2} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
-          {currentStep === 3 && <Stap3 data={stap3} onChange={setStap3} />}
+          {currentStep === 3 && <Stap3 data={stap3} onChange={setStap3} stap2Data={stap2} />}
           {currentStep === 4 && <Stap4 data={stap4} onChange={setStap4} />}
           {currentStep === 5 && <Stap5 data={stap5} onChange={setStap5} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 6 && <Stap6 data={stap6} onChange={setStap6} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
@@ -1451,7 +1451,13 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   )
 }
 
-function Stap3({ data, onChange }: { data: Partial<Oppervlaktes>; onChange: (data: Partial<Oppervlaktes>) => void }) {
+function Stap3({ data, onChange, stap2Data }: { data: Partial<Oppervlaktes>; onChange: (data: Partial<Oppervlaktes>) => void; stap2Data?: Partial<AdresLocatie> }) {
+  useEffect(() => {
+    if (stap2Data?.kadastraalOppervlak !== undefined && stap2Data.kadastraalOppervlak !== data.perceeloppervlak) {
+      onChange({ ...data, perceeloppervlak: stap2Data.kadastraalOppervlak })
+    }
+  }, [stap2Data?.kadastraalOppervlak, data.perceeloppervlak, onChange])
+
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-4">
@@ -1481,8 +1487,9 @@ function Stap3({ data, onChange }: { data: Partial<Oppervlaktes>; onChange: (dat
           <Input
             id="perceeloppervlak"
             type="number"
-            value={data.perceeloppervlak || ''}
-            onChange={(e) => onChange({ ...data, perceeloppervlak: Number(e.target.value) })}
+            value={stap2Data?.kadastraalOppervlak ?? data.perceeloppervlak ?? ''}
+            disabled
+            className="bg-muted cursor-not-allowed"
           />
         </div>
       </div>

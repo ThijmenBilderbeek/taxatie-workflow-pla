@@ -190,13 +190,13 @@ function App() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-6 py-1">
+        <div className="container mx-auto px-6 py-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
                 src="/valyze_logo2.svg"
                 alt="Valyze"
-                className="h-32 w-auto cursor-pointer hover:opacity-80 transition-opacity"
+                className="h-12 w-auto cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={handleLogoClick}
                 role="button"
                 aria-label="Naar dashboard"

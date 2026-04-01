@@ -70,7 +70,7 @@ describe('haalPerceelVerrijking', () => {
     vi.unstubAllGlobals()
   })
 
-  it('calls the correct PDOK BRK endpoint with verified property names', async () => {
+  it('calls the correct PDOK BRK endpoint with query parameters (no CQL filter)', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -87,15 +87,16 @@ describe('haalPerceelVerrijking', () => {
     // Correct endpoint
     expect(calledUrl).toContain('brk-kadastrale-kaart/ogc/v1/collections/perceel/items')
 
-    // No filter-lang parameter (API uses its default)
+    // No CQL filter parameter (API does not support it)
+    expect(calledUrl).not.toContain('filter=')
     expect(calledUrl).not.toContain('filter-lang')
 
-    // Correct snake_case property names in the filter, perceelnummer as integer (no quotes)
-    const decodedUrl = decodeURIComponent(calledUrl)
-    expect(decodedUrl).toContain("akr_kadastrale_gemeente_code_waarde='VLO00'")
-    expect(decodedUrl).toContain("sectie='E'")
-    expect(decodedUrl).toContain('perceelnummer=600')
-    expect(decodedUrl).not.toContain("perceelnummer='600'")
+    // Uses individual query parameters
+    expect(calledUrl).toContain('akr_kadastrale_gemeente_code_waarde=VLO00')
+    expect(calledUrl).toContain('sectie=E')
+    expect(calledUrl).toContain('perceelnummer=600')
+    expect(calledUrl).toContain('limit=1')
+    expect(calledUrl).toContain('f=json')
   })
 
   it('returns enriched perceel data on success', async () => {

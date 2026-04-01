@@ -89,17 +89,24 @@ export async function haalGekoppeldePercelenOp(adresId: string): Promise<Perceel
 /**
  * Haal verrijkte perceeldata op via de PDOK BRK Kadastrale Kaart OGC API.
  * Endpoint: https://api.pdok.nl/kadaster/brk-kadastrale-kaart/ogc/v1/collections/perceel/items
+ * Gebruikt query parameters (geen CQL filter — wordt niet ondersteund door deze API).
  * Haalt oppervlakte en geometrie op.
  * Geeft null terug bij een error of geen resultaten.
  */
 export async function haalPerceelVerrijking(perceel: PerceelData): Promise<PerceelVerrijking | null> {
-  // Validate fields to prevent filter injection: gemeente is alphanumeric, sectie is letters, perceelnummer is digits
+  // Validate fields to prevent injection: gemeente is alphanumeric, sectie is letters, perceelnummer is digits
   if (!/^[A-Z0-9]+$/.test(perceel.gemeente) || !/^[A-Z]{1,2}$/.test(perceel.sectie) || !/^\d+$/.test(perceel.perceelnummer)) {
     throw new Error('Ongeldig perceelformaat')
   }
   try {
-    const filter = `akr_kadastrale_gemeente_code_waarde='${perceel.gemeente}' AND sectie='${perceel.sectie}' AND perceelnummer=${perceel.perceelnummer}`
-    const url = `https://api.pdok.nl/kadaster/brk-kadastrale-kaart/ogc/v1/collections/perceel/items?filter=${encodeURIComponent(filter)}&limit=1`
+    const params = new URLSearchParams({
+      akr_kadastrale_gemeente_code_waarde: perceel.gemeente,
+      sectie: perceel.sectie,
+      perceelnummer: perceel.perceelnummer,
+      limit: '1',
+      f: 'json',
+    })
+    const url = `https://api.pdok.nl/kadaster/brk-kadastrale-kaart/ogc/v1/collections/perceel/items?${params.toString()}`
     const resp = await fetch(url)
     if (!resp.ok) {
       console.warn(`PDOK Kadastrale Kaart API mislukt: ${resp.status} ${resp.statusText}`)

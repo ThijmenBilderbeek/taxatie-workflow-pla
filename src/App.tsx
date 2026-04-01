@@ -74,7 +74,7 @@ function LoginForm({ onSignIn, onSignUp }: {
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading}> 
               {loading ? 'Bezig...' : isSignUp ? 'Account aanmaken' : 'Inloggen'}
             </Button>
             <Button
@@ -196,7 +196,7 @@ function App() {
               <img
                 src="/valyze_logo2.svg"
                 alt="Valyze"
-                className="h-16 w-auto cursor-pointer hover:opacity-80 transition-opacity"
+                className="h-24 w-auto cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={handleLogoClick}
                 role="button"
                 aria-label="Naar dashboard"

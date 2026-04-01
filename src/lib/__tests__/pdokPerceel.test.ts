@@ -70,11 +70,11 @@ describe('haalPerceelVerrijking', () => {
     vi.unstubAllGlobals()
   })
 
-  it('calls the correct PDOK BRK endpoint with cql2-text filter', async () => {
+  it('calls the correct PDOK BRK endpoint with verified property names', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        features: [{ properties: { oppervlakte: 1234 }, geometry: { type: 'Polygon', coordinates: [] } }],
+        features: [{ properties: { kadastrale_grootte_waarde: 1234 }, geometry: { type: 'Polygon', coordinates: [] } }],
       }),
     })
     vi.stubGlobal('fetch', mockFetch)
@@ -87,21 +87,22 @@ describe('haalPerceelVerrijking', () => {
     // Correct endpoint
     expect(calledUrl).toContain('brk-kadastrale-kaart/ogc/v1/collections/perceel/items')
 
-    // Correct filter-lang
-    expect(calledUrl).toContain('filter-lang=cql2-text')
+    // No filter-lang parameter (API uses its default)
+    expect(calledUrl).not.toContain('filter-lang')
 
-    // Correct camelCase property names in the filter
+    // Correct snake_case property names in the filter, perceelnummer as integer (no quotes)
     const decodedUrl = decodeURIComponent(calledUrl)
-    expect(decodedUrl).toContain("kadastraleGemeenteCode='VLO00'")
-    expect(decodedUrl).toContain("kadastraleSectie='E'")
-    expect(decodedUrl).toContain("perceelnummer='600'")
+    expect(decodedUrl).toContain("akr_kadastrale_gemeente_code_waarde='VLO00'")
+    expect(decodedUrl).toContain("sectie='E'")
+    expect(decodedUrl).toContain('perceelnummer=600')
+    expect(decodedUrl).not.toContain("perceelnummer='600'")
   })
 
   it('returns enriched perceel data on success', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        features: [{ properties: { oppervlakte: 1234 }, geometry: { type: 'Polygon', coordinates: [] } }],
+        features: [{ properties: { kadastrale_grootte_waarde: 1234 }, geometry: { type: 'Polygon', coordinates: [] } }],
       }),
     }))
 

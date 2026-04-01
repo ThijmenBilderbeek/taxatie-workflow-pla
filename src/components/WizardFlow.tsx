@@ -1537,6 +1537,50 @@ function Stap3({ data, onChange, stap2Data }: { data: Partial<Oppervlaktes>; onC
 }
 
 function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (data: Partial<Huurgegevens>) => void }) {
+  const [isScanning, setIsScanning] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset so the same file can be re-uploaded if needed
+    e.target.value = ''
+
+    setIsScanning(true)
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = () => reject(new Error('Kon het bestand niet lezen'))
+        reader.readAsDataURL(file)
+      })
+
+      const { data: result, error } = await supabase.functions.invoke('extract-lease-data', {
+        body: { fileBase64: base64, fileName: file.name },
+      })
+
+      if (error || !result?.success) {
+        throw new Error(error?.message ?? 'Extraction failed')
+      }
+
+      onChange({ ...data, ...result.data })
+      toast.success('Huurcontract gescand — gegevens ingevuld')
+    } catch (err) {
+      console.error('[Stap4] upload error:', err)
+      toast.error('Kon huurcontract niet scannen')
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
+  if (isScanning) {
+    return (
+      <div className="flex items-center justify-center min-h-[200px]">
+        <img src="/valyze_logo2.svg" alt="Scanning..." className="h-24 w-auto valyze-generating" />
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-4">
       <div className="flex items-center gap-2">
@@ -1546,6 +1590,26 @@ function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (dat
           onCheckedChange={(checked) => onChange({ ...data, verhuurd: checked })}
         />
         <Label htmlFor="verhuurd">Object is verhuurd</Label>
+        {data.verhuurd && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              📄 Huurcontract uploaden
+            </Button>
+          </>
+        )}
       </div>
 
       {data.verhuurd && (

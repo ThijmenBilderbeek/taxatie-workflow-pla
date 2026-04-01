@@ -52,6 +52,7 @@ export interface AdresLocatie {
     gemeente: string
     sectie: string
     perceelnummer: string
+    appartementsrecht?: string
   }
   kadastraalOppervlak: number
   ligging: Ligging

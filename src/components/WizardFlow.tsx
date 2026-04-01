@@ -717,9 +717,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   // Map van volledigeAanduiding → oppervlakte voor totaalberekening
   const [perceelOppervlaktes, setPerceelOppervlaktes] = useState<Record<string, number>>({})
   // --- Handmatig appartementsrecht toevoegen ---
-  const [toonAppartementsrechtInvoer, setToonAppartementsrechtInvoer] = useState(false)
-  const [handmatigAppartementsrechtNummer, setHandmatigAppartementsrechtNummer] = useState('')
-  const [gevondenAppartementsrechten, setGevondenAppartementsrechten] = useState<string[]>([])
+  const [handmatigAppartementsrecht, setHandmatigAppartementsrecht] = useState('')
   // Sla het laatste geselecteerde PDOK-id op voor retry
   const lastPdokIdRef = useRef<string | null>(null)
   // Altijd de meest recente data beschikbaar in async callbacks
@@ -798,6 +796,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           gemeente: eerstePerceel.gemeente,
           sectie: eerstePerceel.sectie,
           perceelnummer: eerstePerceel.perceelnummer,
+          appartementsrecht: doc.gekoppeld_appartement ? String(doc.gekoppeld_appartement) : undefined,
         },
       })
       // Reset oppervlaktes en haal verrijking op voor ALLE percelen
@@ -820,9 +819,6 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     setIsAppartementsrecht(false)
     setHandmatigGevalideerdSet(new Set())
     setPerceelOppervlaktes({})
-    setGevondenAppartementsrechten([])
-    setToonAppartementsrechtInvoer(false)
-    setHandmatigAppartementsrechtNummer('')
 
     try {
       const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`
@@ -880,9 +876,6 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       setIsAppartementsrecht(false)
       setHandmatigGevalideerdSet(new Set())
       setPerceelOppervlaktes({})
-      setGevondenAppartementsrechten([])
-      setToonAppartementsrechtInvoer(false)
-      setHandmatigAppartementsrechtNummer('')
       verwerkPercelenUitDoc(doc, newAdresData)
     } catch {
       // silently ignore lookup errors
@@ -894,7 +887,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   }
 
   // --- Handmatig perceel: helper om perceel toe te voegen (met of zonder validatie) ---
-  const voegHandmatigPerceelToe = (g: string, s: string, p: string, oppervlakte?: number, gevalideerd = false) => {
+  const voegHandmatigPerceelToe = (g: string, s: string, p: string, oppervlakte?: number, gevalideerd = false, appartementsrecht?: string) => {
     const volledigeAanduiding = `${g}-${s}-${p}`
     const isDuplicaat = gevondenPercelen.some(
       (existing) => existing.gemeente === g && existing.sectie === s && existing.perceelnummer === p
@@ -912,7 +905,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         const totaal = berekenTotaalOppervlak(updated)
         onChange({
           ...dataRef.current,
-          kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
+          kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p, appartementsrecht },
           kadastraalOppervlak: totaal,
         })
         return updated
@@ -920,12 +913,13 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     } else {
       onChange({
         ...dataRef.current,
-        kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
+        kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p, appartementsrecht },
       })
     }
     setHandmatigGemeente('')
     setHandmatigSectie('')
     setHandmatigPerceelnummer('')
+    setHandmatigAppartementsrecht('')
     setHandmatigValidatieFout(null)
     setHandmatigApiError(false)
     setToonHandmatigInvoer(false)
@@ -1037,7 +1031,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
       <div className="grid gap-2">
         <Label>Kadastrale aanduiding</Label>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <Input
             placeholder="Gemeente"
             value={data.kadasterAanduiding?.gemeente || ''}
@@ -1065,6 +1059,16 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
               onChange({
                 ...data,
                 kadasterAanduiding: { ...data.kadasterAanduiding!, perceelnummer: e.target.value },
+              })
+            }
+          />
+          <Input
+            placeholder="Appartementsrecht (optioneel)"
+            value={data.kadasterAanduiding?.appartementsrecht || ''}
+            onChange={(e) =>
+              onChange({
+                ...data,
+                kadasterAanduiding: { ...data.kadasterAanduiding!, appartementsrecht: e.target.value },
               })
             }
           />
@@ -1204,14 +1208,6 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
             >
               {toonHandmatigInvoer ? 'Annuleer' : '+ Perceel handmatig toevoegen'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setToonAppartementsrechtInvoer((v) => !v)}
-            >
-              {toonAppartementsrechtInvoer ? 'Annuleer' : '+ Appartementsrecht toevoegen'}
-            </Button>
             {gevondenPercelen.length > 0 && (
               <Button
                 type="button"
@@ -1277,7 +1273,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           </div>
           {toonHandmatigInvoer && (
             <div className="mt-2 grid gap-2 rounded-md border p-3">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 <Input
                   placeholder="Gemeente (bijv. VLO00)"
                   value={handmatigGemeente}
@@ -1305,6 +1301,11 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                     setHandmatigApiError(false)
                   }}
                 />
+                <Input
+                  placeholder="Appartementsrecht (optioneel)"
+                  value={handmatigAppartementsrecht}
+                  onChange={(e) => setHandmatigAppartementsrecht(e.target.value)}
+                />
               </div>
 
               {/* Foutmelding: perceel niet gevonden in kadaster */}
@@ -1325,7 +1326,8 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                       const g = handmatigGemeente.trim()
                       const s = handmatigSectie.trim()
                       const p = handmatigPerceelnummer.trim()
-                      voegHandmatigPerceelToe(g, s, p, undefined, false)
+                      const a = handmatigAppartementsrecht.trim()
+                      voegHandmatigPerceelToe(g, s, p, undefined, false, a || undefined)
                     }}
                   >
                     Toch toevoegen zonder validatie
@@ -1356,7 +1358,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                       return
                     }
                     // Perceel gevonden: voeg toe met validatie-markering en eventuele oppervlakte
-                    voegHandmatigPerceelToe(g, s, p, verrijking.oppervlakte, true)
+                    voegHandmatigPerceelToe(g, s, p, verrijking.oppervlakte, true, handmatigAppartementsrecht.trim() || undefined)
                   } catch {
                     setIsHandmatigValideren(false)
                     // API-fout: toon fallback knop
@@ -1366,55 +1368,6 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
               >
                 {isHandmatigValideren ? 'Valideren…' : 'Perceel toevoegen'}
               </Button>
-            </div>
-          )}
-          {toonAppartementsrechtInvoer && (
-            <div className="mt-2 grid gap-2 rounded-md border p-3">
-              <Label className="text-sm font-medium">Appartementsrecht toevoegen</Label>
-              <div className="grid gap-2">
-                <Input
-                  placeholder="Appartementsrecht nummer (bijv. 70011234)"
-                  value={handmatigAppartementsrechtNummer}
-                  onChange={(e) => setHandmatigAppartementsrechtNummer(e.target.value)}
-                />
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!handmatigAppartementsrechtNummer.trim()}
-                onClick={() => {
-                  const nummer = handmatigAppartementsrechtNummer.trim()
-                  if (nummer && !gevondenAppartementsrechten.includes(nummer)) {
-                    setGevondenAppartementsrechten((prev) => [...prev, nummer])
-                  }
-                  setHandmatigAppartementsrechtNummer('')
-                  setToonAppartementsrechtInvoer(false)
-                }}
-              >
-                Appartementsrecht toevoegen
-              </Button>
-            </div>
-          )}
-          {gevondenAppartementsrechten.length > 0 && (
-            <div className="mt-2 space-y-1">
-              <Label className="text-sm font-medium">Toegevoegde appartementsrechten</Label>
-              {gevondenAppartementsrechten.map((nr) => (
-                <div key={nr} className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                  <Badge variant="secondary">Appartementsrecht</Badge>
-                  <span>{nr}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="ml-auto text-destructive hover:text-destructive h-6 px-2"
-                    onClick={() => {
-                      setGevondenAppartementsrechten((prev) => prev.filter((a) => a !== nr))
-                    }}
-                  >
-                    Verwijder
-                  </Button>
-                </div>
-              ))}
             </div>
           )}
         </div>

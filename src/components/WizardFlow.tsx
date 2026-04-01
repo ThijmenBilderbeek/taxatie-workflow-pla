@@ -925,29 +925,31 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     setToonHandmatigInvoer(false)
   }
 
-  const renderSuggestie = (veldNaam: string) => {
-    if (dismissedSuggesties?.has(veldNaam)) return null
+  const renderVeld = (veldNaam: string, textarea: React.ReactNode) => {
     if (isLoadingSuggesties) {
       return (
-        <div className="flex items-center gap-2 py-2">
-          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
-          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
         </div>
       )
     }
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
-    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
-    if (!s) return null
+    const s = !dismissedSuggesties?.has(veldNaam) && suggesties && onSuggestieAccept && onSuggestieDismiss
+      ? suggesties.find((sg) => sg.veldNaam === veldNaam)
+      : undefined
+    if (!s) return <>{textarea}</>
     return (
-      <SuggestieBanner
-        suggestie={s.suggestie}
-        bronAdres={s.bronAdres}
-        bronScore={s.bronScore}
-        isAIGenerated={s.isAIGenerated}
-        bronRapporten={s.bronRapporten}
-        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
-        onDismiss={() => onSuggestieDismiss(veldNaam)}
-      />
+      <>
+        <SuggestieBanner
+          suggestie={s.suggestie}
+          bronAdres={s.bronAdres}
+          bronScore={s.bronScore}
+          isAIGenerated={s.isAIGenerated}
+          bronRapporten={s.bronRapporten}
+          onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+          onDismiss={() => onSuggestieDismiss(veldNaam)}
+        />
+        {textarea}
+      </>
     )
   }
   return (
@@ -1411,13 +1413,14 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
       <div className="grid gap-2">
         <Label htmlFor="bereikbaarheid">Bereikbaarheid / infrastructuur</Label>
-        {renderSuggestie('bereikbaarheid')}
-        <Textarea
-          id="bereikbaarheid"
-          value={data.bereikbaarheid || ''}
-          onChange={(e) => onChange({ ...data, bereikbaarheid: e.target.value })}
-          rows={3}
-        />
+        {renderVeld('bereikbaarheid', (
+          <Textarea
+            id="bereikbaarheid"
+            value={data.bereikbaarheid || ''}
+            onChange={(e) => onChange({ ...data, bereikbaarheid: e.target.value })}
+            rows={3}
+          />
+        ))}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -1632,115 +1635,124 @@ function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (dat
 }
 
 function Stap5({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<JuridischeInfo>; onChange: (data: Partial<JuridischeInfo>) => void } & SuggestieProps) {
-  const renderSuggestie = (veldNaam: string) => {
-    if (dismissedSuggesties?.has(veldNaam)) return null
+  const renderVeld = (veldNaam: string, textarea: React.ReactNode) => {
     if (isLoadingSuggesties) {
       return (
-        <div className="flex items-center gap-2 py-2">
-          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
-          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
         </div>
       )
     }
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
-    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
-    if (!s) return null
+    const s = !dismissedSuggesties?.has(veldNaam) && suggesties && onSuggestieAccept && onSuggestieDismiss
+      ? suggesties.find((sg) => sg.veldNaam === veldNaam)
+      : undefined
+    if (!s) return <>{textarea}</>
     return (
-      <SuggestieBanner
-        suggestie={s.suggestie}
-        bronAdres={s.bronAdres}
-        bronScore={s.bronScore}
-        isAIGenerated={s.isAIGenerated}
-        bronRapporten={s.bronRapporten}
-        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
-        onDismiss={() => onSuggestieDismiss(veldNaam)}
-      />
+      <>
+        <SuggestieBanner
+          suggestie={s.suggestie}
+          bronAdres={s.bronAdres}
+          bronScore={s.bronScore}
+          isAIGenerated={s.isAIGenerated}
+          bronRapporten={s.bronRapporten}
+          onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+          onDismiss={() => onSuggestieDismiss(veldNaam)}
+        />
+        {textarea}
+      </>
     )
   }
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
         <Label htmlFor="eigendomssituatie">Eigendomssituatie *</Label>
-        {renderSuggestie('eigendomssituatie')}
-        <Textarea
-          id="eigendomssituatie"
-          value={data.eigendomssituatie || ''}
-          onChange={(e) => onChange({ ...data, eigendomssituatie: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('eigendomssituatie', (
+          <Textarea
+            id="eigendomssituatie"
+            value={data.eigendomssituatie || ''}
+            onChange={(e) => onChange({ ...data, eigendomssituatie: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="erfpacht">Erfpacht</Label>
-        {renderSuggestie('erfpacht')}
-        <Textarea
-          id="erfpacht"
-          value={data.erfpacht || ''}
-          onChange={(e) => onChange({ ...data, erfpacht: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('erfpacht', (
+          <Textarea
+            id="erfpacht"
+            value={data.erfpacht || ''}
+            onChange={(e) => onChange({ ...data, erfpacht: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="zakelijkeRechten">Zakelijke rechten</Label>
-        {renderSuggestie('zakelijkeRechten')}
-        <Textarea
-          id="zakelijkeRechten"
-          value={data.zakelijkeRechten || ''}
-          onChange={(e) => onChange({ ...data, zakelijkeRechten: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('zakelijkeRechten', (
+          <Textarea
+            id="zakelijkeRechten"
+            value={data.zakelijkeRechten || ''}
+            onChange={(e) => onChange({ ...data, zakelijkeRechten: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="kwalitatieveVerplichtingen">Kwalitatieve verplichtingen</Label>
-        {renderSuggestie('kwalitatieveVerplichtingen')}
-        <Textarea
-          id="kwalitatieveVerplichtingen"
-          value={data.kwalitatieveVerplichtingen || ''}
-          onChange={(e) => onChange({ ...data, kwalitatieveVerplichtingen: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('kwalitatieveVerplichtingen', (
+          <Textarea
+            id="kwalitatieveVerplichtingen"
+            value={data.kwalitatieveVerplichtingen || ''}
+            onChange={(e) => onChange({ ...data, kwalitatieveVerplichtingen: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="bestemmingsplan">Bestemmingsplan *</Label>
-        {renderSuggestie('bestemmingsplan')}
-        <Textarea
-          id="bestemmingsplan"
-          value={data.bestemmingsplan || ''}
-          onChange={(e) => onChange({ ...data, bestemmingsplan: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('bestemmingsplan', (
+          <Textarea
+            id="bestemmingsplan"
+            value={data.bestemmingsplan || ''}
+            onChange={(e) => onChange({ ...data, bestemmingsplan: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
     </div>
   )
 }
 
 function Stap6({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<TechnischeStaat>; onChange: (data: Partial<TechnischeStaat>) => void } & SuggestieProps) {
-  const renderSuggestie = (veldNaam: string) => {
-    if (dismissedSuggesties?.has(veldNaam)) return null
+  const renderVeld = (veldNaam: string, textarea: React.ReactNode) => {
     if (isLoadingSuggesties) {
       return (
-        <div className="flex items-center gap-2 py-2">
-          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
-          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
         </div>
       )
     }
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
-    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
-    if (!s) return null
+    const s = !dismissedSuggesties?.has(veldNaam) && suggesties && onSuggestieAccept && onSuggestieDismiss
+      ? suggesties.find((sg) => sg.veldNaam === veldNaam)
+      : undefined
+    if (!s) return <>{textarea}</>
     return (
-      <SuggestieBanner
-        suggestie={s.suggestie}
-        bronAdres={s.bronAdres}
-        bronScore={s.bronScore}
-        isAIGenerated={s.isAIGenerated}
-        bronRapporten={s.bronRapporten}
-        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
-        onDismiss={() => onSuggestieDismiss(veldNaam)}
-      />
+      <>
+        <SuggestieBanner
+          suggestie={s.suggestie}
+          bronAdres={s.bronAdres}
+          bronScore={s.bronScore}
+          isAIGenerated={s.isAIGenerated}
+          bronRapporten={s.bronRapporten}
+          onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+          onDismiss={() => onSuggestieDismiss(veldNaam)}
+        />
+        {textarea}
+      </>
     )
   }
   return (
@@ -1787,35 +1799,38 @@ function Stap6({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
       <div className="grid gap-2">
         <Label htmlFor="fundering">Fundering</Label>
-        {renderSuggestie('fundering')}
-        <Textarea
-          id="fundering"
-          value={data.fundering || ''}
-          onChange={(e) => onChange({ ...data, fundering: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('fundering', (
+          <Textarea
+            id="fundering"
+            value={data.fundering || ''}
+            onChange={(e) => onChange({ ...data, fundering: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="dakbedekking">Dakbedekking</Label>
-        {renderSuggestie('dakbedekking')}
-        <Textarea
-          id="dakbedekking"
-          value={data.dakbedekking || ''}
-          onChange={(e) => onChange({ ...data, dakbedekking: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('dakbedekking', (
+          <Textarea
+            id="dakbedekking"
+            value={data.dakbedekking || ''}
+            onChange={(e) => onChange({ ...data, dakbedekking: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="installaties">Installaties</Label>
-        {renderSuggestie('installaties')}
-        <Textarea
-          id="installaties"
-          value={data.installaties || ''}
-          onChange={(e) => onChange({ ...data, installaties: e.target.value })}
-          rows={2}
-        />
+        {renderVeld('installaties', (
+          <Textarea
+            id="installaties"
+            value={data.installaties || ''}
+            onChange={(e) => onChange({ ...data, installaties: e.target.value })}
+            rows={2}
+          />
+        ))}
       </div>
 
       <div className="flex items-center gap-2">
@@ -1830,13 +1845,14 @@ function Stap6({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       {data.achterstalligOnderhoud && (
         <div className="grid gap-2">
           <Label htmlFor="achterstalligOnderhoudBeschrijving">Beschrijving achterstallig onderhoud</Label>
-          {renderSuggestie('achterstalligOnderhoudBeschrijving')}
-          <Textarea
-            id="achterstalligOnderhoudBeschrijving"
-            value={data.achterstalligOnderhoudBeschrijving || ''}
-            onChange={(e) => onChange({ ...data, achterstalligOnderhoudBeschrijving: e.target.value })}
-            rows={3}
-          />
+          {renderVeld('achterstalligOnderhoudBeschrijving', (
+            <Textarea
+              id="achterstalligOnderhoudBeschrijving"
+              value={data.achterstalligOnderhoudBeschrijving || ''}
+              onChange={(e) => onChange({ ...data, achterstalligOnderhoudBeschrijving: e.target.value })}
+              rows={3}
+            />
+          ))}
         </div>
       )}
 
@@ -1854,29 +1870,31 @@ function Stap6({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 }
 
 function Stap7({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Vergunningen>; onChange: (data: Partial<Vergunningen>) => void } & SuggestieProps) {
-  const renderSuggestie = (veldNaam: string) => {
-    if (dismissedSuggesties?.has(veldNaam)) return null
+  const renderVeld = (veldNaam: string, textarea: React.ReactNode) => {
     if (isLoadingSuggesties) {
       return (
-        <div className="flex items-center gap-2 py-2">
-          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
-          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
         </div>
       )
     }
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
-    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
-    if (!s) return null
+    const s = !dismissedSuggesties?.has(veldNaam) && suggesties && onSuggestieAccept && onSuggestieDismiss
+      ? suggesties.find((sg) => sg.veldNaam === veldNaam)
+      : undefined
+    if (!s) return <>{textarea}</>
     return (
-      <SuggestieBanner
-        suggestie={s.suggestie}
-        bronAdres={s.bronAdres}
-        bronScore={s.bronScore}
-        isAIGenerated={s.isAIGenerated}
-        bronRapporten={s.bronRapporten}
-        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
-        onDismiss={() => onSuggestieDismiss(veldNaam)}
-      />
+      <>
+        <SuggestieBanner
+          suggestie={s.suggestie}
+          bronAdres={s.bronAdres}
+          bronScore={s.bronScore}
+          isAIGenerated={s.isAIGenerated}
+          bronRapporten={s.bronRapporten}
+          onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+          onDismiss={() => onSuggestieDismiss(veldNaam)}
+        />
+        {textarea}
+      </>
     )
   }
   return (
@@ -1973,13 +1991,14 @@ function Stap7({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
       <div className="grid gap-2">
         <Label htmlFor="toelichting">Toelichting</Label>
-        {renderSuggestie('toelichting')}
-        <Textarea
-          id="toelichting"
-          value={data.toelichting || ''}
-          onChange={(e) => onChange({ ...data, toelichting: e.target.value })}
-          rows={3}
-        />
+        {renderVeld('toelichting', (
+          <Textarea
+            id="toelichting"
+            value={data.toelichting || ''}
+            onChange={(e) => onChange({ ...data, toelichting: e.target.value })}
+            rows={3}
+          />
+        ))}
       </div>
     </div>
   )
@@ -2135,64 +2154,69 @@ function Stap8({ data, onChange }: { data: Partial<Waardering>; onChange: (data:
 }
 
 function Stap9({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void } & SuggestieProps) {
-  const renderSuggestie = (veldNaam: string) => {
-    if (dismissedSuggesties?.has(veldNaam)) return null
+  const renderVeld = (veldNaam: string, textarea: React.ReactNode) => {
     if (isLoadingSuggesties) {
       return (
-        <div className="flex items-center gap-2 py-2">
-          <img src="/valyze_logo2.svg" alt="Valyze" className="h-6 w-auto animate-pulse" />
-          <span className="text-sm text-muted-foreground">AI suggesties laden...</span>
+        <div role="status" aria-label="AI genereert suggesties" className="flex items-center justify-center min-h-[100px] rounded-md border border-input bg-white">
+          <img src="/valyze_logo2.svg" alt="AI genereert..." className="h-24 w-auto animate-pulse opacity-50" />
         </div>
       )
     }
-    if (!suggesties || !onSuggestieAccept || !onSuggestieDismiss) return null
-    const s = suggesties.find((sg) => sg.veldNaam === veldNaam)
-    if (!s) return null
+    const s = !dismissedSuggesties?.has(veldNaam) && suggesties && onSuggestieAccept && onSuggestieDismiss
+      ? suggesties.find((sg) => sg.veldNaam === veldNaam)
+      : undefined
+    if (!s) return <>{textarea}</>
     return (
-      <SuggestieBanner
-        suggestie={s.suggestie}
-        bronAdres={s.bronAdres}
-        bronScore={s.bronScore}
-        isAIGenerated={s.isAIGenerated}
-        bronRapporten={s.bronRapporten}
-        onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
-        onDismiss={() => onSuggestieDismiss(veldNaam)}
-      />
+      <>
+        <SuggestieBanner
+          suggestie={s.suggestie}
+          bronAdres={s.bronAdres}
+          bronScore={s.bronScore}
+          isAIGenerated={s.isAIGenerated}
+          bronRapporten={s.bronRapporten}
+          onAccept={() => onSuggestieAccept(veldNaam, s.suggestie)}
+          onDismiss={() => onSuggestieDismiss(veldNaam)}
+        />
+        {textarea}
+      </>
     )
   }
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
         <Label htmlFor="aannames">Aannames</Label>
-        {renderSuggestie('aannames')}
-        <Textarea
-          id="aannames"
-          value={data.aannames || ''}
-          onChange={(e) => onChange({ ...data, aannames: e.target.value })}
-          rows={4}
-        />
+        {renderVeld('aannames', (
+          <Textarea
+            id="aannames"
+            value={data.aannames || ''}
+            onChange={(e) => onChange({ ...data, aannames: e.target.value })}
+            rows={4}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="voorbehouden">Voorbehouden</Label>
-        {renderSuggestie('voorbehouden')}
-        <Textarea
-          id="voorbehouden"
-          value={data.voorbehouden || ''}
-          onChange={(e) => onChange({ ...data, voorbehouden: e.target.value })}
-          rows={4}
-        />
+        {renderVeld('voorbehouden', (
+          <Textarea
+            id="voorbehouden"
+            value={data.voorbehouden || ''}
+            onChange={(e) => onChange({ ...data, voorbehouden: e.target.value })}
+            rows={4}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="bijzondereOmstandigheden">Bijzondere omstandigheden</Label>
-        {renderSuggestie('bijzondereOmstandigheden')}
-        <Textarea
-          id="bijzondereOmstandigheden"
-          value={data.bijzondereOmstandigheden || ''}
-          onChange={(e) => onChange({ ...data, bijzondereOmstandigheden: e.target.value })}
-          rows={4}
-        />
+        {renderVeld('bijzondereOmstandigheden', (
+          <Textarea
+            id="bijzondereOmstandigheden"
+            value={data.bijzondereOmstandigheden || ''}
+            onChange={(e) => onChange({ ...data, bijzondereOmstandigheden: e.target.value })}
+            rows={4}
+          />
+        ))}
       </div>
 
       <div className="grid gap-2">

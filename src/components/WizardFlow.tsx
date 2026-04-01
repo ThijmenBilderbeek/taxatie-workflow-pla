@@ -716,6 +716,10 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [handmatigGevalideerdSet, setHandmatigGevalideerdSet] = useState<Set<string>>(new Set())
   // Map van volledigeAanduiding → oppervlakte voor totaalberekening
   const [perceelOppervlaktes, setPerceelOppervlaktes] = useState<Record<string, number>>({})
+  // --- Handmatig appartementsrecht toevoegen ---
+  const [toonAppartementsrechtInvoer, setToonAppartementsrechtInvoer] = useState(false)
+  const [handmatigAppartementsrechtNummer, setHandmatigAppartementsrechtNummer] = useState('')
+  const [gevondenAppartementsrechten, setGevondenAppartementsrechten] = useState<string[]>([])
   // Sla het laatste geselecteerde PDOK-id op voor retry
   const lastPdokIdRef = useRef<string | null>(null)
   // Altijd de meest recente data beschikbaar in async callbacks
@@ -816,6 +820,9 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     setIsAppartementsrecht(false)
     setHandmatigGevalideerdSet(new Set())
     setPerceelOppervlaktes({})
+    setGevondenAppartementsrechten([])
+    setToonAppartementsrechtInvoer(false)
+    setHandmatigAppartementsrechtNummer('')
 
     try {
       const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`
@@ -873,6 +880,9 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       setIsAppartementsrecht(false)
       setHandmatigGevalideerdSet(new Set())
       setPerceelOppervlaktes({})
+      setGevondenAppartementsrechten([])
+      setToonAppartementsrechtInvoer(false)
+      setHandmatigAppartementsrechtNummer('')
       verwerkPercelenUitDoc(doc, newAdresData)
     } catch {
       // silently ignore lookup errors
@@ -1194,6 +1204,14 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
             >
               {toonHandmatigInvoer ? 'Annuleer' : '+ Perceel handmatig toevoegen'}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setToonAppartementsrechtInvoer((v) => !v)}
+            >
+              {toonAppartementsrechtInvoer ? 'Annuleer' : '+ Appartementsrecht toevoegen'}
+            </Button>
             {gevondenPercelen.length > 0 && (
               <Button
                 type="button"
@@ -1350,6 +1368,55 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
               </Button>
             </div>
           )}
+          {toonAppartementsrechtInvoer && (
+            <div className="mt-2 grid gap-2 rounded-md border p-3">
+              <Label className="text-sm font-medium">Appartementsrecht toevoegen</Label>
+              <div className="grid gap-2">
+                <Input
+                  placeholder="Appartementsrecht nummer (bijv. 70011234)"
+                  value={handmatigAppartementsrechtNummer}
+                  onChange={(e) => setHandmatigAppartementsrechtNummer(e.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!handmatigAppartementsrechtNummer.trim()}
+                onClick={() => {
+                  const nummer = handmatigAppartementsrechtNummer.trim()
+                  if (nummer && !gevondenAppartementsrechten.includes(nummer)) {
+                    setGevondenAppartementsrechten((prev) => [...prev, nummer])
+                  }
+                  setHandmatigAppartementsrechtNummer('')
+                  setToonAppartementsrechtInvoer(false)
+                }}
+              >
+                Appartementsrecht toevoegen
+              </Button>
+            </div>
+          )}
+          {gevondenAppartementsrechten.length > 0 && (
+            <div className="mt-2 space-y-1">
+              <Label className="text-sm font-medium">Toegevoegde appartementsrechten</Label>
+              {gevondenAppartementsrechten.map((nr) => (
+                <div key={nr} className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+                  <Badge variant="secondary">Appartementsrecht</Badge>
+                  <span>{nr}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto text-destructive hover:text-destructive h-6 px-2"
+                    onClick={() => {
+                      setGevondenAppartementsrechten((prev) => prev.filter((a) => a !== nr))
+                    }}
+                  >
+                    Verwijder
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1359,7 +1426,9 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           id="kadastraalOppervlak"
           type="number"
           value={data.kadastraalOppervlak || ''}
-          onChange={(e) => onChange({ ...data, kadastraalOppervlak: Number(e.target.value) })}
+          readOnly
+          disabled
+          className="bg-muted cursor-not-allowed"
         />
       </div>
 

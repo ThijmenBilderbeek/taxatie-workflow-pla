@@ -796,6 +796,16 @@ export function RapportView({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {isGeneratingAI && aiProgress?.sectie === sectie.key && (
+                    <div className="flex items-center gap-2">
+                      <img
+                        src="/valyze_logo2.svg"
+                        alt="Valyze logo"
+                        className="h-6 w-auto animate-pulse"
+                      />
+                      <span className="text-sm text-muted-foreground">AI genereert...</span>
+                    </div>
+                  )}
                   <Textarea
                     value={editingStates[sectie.key] || ''}
                     onChange={(e) =>

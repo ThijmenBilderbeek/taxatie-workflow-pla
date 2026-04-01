@@ -714,6 +714,8 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [handmatigApiError, setHandmatigApiError] = useState(false)
   // Set van volledigeAanduiding van handmatig gevalideerde percelen (voor badge)
   const [handmatigGevalideerdSet, setHandmatigGevalideerdSet] = useState<Set<string>>(new Set())
+  // Map van volledigeAanduiding → oppervlakte voor totaalberekening
+  const [perceelOppervlaktes, setPerceelOppervlaktes] = useState<Record<string, number>>({})
   // Sla het laatste geselecteerde PDOK-id op voor retry
   const lastPdokIdRef = useRef<string | null>(null)
   // Altijd de meest recente data beschikbaar in async callbacks
@@ -750,6 +752,11 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const DROPDOWN_CLOSE_DELAY = 200
 
   // --- PDOK Perceel: verrijking starten voor een geselecteerd perceel ---
+  const berekenTotaalOppervlak = (oppervlakteMap: Record<string, number>) => {
+    const totaal = Object.values(oppervlakteMap).reduce((sum, opp) => sum + opp, 0)
+    return totaal > 0 ? totaal : undefined
+  }
+
   const startVerrijkingVoorPerceel = (perceel: PerceelData) => {
     setIsVerrijkingLaden(true)
     setPerceelVerrijking(null)
@@ -757,7 +764,12 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       setIsVerrijkingLaden(false)
       setPerceelVerrijking(verrijking)
       if (verrijking?.oppervlakte) {
-        onChange({ ...dataRef.current, kadastraalOppervlak: verrijking.oppervlakte })
+        setPerceelOppervlaktes((prev) => {
+          const updated = { ...prev, [perceel.volledigeAanduiding]: verrijking.oppervlakte! }
+          const totaal = berekenTotaalOppervlak(updated)
+          onChange({ ...dataRef.current, kadastraalOppervlak: totaal })
+          return updated
+        })
       }
     }).catch(() => {
       setIsVerrijkingLaden(false)
@@ -784,8 +796,11 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           perceelnummer: eerstePerceel.perceelnummer,
         },
       })
-      // Start verrijking voor het eerste perceel
-      startVerrijkingVoorPerceel(eerstePerceel)
+      // Reset oppervlaktes en haal verrijking op voor ALLE percelen
+      setPerceelOppervlaktes({})
+      for (const perceel of percelen) {
+        startVerrijkingVoorPerceel(perceel)
+      }
     }
   }
 
@@ -800,6 +815,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     setIsVerrijkingLaden(false)
     setIsAppartementsrecht(false)
     setHandmatigGevalideerdSet(new Set())
+    setPerceelOppervlaktes({})
 
     try {
       const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/lookup?id=${encodeURIComponent(id)}`
@@ -856,6 +872,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       setIsVerrijkingLaden(false)
       setIsAppartementsrecht(false)
       setHandmatigGevalideerdSet(new Set())
+      setPerceelOppervlaktes({})
       verwerkPercelenUitDoc(doc, newAdresData)
     } catch {
       // silently ignore lookup errors
@@ -879,11 +896,23 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         setHandmatigGevalideerdSet((prev) => new Set([...prev, volledigeAanduiding]))
       }
     }
-    onChange({
-      ...dataRef.current,
-      kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
-      ...(oppervlakte ? { kadastraalOppervlak: oppervlakte } : {}),
-    })
+    if (oppervlakte) {
+      setPerceelOppervlaktes((prev) => {
+        const updated = { ...prev, [volledigeAanduiding]: oppervlakte }
+        const totaal = berekenTotaalOppervlak(updated)
+        onChange({
+          ...dataRef.current,
+          kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
+          kadastraalOppervlak: totaal,
+        })
+        return updated
+      })
+    } else {
+      onChange({
+        ...dataRef.current,
+        kadasterAanduiding: { gemeente: g, sectie: s, perceelnummer: p },
+      })
+    }
     setHandmatigGemeente('')
     setHandmatigSectie('')
     setHandmatigPerceelnummer('')
@@ -1187,32 +1216,40 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
                     next.delete(teVerwijderen.volledigeAanduiding)
                     return next
                   })
-                  const wasGeselecteerd =
-                    data.kadasterAanduiding?.gemeente === teVerwijderen.gemeente &&
-                    data.kadasterAanduiding?.sectie === teVerwijderen.sectie &&
-                    data.kadasterAanduiding?.perceelnummer === teVerwijderen.perceelnummer
-                  if (wasGeselecteerd) {
-                    setPerceelVerrijking(null)
-                    const volgende = nieuwePercelen[0]
-                    if (volgende) {
-                      onChange({
-                        ...data,
-                        kadasterAanduiding: {
-                          gemeente: volgende.gemeente,
-                          sectie: volgende.sectie,
-                          perceelnummer: volgende.perceelnummer,
-                        },
-                        kadastraalOppervlak: undefined,
-                      })
-                      startVerrijkingVoorPerceel(volgende)
+                  setPerceelOppervlaktes((prev) => {
+                    const updated = { ...prev }
+                    delete updated[teVerwijderen.volledigeAanduiding]
+                    const totaal = berekenTotaalOppervlak(updated)
+                    const wasGeselecteerd =
+                      data.kadasterAanduiding?.gemeente === teVerwijderen.gemeente &&
+                      data.kadasterAanduiding?.sectie === teVerwijderen.sectie &&
+                      data.kadasterAanduiding?.perceelnummer === teVerwijderen.perceelnummer
+                    if (wasGeselecteerd) {
+                      setPerceelVerrijking(null)
+                      const volgende = nieuwePercelen[0]
+                      if (volgende) {
+                        onChange({
+                          ...data,
+                          kadasterAanduiding: {
+                            gemeente: volgende.gemeente,
+                            sectie: volgende.sectie,
+                            perceelnummer: volgende.perceelnummer,
+                          },
+                          kadastraalOppervlak: totaal,
+                        })
+                        startVerrijkingVoorPerceel(volgende)
+                      } else {
+                        onChange({
+                          ...data,
+                          kadasterAanduiding: undefined,
+                          kadastraalOppervlak: undefined,
+                        })
+                      }
                     } else {
-                      onChange({
-                        ...data,
-                        kadasterAanduiding: undefined,
-                        kadastraalOppervlak: undefined,
-                      })
+                      onChange({ ...dataRef.current, kadastraalOppervlak: totaal })
                     }
-                  }
+                    return updated
+                  })
                 }}
                 className="text-destructive hover:text-destructive"
               >

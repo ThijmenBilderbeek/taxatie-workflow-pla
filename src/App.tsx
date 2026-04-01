@@ -196,7 +196,7 @@ function App() {
               <img
                 src="/valyze_logo2.svg"
                 alt="Valyze"
-                className="h-24 w-auto cursor-pointer hover:opacity-80 transition-opacity"
+                className="h-32 w-auto cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={handleLogoClick}
                 role="button"
                 aria-label="Naar dashboard"

@@ -192,18 +192,23 @@ function App() {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div
-              className="cursor-pointer select-none hover:opacity-80 transition-opacity"
-              onClick={handleLogoClick}
-              role="button"
-              aria-label="Naar dashboard"
-            >
-              <h1 className="text-2xl font-semibold text-foreground">
-                Taxatieplatform
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Intelligente Vastgoedwaardering
-              </p>
+            <div className="flex items-center gap-3">
+              <img
+                src="/valyze_logo2.svg"
+                alt="Valyze"
+                className="h-10 cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={handleLogoClick}
+                role="button"
+                aria-label="Naar dashboard"
+              />
+              <div>
+                <h1 className="text-2xl font-semibold text-foreground">
+                  Taxatieplatform
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Intelligente Vastgoedwaardering
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <Tabs

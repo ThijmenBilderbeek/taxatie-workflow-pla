@@ -1156,14 +1156,70 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
         {/* --- Handmatig perceel toevoegen: altijd beschikbaar --- */}
         <div className="pt-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setToonHandmatigInvoer((v) => !v)}
-          >
-            {toonHandmatigInvoer ? 'Annuleer' : '+ Perceel handmatig toevoegen'}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setToonHandmatigInvoer((v) => !v)}
+            >
+              {toonHandmatigInvoer ? 'Annuleer' : '+ Perceel handmatig toevoegen'}
+            </Button>
+            {gevondenPercelen.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const huidig = gevondenPercelen.find(
+                    (p) =>
+                      p.gemeente === data.kadasterAanduiding?.gemeente &&
+                      p.sectie === data.kadasterAanduiding?.sectie &&
+                      p.perceelnummer === data.kadasterAanduiding?.perceelnummer,
+                  )
+                  const teVerwijderen = huidig ?? gevondenPercelen[gevondenPercelen.length - 1]
+                  const nieuwePercelen = gevondenPercelen.filter(
+                    (p) => p.volledigeAanduiding !== teVerwijderen.volledigeAanduiding,
+                  )
+                  setGevondenPercelen(nieuwePercelen)
+                  setHandmatigGevalideerdSet((prev) => {
+                    const next = new Set(prev)
+                    next.delete(teVerwijderen.volledigeAanduiding)
+                    return next
+                  })
+                  const wasGeselecteerd =
+                    data.kadasterAanduiding?.gemeente === teVerwijderen.gemeente &&
+                    data.kadasterAanduiding?.sectie === teVerwijderen.sectie &&
+                    data.kadasterAanduiding?.perceelnummer === teVerwijderen.perceelnummer
+                  if (wasGeselecteerd) {
+                    setPerceelVerrijking(null)
+                    const volgende = nieuwePercelen[0]
+                    if (volgende) {
+                      onChange({
+                        ...data,
+                        kadasterAanduiding: {
+                          gemeente: volgende.gemeente,
+                          sectie: volgende.sectie,
+                          perceelnummer: volgende.perceelnummer,
+                        },
+                        kadastraalOppervlak: undefined,
+                      })
+                      startVerrijkingVoorPerceel(volgende)
+                    } else {
+                      onChange({
+                        ...data,
+                        kadasterAanduiding: undefined,
+                        kadastraalOppervlak: undefined,
+                      })
+                    }
+                  }
+                }}
+                className="text-destructive hover:text-destructive"
+              >
+                Verwijder perceel
+              </Button>
+            )}
+          </div>
           {toonHandmatigInvoer && (
             <div className="mt-2 grid gap-2 rounded-md border p-3">
               <div className="grid grid-cols-3 gap-2">

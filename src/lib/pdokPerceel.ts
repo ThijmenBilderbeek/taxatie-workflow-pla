@@ -98,7 +98,7 @@ export async function haalPerceelVerrijking(perceel: PerceelData): Promise<Perce
   if (!/^[A-Z0-9]+$/.test(perceel.gemeente) || !/^[A-Z]{1,2}$/.test(perceel.sectie) || !/^\d+$/.test(perceel.perceelnummer)) {
     throw new Error('Ongeldig perceelformaat')
   }
-  const filter = `kadastraleGemeente = '${perceel.gemeente}' AND kadastraleSectie = '${perceel.sectie}' AND perceelnummer = '${perceel.perceelnummer}'`
+  const filter = `kadastraleGemeente = '${perceel.gemeente}' AND kadastraleSectie = '${perceel.sectie}' AND perceelnummer = ${perceel.perceelnummer}`
   const url = `https://api.pdok.nl/kadaster/brk-kadastrale-kaart/ogc/v1/collections/perceel/items?filter=${encodeURIComponent(filter)}&filter-lang=cql-text&limit=1`
   const resp = await fetch(url)
   if (!resp.ok) {

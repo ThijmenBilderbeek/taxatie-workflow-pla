@@ -14,6 +14,7 @@ interface InstellingenProps {
   historischeRapporten: HistorischRapport[]
   onUpdateInstellingen: (instellingen: SimilarityInstellingen) => void
   onSeedRapporten: (rapporten: HistorischRapport[]) => void
+  onNavigateToAIUsage: () => void
 }
 
 const SEED_RAPPORTEN: HistorischRapport[] = [
@@ -160,6 +161,7 @@ export function Instellingen({
   historischeRapporten,
   onUpdateInstellingen,
   onSeedRapporten,
+  onNavigateToAIUsage,
 }: InstellingenProps) {
   const [showSeedConfirm, setShowSeedConfirm] = useState(false)
 
@@ -340,6 +342,20 @@ export function Instellingen({
               </span>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Gebruik</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground">
+            Bekijk het AI gebruik dashboard met OpenAI kostenmonitoring per gebruiker en dossier.
+          </p>
+          <Button onClick={onNavigateToAIUsage}>
+            Bekijk AI Gebruik Dashboard
+          </Button>
         </CardContent>
       </Card>
 

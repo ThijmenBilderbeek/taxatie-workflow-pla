@@ -18,7 +18,7 @@ import { Button } from './components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import type { Dossier, SimilarityFeedback } from './types'
 
-type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen' | 'ai-usage'
+type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen'
 
 function LoginForm({ onSignIn, onSignUp }: {
   onSignIn: (email: string, password: string) => Promise<{ error: unknown }>
@@ -105,6 +105,7 @@ function App() {
   const [nieuwDossiernummer, setNieuwDossiernummer] = useState('')
   const [dossiernummerFout, setDossiernummerFout] = useState(false)
   const [wizardShouldSaveAndNavigate, setWizardShouldSaveAndNavigate] = useState(false)
+  const [showAIUsageDashboard, setShowAIUsageDashboard] = useState(false)
 
   if (authLoading) {
     return (
@@ -213,7 +214,10 @@ function App() {
             <div className="flex items-center gap-4">
               <Tabs
                 value={currentView}
-                onValueChange={(v) => setCurrentView(v as View)}
+                onValueChange={(v) => {
+                  setCurrentView(v as View)
+                  setShowAIUsageDashboard(false)
+                }}
               >
                 <TabsList>
                   <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
@@ -225,7 +229,6 @@ function App() {
                   </TabsTrigger>
                   <TabsTrigger value="kennisbank">Kennisbank</TabsTrigger>
                   <TabsTrigger value="instellingen">Instellingen</TabsTrigger>
-                  <TabsTrigger value="ai-usage">AI Gebruik</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Button variant="outline" size="sm" onClick={signOut}>
@@ -288,19 +291,25 @@ function App() {
         )}
 
         {currentView === 'instellingen' && (
-          <Instellingen
-            instellingen={similarityInstellingen}
-            feedback={similarityFeedback}
-            historischeRapporten={historischeRapporten}
-            onUpdateInstellingen={setSimilarityInstellingen}
-            onSeedRapporten={(nieuweRapporten) =>
-              nieuweRapporten.forEach(addRapport)
-            }
-          />
-        )}
-
-        {currentView === 'ai-usage' && (
-          <AIUsageDashboard />
+          showAIUsageDashboard ? (
+            <div className="space-y-4">
+              <Button variant="outline" onClick={() => setShowAIUsageDashboard(false)}>
+                ← Terug naar Instellingen
+              </Button>
+              <AIUsageDashboard />
+            </div>
+          ) : (
+            <Instellingen
+              instellingen={similarityInstellingen}
+              feedback={similarityFeedback}
+              historischeRapporten={historischeRapporten}
+              onUpdateInstellingen={setSimilarityInstellingen}
+              onSeedRapporten={(nieuweRapporten) =>
+                nieuweRapporten.forEach(addRapport)
+              }
+              onNavigateToAIUsage={() => setShowAIUsageDashboard(true)}
+            />
+          )
         )}
       </main>
 

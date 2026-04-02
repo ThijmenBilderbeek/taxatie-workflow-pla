@@ -46,10 +46,22 @@ async function logUsage(
       userId = data.user?.id ?? null
     }
 
+    let kantoorId: string | null = null
+    if (userId) {
+      const { data: membership } = await supabaseAdmin
+        .from('kantoor_members')
+        .select('kantoor_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle()
+      kantoorId = membership?.kantoor_id ?? null
+    }
+
     const estimatedCost = estimateCost(model, promptTokens, completionTokens)
 
     await supabaseAdmin.from('ai_usage_log').insert({
       user_id: userId,
+      kantoor_id: kantoorId,
       dossier_id: null,
       sectie_key: '__classify',
       model,

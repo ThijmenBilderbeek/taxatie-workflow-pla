@@ -278,7 +278,8 @@ export async function getKennisbankContextForSectieSemantic(
   sectieKey: string,
   objectType?: ObjectType,
   marketSegment?: MarketSegment,
-  queryEmbedding?: number[]
+  queryEmbedding?: number[],
+  kantoorId?: string | null
 ): Promise<KennisbankContext> {
   if (!queryEmbedding) {
     return getKennisbankContextForSectie(sectieKey, objectType, marketSegment)
@@ -302,6 +303,7 @@ export async function getKennisbankContextForSectieSemantic(
       match_count: (MAX_TEMPLATE_CHUNKS + MAX_STYLE_EXAMPLES) * 2,
       filter_object_type: objectType ?? null,
       filter_market_segment: marketSegment ?? null,
+      filter_kantoor_id: kantoorId ?? null,
     })
 
     if (rpcError) {

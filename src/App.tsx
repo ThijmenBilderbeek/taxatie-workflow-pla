@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth'
 import { useDossiers } from './hooks/useDossiers'
 import { useHistorischeRapporten } from './hooks/useHistorischeRapporten'
 import { useSimilarityInstellingen } from './hooks/useSimilarityInstellingen'
+import { KantoorProvider } from './contexts/KantoorContext'
 import { Dashboard } from './components/Dashboard'
 import { WizardFlow } from './components/WizardFlow'
 import { RapportView } from './components/RapportView'
@@ -92,8 +93,7 @@ function LoginForm({ onSignIn, onSignUp }: {
   )
 }
 
-function App() {
-  const { user, loading: authLoading, signIn, signUp, signOut } = useAuth()
+function AppContent({ signOut }: { signOut: () => Promise<void> }) {
   const { dossiers, createDossier, updateDossier, deleteDossier } = useDossiers()
   const { rapporten: historischeRapporten, addRapport, updateRapport, deleteRapport } = useHistorischeRapporten()
   const { instellingen: similarityInstellingen, updateInstellingen: setSimilarityInstellingen } = useSimilarityInstellingen()
@@ -106,18 +106,6 @@ function App() {
   const [dossiernummerFout, setDossiernummerFout] = useState(false)
   const [wizardShouldSaveAndNavigate, setWizardShouldSaveAndNavigate] = useState(false)
   const [showAIUsageDashboard, setShowAIUsageDashboard] = useState(false)
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Laden...</p>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return <LoginForm onSignIn={signIn} onSignUp={signUp} />
-  }
 
   const activeDossier = activeDossierId
     ? dossiers.find((d) => d.id === activeDossierId)
@@ -350,4 +338,24 @@ function App() {
   )
 }
 
-export default App
+export default function App() {
+  const { user, loading: authLoading, signIn, signUp, signOut } = useAuth()
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Laden...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginForm onSignIn={signIn} onSignUp={signUp} />
+  }
+
+  return (
+    <KantoorProvider>
+      <AppContent signOut={signOut} />
+    </KantoorProvider>
+  )
+}

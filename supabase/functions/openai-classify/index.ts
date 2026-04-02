@@ -39,17 +39,29 @@ async function logUsage(
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
 
     let userId: string | null = null
+    let kantoorId: string | null = null
     const authHeader = req.headers.get('authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7)
       const { data } = await supabaseAdmin.auth.getUser(token)
       userId = data.user?.id ?? null
+
+      if (userId) {
+        const { data: membership } = await supabaseAdmin
+          .from('kantoor_members')
+          .select('kantoor_id')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle()
+        kantoorId = membership?.kantoor_id ?? null
+      }
     }
 
     const estimatedCost = estimateCost(model, promptTokens, completionTokens)
 
     await supabaseAdmin.from('ai_usage_log').insert({
       user_id: userId,
+      kantoor_id: kantoorId,
       dossier_id: null,
       sectie_key: '__classify',
       model,

@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useKantoor } from './useKantoor'
 import type { Dossier } from '@/types'
 
-function dossierToRow(dossier: Dossier, userId: string) {
+function dossierToRow(dossier: Dossier, userId: string, kantoorId: string | null) {
   return {
     id: dossier.id,
     user_id: userId,
+    kantoor_id: kantoorId,
     dossiernummer: dossier.dossiernummer,
     huidige_stap: dossier.huidigeStap,
     status: dossier.status,
@@ -55,6 +57,7 @@ function rowToDossier(row: Record<string, unknown>): Dossier {
 }
 
 export function useDossiers() {
+  const { kantoorId } = useKantoor()
   const [dossiers, setDossiers] = useState<Dossier[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -65,16 +68,23 @@ export function useDossiers() {
       setLoading(false)
       return
     }
-    const { data, error } = await supabase
+    let query = supabase
       .from('dossiers')
       .select('*')
-      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
+
+    if (kantoorId) {
+      query = query.eq('kantoor_id', kantoorId)
+    } else {
+      query = query.eq('user_id', session.user.id)
+    }
+
+    const { data, error } = await query
     if (!error && data) {
       setDossiers(data.map(rowToDossier))
     }
     setLoading(false)
-  }, [])
+  }, [kantoorId])
 
   useEffect(() => {
     fetchDossiers()
@@ -104,18 +114,18 @@ export function useDossiers() {
 
     setDossiers((current) => [dossier, ...current])
 
-    const row = dossierToRow(dossier, user.id)
+    const row = dossierToRow(dossier, user.id, kantoorId)
     const { error } = await supabase.from('dossiers').insert(row)
     if (error) {
       console.error('Failed to create dossier:', error)
       setDossiers((current) => current.filter((d) => d.id !== dossier.id))
     }
-  }, [])
+  }, [kantoorId])
 
   const updateDossier = useCallback(async (dossier: Dossier) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const row = dossierToRow(dossier, user.id)
+    const row = dossierToRow(dossier, user.id, kantoorId)
     const { error } = await supabase
       .from('dossiers')
       .update(row)
@@ -125,7 +135,7 @@ export function useDossiers() {
         current.map((d) => (d.id === dossier.id ? dossier : d))
       )
     }
-  }, [])
+  }, [kantoorId])
 
   const deleteDossier = useCallback(async (dossierId: string) => {
     const { error } = await supabase.from('dossiers').delete().eq('id', dossierId)

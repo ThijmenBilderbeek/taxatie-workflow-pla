@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { useKantoorContext } from '@/contexts/KantoorContext'
 
 export interface SectieFeedbackRecord {
   feedbackType: 'positief' | 'negatief' | 'bewerkt'
@@ -21,7 +22,8 @@ export async function saveSectieFeedback(
   origineleTekst: string,
   bewerkteTekst?: string,
   reden?: string,
-  toelichting?: string
+  toelichting?: string,
+  kantoorId?: string | null
 ): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
@@ -29,6 +31,7 @@ export async function saveSectieFeedback(
 
     const { error } = await supabase.from('sectie_feedback').insert({
       user_id: user.id,
+      kantoor_id: kantoorId ?? null,
       dossier_id: dossierId,
       sectie_key: sectieKey,
       feedback_type: feedbackType,
@@ -83,5 +86,17 @@ export async function getSectieFeedback(
 }
 
 export function useSectieFeedback() {
-  return { saveSectieFeedback, getSectieFeedback }
+  const { kantoorId } = useKantoorContext()
+  return {
+    saveSectieFeedback: (
+      dossierId: string,
+      sectieKey: string,
+      feedbackType: 'positief' | 'negatief' | 'bewerkt',
+      origineleTekst: string,
+      bewerkteTekst?: string,
+      reden?: string,
+      toelichting?: string
+    ) => saveSectieFeedback(dossierId, sectieKey, feedbackType, origineleTekst, bewerkteTekst, reden, toelichting, kantoorId),
+    getSectieFeedback,
+  }
 }

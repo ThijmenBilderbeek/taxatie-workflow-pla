@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useKantoor } from './useKantoor'
 import type { SimilarityInstellingen } from '@/types'
 
 const DEFAULT_INSTELLINGEN: SimilarityInstellingen = {
@@ -13,6 +14,7 @@ const DEFAULT_INSTELLINGEN: SimilarityInstellingen = {
 }
 
 export function useSimilarityInstellingen() {
+  const { kantoorId } = useKantoor()
   const [instellingen, setInstellingen] = useState<SimilarityInstellingen>(DEFAULT_INSTELLINGEN)
   const [loading, setLoading] = useState(true)
 
@@ -23,11 +25,17 @@ export function useSimilarityInstellingen() {
         setLoading(false)
         return
       }
-      const { data, error } = await supabase
+      let query = supabase
         .from('similarity_instellingen')
         .select('*')
-        .eq('user_id', session.user.id)
-        .maybeSingle()
+
+      if (kantoorId) {
+        query = query.eq('kantoor_id', kantoorId)
+      } else {
+        query = query.eq('user_id', session.user.id)
+      }
+
+      const { data, error } = await query.maybeSingle()
       if (!error && data) {
         setInstellingen({ gewichten: data.gewichten })
       }
@@ -45,21 +53,34 @@ export function useSimilarityInstellingen() {
     return () => {
       authSubscription.unsubscribe()
     }
-  }, [])
+  }, [kantoorId])
 
   const updateInstellingen = useCallback(async (nieuw: SimilarityInstellingen) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { error } = await supabase
-      .from('similarity_instellingen')
-      .upsert(
-        { user_id: user.id, gewichten: nieuw.gewichten, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      )
-    if (!error) {
-      setInstellingen(nieuw)
+
+    if (kantoorId) {
+      const { error } = await supabase
+        .from('similarity_instellingen')
+        .upsert(
+          { kantoor_id: kantoorId, user_id: user.id, gewichten: nieuw.gewichten, updated_at: new Date().toISOString() },
+          { onConflict: 'kantoor_id' }
+        )
+      if (!error) {
+        setInstellingen(nieuw)
+      }
+    } else {
+      const { error } = await supabase
+        .from('similarity_instellingen')
+        .upsert(
+          { user_id: user.id, gewichten: nieuw.gewichten, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        )
+      if (!error) {
+        setInstellingen(nieuw)
+      }
     }
-  }, [])
+  }, [kantoorId])
 
   return { instellingen, loading, updateInstellingen }
 }

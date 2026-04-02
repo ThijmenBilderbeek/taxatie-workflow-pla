@@ -9,7 +9,7 @@ import { Switch } from './ui/switch'
 import { Progress } from './ui/progress'
 import { Badge } from './ui/badge'
 import { Skeleton } from './ui/skeleton'
-import { ArrowLeft, ArrowRight, Check, Lightbulb } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowRight, Check, Lightbulb, Upload } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { 
   Dossier, 
@@ -1538,14 +1538,10 @@ function Stap3({ data, onChange, stap2Data }: { data: Partial<Oppervlaktes>; onC
 
 function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (data: Partial<Huurgegevens>) => void }) {
   const [isScanning, setIsScanning] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    // Reset so the same file can be re-uploaded if needed
-    e.target.value = ''
-
+  async function processFile(file: File) {
     setIsScanning(true)
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -1573,6 +1569,45 @@ function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (dat
     }
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    await processFile(file)
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Alleen PDF-bestanden zijn toegestaan.')
+      return
+    }
+    processFile(file)
+  }
+
   if (isScanning) {
     return (
       <div className="flex items-center justify-center min-h-[200px]">
@@ -1590,27 +1625,44 @@ function Stap4({ data, onChange }: { data: Partial<Huurgegevens>; onChange: (dat
           onCheckedChange={(checked) => onChange({ ...data, verhuurd: checked })}
         />
         <Label htmlFor="verhuurd">Object is verhuurd</Label>
-        {data.verhuurd && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
+      </div>
+
+      {data.verhuurd && (
+        <div className="space-y-2">
+          <Label>Huurcontract uploaden</Label>
+          <div
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer ${
+              isDragging
+                ? 'border-primary bg-primary/10'
+                : 'border-muted-foreground/30 bg-muted/30 hover:border-primary/50 hover:bg-muted/50'
+            }`}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Sleep een huurcontract (PDF) hierheen</p>
+            <p className="text-xs text-muted-foreground">of</p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="ml-auto"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }}
             >
-              📄 Huurcontract uploaden
+              Bestand kiezen
             </Button>
-          </>
-        )}
-      </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+        </div>
+      )}
 
       {data.verhuurd && (
         <>

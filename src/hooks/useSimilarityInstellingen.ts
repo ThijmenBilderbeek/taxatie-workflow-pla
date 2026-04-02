@@ -25,18 +25,11 @@ export function useSimilarityInstellingen() {
         setLoading(false)
         return
       }
-
-      let query = supabase
+      const { data, error } = await supabase
         .from('similarity_instellingen')
         .select('*')
-
-      if (kantoorId) {
-        query = query.eq('kantoor_id', kantoorId)
-      } else {
-        query = query.eq('user_id', session.user.id)
-      }
-
-      const { data, error } = await query.maybeSingle()
+        .eq('user_id', session.user.id)
+        .maybeSingle()
       if (!error && data) {
         setInstellingen({ gewichten: data.gewichten })
       }
@@ -54,7 +47,7 @@ export function useSimilarityInstellingen() {
     return () => {
       authSubscription.unsubscribe()
     }
-  }, [kantoorId])
+  }, [])
 
   const updateInstellingen = useCallback(async (nieuw: SimilarityInstellingen) => {
     const { data: { user } } = await supabase.auth.getUser()

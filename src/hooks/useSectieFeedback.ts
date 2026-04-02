@@ -49,7 +49,7 @@ export async function saveSectieFeedback(
     }
 
     // Trigger non-blocking summary update (Layer 1)
-    triggerFeedbackSamenvattingUpdate(sectieKey, 'sectie', kantoorId)
+    triggerFeedbackSamenvattingUpdate(sectieKey, 'sectie')
   } catch (err) {
     console.warn('[useSectieFeedback] saveSectieFeedback failed silently:', err)
   }

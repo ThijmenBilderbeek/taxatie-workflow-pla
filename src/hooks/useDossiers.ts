@@ -68,24 +68,16 @@ export function useDossiers() {
       setLoading(false)
       return
     }
-
-    let query = supabase
+    const { data, error } = await supabase
       .from('dossiers')
       .select('*')
+      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
-
-    if (kantoorId) {
-      query = query.eq('kantoor_id', kantoorId)
-    } else {
-      query = query.eq('user_id', session.user.id)
-    }
-
-    const { data, error } = await query
     if (!error && data) {
       setDossiers(data.map(rowToDossier))
     }
     setLoading(false)
-  }, [kantoorId])
+  }, [])
 
   useEffect(() => {
     fetchDossiers()

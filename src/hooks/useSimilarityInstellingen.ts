@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useKantoor } from '@/hooks/useKantoor'
 import type { SimilarityInstellingen } from '@/types'
 
 const DEFAULT_INSTELLINGEN: SimilarityInstellingen = {
@@ -15,6 +16,7 @@ const DEFAULT_INSTELLINGEN: SimilarityInstellingen = {
 export function useSimilarityInstellingen() {
   const [instellingen, setInstellingen] = useState<SimilarityInstellingen>(DEFAULT_INSTELLINGEN)
   const [loading, setLoading] = useState(true)
+  const { kantoorId } = useKantoor()
 
   useEffect(() => {
     async function fetchInstellingen() {
@@ -53,13 +55,18 @@ export function useSimilarityInstellingen() {
     const { error } = await supabase
       .from('similarity_instellingen')
       .upsert(
-        { user_id: user.id, gewichten: nieuw.gewichten, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
+        {
+          user_id: user.id,
+          kantoor_id: kantoorId ?? null,
+          gewichten: nieuw.gewichten,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: kantoorId ? 'kantoor_id' : 'user_id' }
       )
     if (!error) {
       setInstellingen(nieuw)
     }
-  }, [])
+  }, [kantoorId])
 
   return { instellingen, loading, updateInstellingen }
 }

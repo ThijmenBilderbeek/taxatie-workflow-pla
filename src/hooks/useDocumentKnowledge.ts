@@ -1,12 +1,14 @@
 import { useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useKantoor } from '@/hooks/useKantoor'
 import type { DocumentChunk, DocumentWritingProfile, AIEnhancementOptions } from '@/types/kennisbank'
 import { extractDocumentKnowledgeWithAI } from '@/lib/documentKnowledgeExtractor'
 import type { ObjectType } from '@/types'
 
-function chunkToRow(chunk: DocumentChunk, userId: string) {
+function chunkToRow(chunk: DocumentChunk, userId: string, kantoorId: string | null) {
   return {
     user_id: userId,
+    kantoor_id: kantoorId ?? null,
     document_id: chunk.documentId,
     chapter: chunk.chapter,
     subchapter: chunk.subchapter,
@@ -32,9 +34,10 @@ function chunkToRow(chunk: DocumentChunk, userId: string) {
   }
 }
 
-function profileToRow(profile: DocumentWritingProfile, userId: string) {
+function profileToRow(profile: DocumentWritingProfile, userId: string, kantoorId: string | null) {
   return {
     user_id: userId,
+    kantoor_id: kantoorId ?? null,
     document_id: profile.documentId,
     document_type: profile.documentType,
     object_type: profile.objectType ?? null,
@@ -92,30 +95,32 @@ function rowToProfile(row: Record<string, unknown>): DocumentWritingProfile {
 }
 
 export function useDocumentKnowledge() {
+  const { kantoorId } = useKantoor()
+
   const saveDocumentChunks = useCallback(async (chunks: DocumentChunk[]) => {
     if (chunks.length === 0) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const rows = chunks.map((c) => chunkToRow(c, user.id))
+    const rows = chunks.map((c) => chunkToRow(c, user.id, kantoorId))
     const { error } = await supabase.from('document_chunks').insert(rows)
     if (error) {
       console.error('[useDocumentKnowledge] saveDocumentChunks error:', error)
     }
-  }, [])
+  }, [kantoorId])
 
   const saveDocumentProfile = useCallback(async (profile: DocumentWritingProfile) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const row = profileToRow(profile, user.id)
+    const row = profileToRow(profile, user.id, kantoorId)
     const { error } = await supabase
       .from('document_writing_profiles')
       .upsert(row, { onConflict: 'document_id' })
     if (error) {
       console.error('[useDocumentKnowledge] saveDocumentProfile error:', error)
     }
-  }, [])
+  }, [kantoorId])
 
   const getDocumentChunks = useCallback(async (documentId: string): Promise<DocumentChunk[]> => {
     const { data, error } = await supabase

@@ -8,19 +8,26 @@ import { supabase } from './supabaseClient'
  */
 export async function getFeedbackSamenvatting(
   contextKey: string,
-  contextType: 'veld' | 'sectie'
+  contextType: 'veld' | 'sectie',
+  kantoorId?: string | null
 ): Promise<string | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('feedback_samenvattingen')
       .select('samenvatting')
-      .eq('user_id', user.id)
       .eq('context_key', contextKey)
       .eq('context_type', contextType)
-      .maybeSingle()
+
+    if (kantoorId) {
+      query = query.eq('kantoor_id', kantoorId)
+    } else {
+      query = query.eq('user_id', user.id)
+    }
+
+    const { data, error } = await query.maybeSingle()
 
     if (error || !data) return null
     return (data.samenvatting as string) ?? null
@@ -34,16 +41,22 @@ export async function getFeedbackSamenvatting(
  *
  * Layer 3 of the 3-layer feedback system.
  */
-export async function getSchrijfProfiel(): Promise<string | null> {
+export async function getSchrijfProfiel(kantoorId?: string | null): Promise<string | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('gebruiker_schrijfprofiel')
       .select('profiel')
-      .eq('user_id', user.id)
-      .maybeSingle()
+
+    if (kantoorId) {
+      query = query.eq('kantoor_id', kantoorId)
+    } else {
+      query = query.eq('user_id', user.id)
+    }
+
+    const { data, error } = await query.maybeSingle()
 
     if (error || !data) return null
     return (data.profiel as string) ?? null
@@ -62,7 +75,8 @@ export async function getSchrijfProfiel(): Promise<string | null> {
  */
 export function triggerFeedbackSamenvattingUpdate(
   contextKey: string,
-  contextType: 'veld' | 'sectie'
+  contextType: 'veld' | 'sectie',
+  kantoorId?: string | null
 ): void {
   void (async () => {
     try {
@@ -106,6 +120,7 @@ export function triggerFeedbackSamenvattingUpdate(
         .upsert(
           {
             user_id: user.id,
+            kantoor_id: kantoorId ?? null,
             context_key: contextKey,
             context_type: contextType,
             samenvatting: result.samenvatting as string,
@@ -128,7 +143,7 @@ export function triggerFeedbackSamenvattingUpdate(
  * Should be called after a user saves an edited AI-generated section.
  * Uses `void` so callers are never blocked.
  */
-export function triggerSchrijfProfielUpdate(): void {
+export function triggerSchrijfProfielUpdate(kantoorId?: string | null): void {
   void (async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -160,6 +175,7 @@ export function triggerSchrijfProfielUpdate(): void {
         .upsert(
           {
             user_id: user.id,
+            kantoor_id: kantoorId ?? null,
             profiel: result.profiel as string,
             bewerkingen_verwerkt: bewerkingen.length,
             updated_at: new Date().toISOString(),

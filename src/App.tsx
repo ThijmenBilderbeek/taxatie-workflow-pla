@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth'
 import { useDossiers } from './hooks/useDossiers'
 import { useHistorischeRapporten } from './hooks/useHistorischeRapporten'
 import { useSimilarityInstellingen } from './hooks/useSimilarityInstellingen'
+import { KantoorProvider } from './contexts/KantoorContext'
 import { Dashboard } from './components/Dashboard'
 import { WizardFlow } from './components/WizardFlow'
 import { RapportView } from './components/RapportView'
@@ -92,7 +93,7 @@ function LoginForm({ onSignIn, onSignUp }: {
   )
 }
 
-function App() {
+function AppContent() {
   const { user, loading: authLoading, signIn, signUp, signOut } = useAuth()
   const { dossiers, createDossier, updateDossier, deleteDossier } = useDossiers()
   const { rapporten: historischeRapporten, addRapport, updateRapport, deleteRapport } = useHistorischeRapporten()
@@ -347,6 +348,14 @@ function App() {
 
       <Toaster />
     </div>
+  )
+}
+
+function App() {
+  return (
+    <KantoorProvider>
+      <AppContent />
+    </KantoorProvider>
   )
 }
 

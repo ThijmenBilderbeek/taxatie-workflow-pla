@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useKantoor } from '@/hooks/useKantoor'
 import type { HistorischRapport } from '@/types'
 
-function rapportToRow(rapport: HistorischRapport, userId: string) {
+function rapportToRow(rapport: HistorischRapport, userId: string, kantoorId: string | null) {
   return {
     user_id: userId,
+    kantoor_id: kantoorId ?? null,
     rapport_id: rapport.id,
     adres: rapport.adres,
     type_object: rapport.typeObject,
@@ -41,6 +43,7 @@ function rowToRapport(row: Record<string, unknown>): HistorischRapport {
 export function useHistorischeRapporten() {
   const [rapporten, setRapporten] = useState<HistorischRapport[]>([])
   const [loading, setLoading] = useState(true)
+  const { kantoorId } = useKantoor()
 
   const fetchRapporten = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -85,17 +88,17 @@ export function useHistorischeRapporten() {
   const addRapport = useCallback(async (rapport: HistorischRapport) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const row = rapportToRow(rapport, user.id)
+    const row = rapportToRow(rapport, user.id, kantoorId)
     const { error } = await supabase.from('historische_rapporten').insert(row)
     if (!error) {
       setRapporten((current) => [rapport, ...current])
     }
-  }, [])
+  }, [kantoorId])
 
   const updateRapport = useCallback(async (rapport: HistorischRapport) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const row = rapportToRow(rapport, user.id)
+    const row = rapportToRow(rapport, user.id, kantoorId)
     const { error } = await supabase
       .from('historische_rapporten')
       .update(row)
@@ -105,7 +108,7 @@ export function useHistorischeRapporten() {
         current.map((r) => (r.id === rapport.id ? rapport : r))
       )
     }
-  }, [])
+  }, [kantoorId])
 
   const deleteRapport = useCallback(async (id: string) => {
     const { error } = await supabase.from('historische_rapporten').delete().eq('rapport_id', id)

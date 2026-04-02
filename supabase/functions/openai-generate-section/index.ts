@@ -93,7 +93,8 @@ Instructies:
 - Gebruik NOOIT placeholders zoals [invullen] — schrijf altijd concrete tekst
 - Als informatie ontbreekt, schrijf "Informatie niet beschikbaar" of laat de passage weg
 - Houd de tekst professioneel en beknopt
-- Genereer alleen de tekst voor de gevraagde sectie, geen extra uitleg of markdown`
+- Genereer alleen de tekst voor de gevraagde sectie, geen extra uitleg of markdown
+- Volg de instructies in het GEBRUIKERSPROFIEL en de FEEDBACK SAMENVATTING altijd op`
 
 interface DossierData {
   stap1?: Record<string, unknown>
@@ -159,6 +160,8 @@ interface RequestBody {
   schrijfstijl?: SchrijfStijl
   kennisbankContext?: KennisbankContext
   eerdereFeedback?: EerdereFeedback[]
+  feedbackSamenvatting?: string
+  schrijfprofiel?: string
   previousSectionsSummary?: string
   model?: string
   batchSecties?: BatchSectie[]
@@ -181,7 +184,9 @@ function buildUserPrompt(
   schrijfstijl: SchrijfStijl | undefined,
   kennisbankContext: KennisbankContext | undefined,
   eerdereFeedback: EerdereFeedback[] | undefined,
-  previousSectionsSummary?: string
+  previousSectionsSummary?: string,
+  feedbackSamenvatting?: string,
+  schrijfprofiel?: string
 ): string {
   let prompt = `Genereer de tekst voor sectie "${sectieTitel}" (key: ${sectieKey}) van een taxatierapport.\n`
 
@@ -254,19 +259,24 @@ function buildUserPrompt(
     prompt += `\nStructuurhint (huidige template-output, gebruik als structuurgids maar schrijf betere tekst):\n"${truncatedTemplate}"\n`
   }
 
-  // Voeg eerdere feedback toe aan de prompt
+  // Voeg eerdere feedback toe aan de prompt (3-laags systeem)
+  prompt += '\n\n=== GEBRUIKERSPROFIEL ==='
+  prompt += `\n${schrijfprofiel ?? 'Geen profiel beschikbaar'}`
+
+  prompt += '\n\n=== FEEDBACK SAMENVATTING ==='
+  prompt += `\n${feedbackSamenvatting ?? 'Geen eerdere feedback'}`
+
   if (eerdereFeedback && eerdereFeedback.length > 0) {
-    prompt += '\nRecente feedback op eerdere generaties van deze sectie (neem dit mee):\n'
+    prompt += '\n\n=== RECENTE FEEDBACK ==='
     for (const fb of eerdereFeedback) {
       if (fb.feedbackType === 'bewerkt') {
         const origTrunc = fb.origineleTekst ? `"${fb.origineleTekst.slice(0, 200)}${fb.origineleTekst.length > 200 ? '…' : ''}"` : '(niet beschikbaar)'
         const bewTrunc = fb.bewerkteTekst ? `"${fb.bewerkteTekst.slice(0, 200)}${fb.bewerkteTekst.length > 200 ? '…' : ''}"` : '(niet beschikbaar)'
-        prompt += `- Type: bewerkt — De taxateur heeft de tekst aangepast. Origineel: ${origTrunc} → Bewerkt: ${bewTrunc}\n`
+        prompt += `\n- Type: bewerkt — De taxateur heeft de tekst aangepast. Origineel: ${origTrunc} → Bewerkt: ${bewTrunc}`
       } else if (fb.feedbackType === 'negatief') {
-        prompt += `- Type: negatief`
+        prompt += `\n- Type: negatief`
         if (fb.reden) prompt += ` — Reden: ${fb.reden}`
         if (fb.toelichting) prompt += ` — Toelichting: "${fb.toelichting}"`
-        prompt += '\n'
       }
     }
   }
@@ -296,7 +306,7 @@ serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as RequestBody
-    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback, previousSectionsSummary, model, batchSecties, dossierId } = body
+    const { sectieKey, sectieTitel, dossierData, referenties, templateTekst, schrijfstijl, kennisbankContext, eerdereFeedback, feedbackSamenvatting, schrijfprofiel, previousSectionsSummary, model, batchSecties, dossierId } = body
     const dossierIdValue = (dossierId && typeof dossierId === 'string') ? dossierId : null
 
     // -----------------------------------------------------------------------
@@ -473,7 +483,9 @@ Als er geen inconsistenties zijn, geef dan isCoherent: true met een lege inconsi
       schrijfstijl,
       kennisbankContext,
       eerdereFeedback,
-      previousSectionsSummary
+      previousSectionsSummary,
+      feedbackSamenvatting,
+      schrijfprofiel
     )
 
     // Use provided model or fall back to gpt-4o-mini

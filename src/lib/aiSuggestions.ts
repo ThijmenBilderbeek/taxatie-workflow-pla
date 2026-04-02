@@ -2,10 +2,17 @@ import type { Dossier, HistorischRapport, SimilarityInstellingen } from '@/types
 import { calculateSimilarity } from './similarity'
 import { getSuggestiesVoorStap, type VeldSuggestie } from './suggestions'
 import { supabase } from './supabaseClient'
+import { getFeedbackSamenvatting, getSchrijfProfiel } from './feedbackEnrichment'
 
 interface EerdereFeedback {
   reden: string
   toelichting?: string
+}
+
+interface VeldFeedbackContext {
+  eerdereFeedback: EerdereFeedback[]
+  feedbackSamenvatting: string | null
+  schrijfprofiel: string | null
 }
 
 interface ReferentieContext {
@@ -53,27 +60,32 @@ const VELD_GETTERS_HUIDIG: Record<string, VeldGetter<Partial<Dossier>>> = {
   bijzondereOmstandigheden: (d) => d.stap9?.bijzondereOmstandigheden,
 }
 
-async function getEerdereFeedback(veldNaam: string): Promise<EerdereFeedback[]> {
+async function getEerdereFeedback(veldNaam: string): Promise<VeldFeedbackContext> {
   try {
-    const { data, error } = await supabase
-      .from('suggestie_feedback')
-      .select('reden, toelichting')
-      .eq('veld_naam', veldNaam)
-      .eq('feedback_type', 'negatief')
-      .order('created_at', { ascending: false })
-      .limit(5)
+    const [feedbackResult, feedbackSamenvatting, schrijfprofiel] = await Promise.all([
+      supabase
+        .from('suggestie_feedback')
+        .select('reden, toelichting')
+        .eq('veld_naam', veldNaam)
+        .eq('feedback_type', 'negatief')
+        .order('created_at', { ascending: false })
+        .limit(3),
+      getFeedbackSamenvatting(veldNaam, 'veld'),
+      getSchrijfProfiel(),
+    ])
 
-    if (error) {
-      console.warn('[aiSuggestions] Could not fetch feedback:', error.message)
-      return []
-    }
-
-    return (data ?? []).map((row) => ({
+    const eerdereFeedback = (feedbackResult.data ?? []).map((row) => ({
       reden: row.reden ?? '',
       toelichting: row.toelichting ?? undefined,
     }))
+
+    if (feedbackResult.error) {
+      console.warn('[aiSuggestions] Could not fetch feedback:', feedbackResult.error.message)
+    }
+
+    return { eerdereFeedback, feedbackSamenvatting, schrijfprofiel }
   } catch {
-    return []
+    return { eerdereFeedback: [], feedbackSamenvatting: null, schrijfprofiel: null }
   }
 }
 
@@ -191,8 +203,8 @@ export async function getAISuggestiesVoorStap(
         })
         .filter((r) => r.tekst.trim() !== '')
 
-      // Get earlier feedback for this field
-      const eerdereFeedback = await getEerdereFeedback(veldNaam)
+      // Get earlier feedback for this field (all 3 layers)
+      const { eerdereFeedback, feedbackSamenvatting, schrijfprofiel } = await getEerdereFeedback(veldNaam)
 
       // Call the Edge Function
       const { data, error } = await supabase.functions.invoke('openai-suggest-field', {
@@ -202,6 +214,8 @@ export async function getAISuggestiesVoorStap(
           huidigObject,
           referenties,
           eerdereFeedback,
+          feedbackSamenvatting,
+          schrijfprofiel,
         },
       })
 

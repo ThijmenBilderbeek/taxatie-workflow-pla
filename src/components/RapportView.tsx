@@ -16,6 +16,7 @@ import { invalidateKennisbankCache } from '@/lib/kennisbankRetriever'
 import { KennisbankSuggestiesPanel } from './KennisbankSuggestiesPanel'
 import { saveSectieFeedback } from '@/hooks/useSectieFeedback'
 import { useAlleSectieStats } from '@/hooks/useSectieKwaliteit'
+import { triggerSchrijfProfielUpdate } from '@/lib/feedbackEnrichment'
 
 function getRapportVariant(dossier: Dossier): RapportVariant {
   const isVerhuurd = dossier.stap4?.verhuurd || false
@@ -184,6 +185,8 @@ export function RapportView({
         sectie.gegenereerdeInhoud,
         nieuweInhoud
       )
+      // Trigger non-blocking schrijfprofiel update (Layer 3)
+      triggerSchrijfProfielUpdate()
     }
 
     onUpdateDossier({

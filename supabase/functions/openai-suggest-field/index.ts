@@ -103,9 +103,15 @@ interface RequestBody {
   huidigObject: HuidigObject
   referenties: Referentie[]
   eerdereFeedback?: EerdereFeedback[]
+  feedbackSamenvatting?: string
+  schrijfprofiel?: string
 }
 
-function buildSystemPrompt(eerdereFeedback: EerdereFeedback[]): string {
+function buildSystemPrompt(
+  eerdereFeedback: EerdereFeedback[],
+  feedbackSamenvatting: string | undefined,
+  schrijfprofiel: string | undefined
+): string {
   let prompt = `Je bent een expert in het schrijven van Nederlandse taxatierapporten (vastgoedwaardering).
 Je taak is om een professionele tekst te genereren voor een specifiek veld in een taxatierapport.
 
@@ -117,8 +123,14 @@ Instructies:
 - Genereer alleen de tekst voor het gevraagde veld, geen extra uitleg
 - Houd de tekst beknopt en feitelijk`
 
+  prompt += '\n\n=== GEBRUIKERSPROFIEL ==='
+  prompt += `\n${schrijfprofiel ?? 'Geen profiel beschikbaar'}`
+
+  prompt += '\n\n=== FEEDBACK SAMENVATTING ==='
+  prompt += `\n${feedbackSamenvatting ?? 'Geen eerdere feedback'}`
+
   if (eerdereFeedback && eerdereFeedback.length > 0) {
-    prompt += '\n\nRecente feedback op eerdere suggesties (neem dit mee):'
+    prompt += '\n\n=== RECENTE FEEDBACK ==='
     for (const fb of eerdereFeedback) {
       prompt += `\n- Reden: ${fb.reden}`
       if (fb.toelichting) {
@@ -178,7 +190,7 @@ serve(async (req: Request) => {
 
   try {
     const body = await req.json() as RequestBody
-    const { veldNaam, stap, huidigObject, referenties, eerdereFeedback } = body
+    const { veldNaam, stap, huidigObject, referenties, eerdereFeedback, feedbackSamenvatting, schrijfprofiel } = body
 
     if (!veldNaam || typeof veldNaam !== 'string') {
       return new Response(JSON.stringify({ error: 'veldNaam is required' }), {
@@ -194,7 +206,7 @@ serve(async (req: Request) => {
       })
     }
 
-    const systemPrompt = buildSystemPrompt(eerdereFeedback ?? [])
+    const systemPrompt = buildSystemPrompt(eerdereFeedback ?? [], feedbackSamenvatting, schrijfprofiel)
     const userPrompt = buildUserPrompt(veldNaam, huidigObject, referenties ?? [])
 
     console.log(`[openai-suggest-field] Generating suggestion for veld "${veldNaam}", stap ${stap}`)

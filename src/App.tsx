@@ -4,12 +4,16 @@ import { useDossiers } from './hooks/useDossiers'
 import { useHistorischeRapporten } from './hooks/useHistorischeRapporten'
 import { useSimilarityInstellingen } from './hooks/useSimilarityInstellingen'
 import { KantoorProvider } from './contexts/KantoorContext'
+import { useKantoorContext } from './contexts/KantoorContext'
 import { Dashboard } from './components/Dashboard'
 import { WizardFlow } from './components/WizardFlow'
 import { RapportView } from './components/RapportView'
 import { Instellingen } from './components/Instellingen'
 import { Kennisbank } from './components/Kennisbank'
 import { AIUsageDashboard } from './components/AIUsageDashboard'
+import { KantoorOnboarding } from './components/KantoorOnboarding'
+import { KantoorInstellingen } from './components/KantoorInstellingen'
+import { KantoorSwitcher } from './components/KantoorSwitcher'
 import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Toaster } from './components/ui/sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog'
@@ -95,6 +99,7 @@ function LoginForm({ onSignIn, onSignUp }: {
 
 function AppContent() {
   const { user, loading: authLoading, signIn, signUp, signOut } = useAuth()
+  const { kantoorId, loading: kantoorLoading } = useKantoorContext()
   const { dossiers, createDossier, updateDossier, deleteDossier } = useDossiers()
   const { rapporten: historischeRapporten, addRapport, updateRapport, deleteRapport } = useHistorischeRapporten()
   const { instellingen: similarityInstellingen, updateInstellingen: setSimilarityInstellingen } = useSimilarityInstellingen()
@@ -118,6 +123,19 @@ function AppContent() {
 
   if (!user) {
     return <LoginForm onSignIn={signIn} onSignUp={signUp} />
+  }
+
+  // Show onboarding if user has no kantoor
+  if (!kantoorLoading && kantoorId === null) {
+    return <KantoorOnboarding />
+  }
+
+  if (kantoorLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Kantoor laden...</p>
+      </div>
+    )
   }
 
   const activeDossier = activeDossierId
@@ -213,6 +231,7 @@ function AppContent() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              <KantoorSwitcher />
               <Tabs
                 value={currentView}
                 onValueChange={(v) => {
@@ -300,16 +319,21 @@ function AppContent() {
               <AIUsageDashboard />
             </div>
           ) : (
-            <Instellingen
-              instellingen={similarityInstellingen}
-              feedback={similarityFeedback}
-              historischeRapporten={historischeRapporten}
-              onUpdateInstellingen={setSimilarityInstellingen}
-              onSeedRapporten={(nieuweRapporten) =>
-                nieuweRapporten.forEach(addRapport)
-              }
-              onNavigateToAIUsage={() => setShowAIUsageDashboard(true)}
-            />
+            <div className="space-y-8">
+              <KantoorInstellingen />
+              <div className="border-t pt-8">
+                <Instellingen
+                  instellingen={similarityInstellingen}
+                  feedback={similarityFeedback}
+                  historischeRapporten={historischeRapporten}
+                  onUpdateInstellingen={setSimilarityInstellingen}
+                  onSeedRapporten={(nieuweRapporten) =>
+                    nieuweRapporten.forEach(addRapport)
+                  }
+                  onNavigateToAIUsage={() => setShowAIUsageDashboard(true)}
+                />
+              </div>
+            </div>
           )
         )}
       </main>

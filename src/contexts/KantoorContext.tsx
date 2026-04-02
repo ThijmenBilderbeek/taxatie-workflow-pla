@@ -13,6 +13,7 @@ interface KantoorContextValue {
   role: 'owner' | 'admin' | 'member' | null
   loading: boolean
   allMemberships: KantoorMembership[]
+  isAdmin: boolean
   switchKantoor: (kantoorId: string) => void
   refresh: () => void
 }
@@ -23,6 +24,7 @@ const KantoorContext = createContext<KantoorContextValue>({
   role: null,
   loading: true,
   allMemberships: [],
+  isAdmin: false,
   switchKantoor: () => {},
   refresh: () => {},
 })
@@ -33,6 +35,7 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<'owner' | 'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
   const [allMemberships, setAllMemberships] = useState<KantoorMembership[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
   const [refreshCounter, setRefreshCounter] = useState(0)
   const kantoorIdRef = useRef<string | null>(null)
 
@@ -49,6 +52,7 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
         setKantoorNaam(null)
         setRole(null)
         setAllMemberships([])
+        setIsAdmin(false)
         setLoading(false)
         return
       }
@@ -86,6 +90,14 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
         setAllMemberships([])
       }
 
+      // Haal is_admin op uit profiles tabel
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .single()
+      setIsAdmin(profile?.is_admin === true)
+
       setLoading(false)
     }
 
@@ -114,7 +126,7 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
   }, [allMemberships])
 
   return (
-    <KantoorContext.Provider value={{ kantoorId, kantoorNaam, role, loading, allMemberships, switchKantoor, refresh }}>
+    <KantoorContext.Provider value={{ kantoorId, kantoorNaam, role, loading, allMemberships, isAdmin, switchKantoor, refresh }}>
       {children}
     </KantoorContext.Provider>
   )

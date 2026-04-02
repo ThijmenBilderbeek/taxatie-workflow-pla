@@ -52,16 +52,24 @@ export function useHistorischeRapporten() {
       setLoading(false)
       return
     }
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('historische_rapporten')
       .select('*')
-      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
+
+    if (kantoorId) {
+      query = query.eq('kantoor_id', kantoorId)
+    } else {
+      query = query.eq('user_id', session.user.id)
+    }
+
+    const { data, error } = await query
     if (!error && data) {
       setRapporten(data.map(rowToRapport))
     }
     setLoading(false)
-  }, [])
+  }, [kantoorId])
 
   useEffect(() => {
     fetchRapporten()

@@ -12,8 +12,7 @@ import { Instellingen } from './components/Instellingen'
 import { Kennisbank } from './components/Kennisbank'
 import { AIUsageDashboard } from './components/AIUsageDashboard'
 import { KantoorOnboarding } from './components/KantoorOnboarding'
-import { KantoorInstellingen } from './components/KantoorInstellingen'
-import { KantoorSwitcher } from './components/KantoorSwitcher'
+import { AdminPanel } from './components/AdminPanel'
 import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Toaster } from './components/ui/sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog'
@@ -23,7 +22,7 @@ import { Button } from './components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import type { Dossier, SimilarityFeedback } from './types'
 
-type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen'
+type View = 'dashboard' | 'wizard' | 'rapport' | 'kennisbank' | 'instellingen' | 'admin'
 
 function LoginForm({ onSignIn, onSignUp }: {
   onSignIn: (email: string, password: string) => Promise<{ error: unknown }>
@@ -99,7 +98,7 @@ function LoginForm({ onSignIn, onSignUp }: {
 
 function AppContent() {
   const { user, loading: authLoading, signIn, signUp, signOut } = useAuth()
-  const { kantoorId, loading: kantoorLoading } = useKantoorContext()
+  const { kantoorId, loading: kantoorLoading, isAdmin } = useKantoorContext()
   const { dossiers, createDossier, updateDossier, deleteDossier } = useDossiers()
   const { rapporten: historischeRapporten, addRapport, updateRapport, deleteRapport } = useHistorischeRapporten()
   const { instellingen: similarityInstellingen, updateInstellingen: setSimilarityInstellingen } = useSimilarityInstellingen()
@@ -125,8 +124,8 @@ function AppContent() {
     return <LoginForm onSignIn={signIn} onSignUp={signUp} />
   }
 
-  // Show onboarding if user has no kantoor
-  if (!kantoorLoading && kantoorId === null) {
+  // Show "contact admin" screen if user has no kantoor (unless they are the admin)
+  if (!kantoorLoading && kantoorId === null && !isAdmin) {
     return <KantoorOnboarding />
   }
 
@@ -231,7 +230,6 @@ function AppContent() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <KantoorSwitcher />
               <Tabs
                 value={currentView}
                 onValueChange={(v) => {
@@ -249,6 +247,9 @@ function AppContent() {
                   </TabsTrigger>
                   <TabsTrigger value="kennisbank">Kennisbank</TabsTrigger>
                   <TabsTrigger value="instellingen">Instellingen</TabsTrigger>
+                  {isAdmin && (
+                    <TabsTrigger value="admin">Admin</TabsTrigger>
+                  )}
                 </TabsList>
               </Tabs>
               <Button variant="outline" size="sm" onClick={signOut}>
@@ -320,21 +321,22 @@ function AppContent() {
             </div>
           ) : (
             <div className="space-y-8">
-              <KantoorInstellingen />
-              <div className="border-t pt-8">
-                <Instellingen
-                  instellingen={similarityInstellingen}
-                  feedback={similarityFeedback}
-                  historischeRapporten={historischeRapporten}
-                  onUpdateInstellingen={setSimilarityInstellingen}
-                  onSeedRapporten={(nieuweRapporten) =>
-                    nieuweRapporten.forEach(addRapport)
-                  }
-                  onNavigateToAIUsage={() => setShowAIUsageDashboard(true)}
-                />
-              </div>
+              <Instellingen
+                instellingen={similarityInstellingen}
+                feedback={similarityFeedback}
+                historischeRapporten={historischeRapporten}
+                onUpdateInstellingen={setSimilarityInstellingen}
+                onSeedRapporten={(nieuweRapporten) =>
+                  nieuweRapporten.forEach(addRapport)
+                }
+                onNavigateToAIUsage={() => setShowAIUsageDashboard(true)}
+              />
             </div>
           )
+        )}
+
+        {currentView === 'admin' && isAdmin && (
+          <AdminPanel />
         )}
       </main>
 

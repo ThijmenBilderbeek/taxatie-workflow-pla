@@ -4,12 +4,14 @@ import { supabase } from '@/lib/supabaseClient'
 export interface KantoorMembership {
   kantoorId: string
   kantoorNaam: string
+  kantoorLogoUrl: string | null
   role: 'owner' | 'admin' | 'member'
 }
 
 interface KantoorContextValue {
   kantoorId: string | null
   kantoorNaam: string | null
+  kantoorLogoUrl: string | null
   role: 'owner' | 'admin' | 'member' | null
   loading: boolean
   allMemberships: KantoorMembership[]
@@ -21,6 +23,7 @@ interface KantoorContextValue {
 const KantoorContext = createContext<KantoorContextValue>({
   kantoorId: null,
   kantoorNaam: null,
+  kantoorLogoUrl: null,
   role: null,
   loading: true,
   allMemberships: [],
@@ -32,6 +35,7 @@ const KantoorContext = createContext<KantoorContextValue>({
 export function KantoorProvider({ children }: { children: ReactNode }) {
   const [kantoorId, setKantoorId] = useState<string | null>(null)
   const [kantoorNaam, setKantoorNaam] = useState<string | null>(null)
+  const [kantoorLogoUrl, setKantoorLogoUrl] = useState<string | null>(null)
   const [role, setRole] = useState<'owner' | 'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
   const [allMemberships, setAllMemberships] = useState<KantoorMembership[]>([])
@@ -50,6 +54,7 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
       if (!session?.user) {
         setKantoorId(null)
         setKantoorNaam(null)
+        setKantoorLogoUrl(null)
         setRole(null)
         setAllMemberships([])
         setIsAdmin(false)
@@ -59,15 +64,16 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
 
       const { data: memberships } = await supabase
         .from('kantoor_members')
-        .select('kantoor_id, role, kantoren(naam)')
+        .select('kantoor_id, role, kantoren(naam, logo_url)')
         .eq('user_id', session.user.id)
 
       if (memberships && memberships.length > 0) {
         const parsed: KantoorMembership[] = memberships.map((m) => {
-          const kantoor = m.kantoren as unknown as { naam: string } | null
+          const kantoor = m.kantoren as unknown as { naam: string; logo_url: string | null } | null
           return {
             kantoorId: m.kantoor_id as string,
             kantoorNaam: kantoor?.naam ?? '',
+            kantoorLogoUrl: kantoor?.logo_url ?? null,
             role: m.role as 'owner' | 'admin' | 'member',
           }
         })
@@ -83,9 +89,11 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
         setKantoorId(selectedMembership.kantoorId)
         setRole(selectedMembership.role)
         setKantoorNaam(selectedMembership.kantoorNaam)
+        setKantoorLogoUrl(selectedMembership.kantoorLogoUrl)
       } else {
         setKantoorId(null)
         setKantoorNaam(null)
+        setKantoorLogoUrl(null)
         setRole(null)
         setAllMemberships([])
       }
@@ -121,12 +129,13 @@ export function KantoorProvider({ children }: { children: ReactNode }) {
       kantoorIdRef.current = membership.kantoorId
       setKantoorId(membership.kantoorId)
       setKantoorNaam(membership.kantoorNaam)
+      setKantoorLogoUrl(membership.kantoorLogoUrl)
       setRole(membership.role)
     }
   }, [allMemberships])
 
   return (
-    <KantoorContext.Provider value={{ kantoorId, kantoorNaam, role, loading, allMemberships, isAdmin, switchKantoor, refresh }}>
+    <KantoorContext.Provider value={{ kantoorId, kantoorNaam, kantoorLogoUrl, role, loading, allMemberships, isAdmin, switchKantoor, refresh }}>
       {children}
     </KantoorContext.Provider>
   )

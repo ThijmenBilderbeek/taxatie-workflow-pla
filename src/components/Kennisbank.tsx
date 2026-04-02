@@ -39,6 +39,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   const [extractionDebug, setExtractionDebug] = useState<ExtractionDebugRecord>({})
   const [fieldSuggestions, setFieldSuggestions] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   // Knowledge extraction state
   const [pendingChunks, setPendingChunks] = useState<DocumentChunk[]>([])
@@ -88,9 +89,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     handleCloseBewerkDialog()
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const processFile = async (file: File) => {
     setIsLoading(true)
     try {
       const parsed = await parsePdfToRapport(file)
@@ -189,6 +188,44 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    processFile(file)
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Alleen PDF-bestanden zijn toegestaan.')
+      return
+    }
+    processFile(file)
   }
 
   const handleSaveRapport = () => {
@@ -299,6 +336,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     setExtractionDebug({})
     setFieldSuggestions({})
     setIsLoading(false)
+    setIsDragging(false)
     setPendingChunks([])
     setPendingProfile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -472,13 +510,37 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
             {!preview && (
               <div className="space-y-2">
                 <Label htmlFor="pdf-upload">PDF-bestand selecteren</Label>
+                <div
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer ${
+                    isDragging
+                      ? 'border-primary bg-primary/10'
+                      : 'border-muted-foreground/30 bg-muted/30 hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Sleep een PDF-bestand hierheen</p>
+                  <p className="text-xs text-muted-foreground">of</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }}
+                  >
+                    Bestand kiezen
+                  </Button>
+                </div>
                 <input
                   ref={fileInputRef}
                   id="pdf-upload"
                   type="file"
                   accept=".pdf"
                   onChange={handleFileChange}
-                  className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                  className="hidden"
                 />
               </div>
             )}

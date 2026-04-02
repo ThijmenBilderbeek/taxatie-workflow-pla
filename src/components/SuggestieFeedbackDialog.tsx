@@ -6,6 +6,7 @@ import { Textarea } from './ui/textarea'
 import { Label } from './ui/label'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabaseClient'
+import { triggerFeedbackSamenvattingUpdate } from '@/lib/feedbackEnrichment'
 
 const REDENEN = [
   { value: 'te_generiek', label: 'Te generiek' },
@@ -57,6 +58,9 @@ export function SuggestieFeedbackDialog({
       if (error) {
         throw error
       }
+
+      // Trigger non-blocking summary update (Layer 1)
+      triggerFeedbackSamenvattingUpdate(veldNaam, 'veld')
 
       toast.success('Feedback opgeslagen, bedankt!')
       setReden('')

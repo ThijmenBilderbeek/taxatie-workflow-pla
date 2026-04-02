@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { triggerFeedbackSamenvattingUpdate } from '@/lib/feedbackEnrichment'
 
 export interface SectieFeedbackRecord {
   feedbackType: 'positief' | 'negatief' | 'bewerkt'
@@ -40,7 +41,11 @@ export async function saveSectieFeedback(
 
     if (error) {
       console.warn('[useSectieFeedback] Could not save sectie feedback:', error.message)
+      return
     }
+
+    // Trigger non-blocking summary update (Layer 1)
+    triggerFeedbackSamenvattingUpdate(sectieKey, 'sectie')
   } catch (err) {
     console.warn('[useSectieFeedback] saveSectieFeedback failed silently:', err)
   }

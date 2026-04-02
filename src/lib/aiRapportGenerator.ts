@@ -6,6 +6,7 @@ import type { MarketSegment } from '@/types/kennisbank'
 import { calculateSimilarity } from './similarity'
 import { getKennisbankContextForSectie } from './kennisbankRetriever'
 import { getSectieFeedback } from '@/hooks/useSectieFeedback'
+import { getFeedbackSamenvatting, getSchrijfProfiel } from './feedbackEnrichment'
 
 // ---------------------------------------------------------------------------
 // Section configuration: maps sectieKey → relevant dossier stappen + titel
@@ -257,20 +258,26 @@ function getSectieTekstUitRapport(rapport: HistorischRapport, sectieKey: string)
 // ---------------------------------------------------------------------------
 
 /**
- * Queries the sectie_feedback table for the 5 most recent negative/edited
- * entries for the given sectieKey, to be included in the AI generation prompt.
+ * Queries the sectie_feedback table for the 3 most recent negative/edited
+ * entries for the given sectieKey, and also fetches the feedback summary and
+ * user writing profile. All three layers are included in the AI generation prompt.
  */
 export async function getSectieFeedbackVoorGeneratie(
   sectieKey: string
-): Promise<EerdereSectieGeneratieFeedback[]> {
-  const records = await getSectieFeedback(sectieKey, 5)
-  return records.map((r) => ({
+): Promise<{ eerdereFeedback: EerdereSectieGeneratieFeedback[]; feedbackSamenvatting: string | null; schrijfprofiel: string | null }> {
+  const [records, feedbackSamenvatting, schrijfprofiel] = await Promise.all([
+    getSectieFeedback(sectieKey, 3),
+    getFeedbackSamenvatting(sectieKey, 'sectie'),
+    getSchrijfProfiel(),
+  ])
+  const eerdereFeedback = records.map((r) => ({
     feedbackType: r.feedbackType,
     reden: r.reden,
     toelichting: r.toelichting,
     origineleTekst: r.origineleTekst ? r.origineleTekst.slice(0, 300) : undefined,
     bewerkteTekst: r.bewerkteTekst ? r.bewerkteTekst.slice(0, 300) : undefined,
   }))
+  return { eerdereFeedback, feedbackSamenvatting, schrijfprofiel }
 }
 
 /**
@@ -341,8 +348,11 @@ export async function generateSectieMetAI(
       }
     : undefined
 
-  // Haal eerdere feedback op voor deze sectie (wordt meegestuurd naar Edge Function)
-  const eerdereFeedback = options.eerdereFeedback ?? await getSectieFeedbackVoorGeneratie(sectieKey)
+  // Haal eerdere feedback op voor deze sectie (alle 3 lagen worden meegestuurd naar Edge Function)
+  const feedbackContext = options.eerdereFeedback
+    ? { eerdereFeedback: options.eerdereFeedback, feedbackSamenvatting: null, schrijfprofiel: null }
+    : await getSectieFeedbackVoorGeneratie(sectieKey)
+  const { eerdereFeedback, feedbackSamenvatting, schrijfprofiel } = feedbackContext
 
   // Select model based on section complexity
   const model = COMPLEX_SECTIES.includes(sectieKey) ? 'gpt-4o' : 'gpt-4o-mini'
@@ -358,6 +368,8 @@ export async function generateSectieMetAI(
         schrijfstijl,
         kennisbankContext,
         eerdereFeedback: eerdereFeedback.length > 0 ? eerdereFeedback : undefined,
+        feedbackSamenvatting: feedbackSamenvatting ?? undefined,
+        schrijfprofiel: schrijfprofiel ?? undefined,
         previousSectionsSummary: options.previousSectionsSummary || undefined,
         model,
         dossierId: options.dossierId,

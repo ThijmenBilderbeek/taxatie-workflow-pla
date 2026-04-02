@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
@@ -12,12 +12,13 @@ import {
   SelectValue,
 } from './ui/select'
 import { toast } from 'sonner'
-import { Building2, Users, ArrowLeft, Trash2 } from 'lucide-react'
+import { Building2, Users, ArrowLeft, Trash2, Upload, X } from 'lucide-react'
 
 interface Kantoor {
   id: string
   naam: string
   slug: string
+  logo_url: string | null
   created_at: string
   member_count: number
 }
@@ -74,6 +75,11 @@ export function AdminPanel() {
   const [addEmail, setAddEmail] = useState('')
   const [addRole, setAddRole] = useState('member')
   const [addingMember, setAddingMember] = useState(false)
+
+  // Logo upload
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [deletingLogo, setDeletingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const fetchKantoren = useCallback(async () => {
     setLoading(true)
@@ -211,6 +217,85 @@ export function AdminPanel() {
     }
   }
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedKantoor) return
+
+    const allowedTypes: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/svg+xml': 'svg',
+      'image/webp': 'webp',
+    }
+    const ext = allowedTypes[file.type]
+    if (!ext) {
+      toast.error('Alleen PNG, JPG, SVG en WEBP bestanden zijn toegestaan')
+      return
+    }
+
+    setUploadingLogo(true)
+    try {
+      const filePath = `${selectedKantoor.id}/logo.${ext}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('kantoor-logos')
+        .upload(filePath, file, { upsert: true })
+
+      if (uploadError) {
+        toast.error('Fout bij uploaden logo: ' + uploadError.message)
+        return
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('kantoor-logos')
+        .getPublicUrl(filePath)
+
+      const { error: updateError } = await supabase.rpc('admin_update_kantoor_logo', {
+        p_kantoor_id: selectedKantoor.id,
+        p_logo_url: publicUrl,
+      })
+
+      if (updateError) {
+        toast.error('Fout bij opslaan logo URL: ' + updateError.message)
+        return
+      }
+
+      setSelectedKantoor((prev) => prev ? { ...prev, logo_url: publicUrl } : prev)
+      toast.success('Logo succesvol geüpload')
+    } catch (error) {
+      console.error('Logo upload error:', error)
+      toast.error('Er is een onbekende fout opgetreden')
+    } finally {
+      setUploadingLogo(false)
+      if (logoInputRef.current) logoInputRef.current.value = ''
+    }
+  }
+
+  const handleLogoDelete = async () => {
+    if (!selectedKantoor?.logo_url) return
+
+    setDeletingLogo(true)
+    try {
+      const { error: updateError } = await supabase.rpc('admin_update_kantoor_logo', {
+        p_kantoor_id: selectedKantoor.id,
+        p_logo_url: null,
+      })
+
+      if (updateError) {
+        toast.error('Fout bij verwijderen logo: ' + updateError.message)
+        return
+      }
+
+      setSelectedKantoor((prev) => prev ? { ...prev, logo_url: null } : prev)
+      toast.success('Logo verwijderd')
+    } catch (error) {
+      console.error('Logo delete error:', error)
+      toast.error('Er is een onbekende fout opgetreden')
+    } finally {
+      setDeletingLogo(false)
+    }
+  }
+
   // Kantoor detail view
   if (selectedKantoor) {
     return (
@@ -225,6 +310,56 @@ export function AdminPanel() {
             <p className="text-sm text-muted-foreground">Slug: {selectedKantoor.slug}</p>
           </div>
         </div>
+
+        {/* Logo beheren */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Kantoor logo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {selectedKantoor.logo_url ? (
+                <div className="flex items-center gap-4">
+                  <img
+                    src={selectedKantoor.logo_url}
+                    alt={`Logo van ${selectedKantoor.naam}`}
+                    className="h-16 w-auto object-contain border rounded-md p-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={handleLogoDelete}
+                    disabled={deletingLogo}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    {deletingLogo ? 'Bezig...' : 'Logo verwijderen'}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Geen logo ingesteld</p>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  className="hidden"
+                  onChange={handleLogoUpload}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={uploadingLogo}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {uploadingLogo ? 'Uploaden...' : selectedKantoor.logo_url ? 'Logo vervangen' : 'Logo uploaden'}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Lid toevoegen */}
         <Card>

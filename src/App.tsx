@@ -98,7 +98,7 @@ function LoginForm({ onSignIn, onSignUp }: {
 
 function AppContent() {
   const { user, loading: authLoading, signIn, signUp, signOut } = useAuth()
-  const { kantoorId, loading: kantoorLoading, isAdmin } = useKantoorContext()
+  const { kantoorId, loading: kantoorLoading, isAdmin, kantoorLogoUrl } = useKantoorContext()
   const { dossiers, createDossier, updateDossier, deleteDossier } = useDossiers()
   const { rapporten: historischeRapporten, addRapport, updateRapport, deleteRapport } = useHistorischeRapporten()
   const { instellingen: similarityInstellingen, updateInstellingen: setSimilarityInstellingen } = useSimilarityInstellingen()
@@ -230,6 +230,13 @@ function AppContent() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {kantoorLogoUrl && (
+                <img
+                  src={kantoorLogoUrl}
+                  alt="Kantoor logo"
+                  className="h-9 w-auto object-contain"
+                />
+              )}
               <Tabs
                 value={currentView}
                 onValueChange={(v) => {

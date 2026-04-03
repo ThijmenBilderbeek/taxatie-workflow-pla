@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MagnifyingGlass } from '@phosphor-icons/react'
 
@@ -39,7 +39,11 @@ const ADRES_ZOOM = 18
 
 const WMS_URL = 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0?'
 
-async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelClickResult | null> {
+interface PerceelPreview extends PerceelClickResult {
+  geometry: GeoJSON.GeoJsonObject | null
+}
+
+async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelPreview | null> {
   const size = map.getSize()
   const bounds = map.getBounds()
   const sw = bounds.getSouthWest()
@@ -89,6 +93,7 @@ async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelC
     sectie,
     perceelnummer,
     volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
+    geometry: feature.geometry ?? null,
   }
 }
 
@@ -106,7 +111,9 @@ export function AdresKaart({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
+  const highlightLayerRef = useRef<L.GeoJSON | null>(null)
   const onPerceelClickRef = useRef(onPerceelClick)
+  const [previewPerceel, setPreviewPerceel] = useState<PerceelPreview | null>(null)
 
   // Keep ref in sync so the map click handler always uses the latest callback
   useEffect(() => {
@@ -146,13 +153,12 @@ export function AdresKaart({
       maxNativeZoom: 19,
     }).addTo(map)
 
-    // Klik-handler: haal perceel op via WMS GetFeatureInfo
+    // Klik-handler: toon perceel preview + highlight op kaart
     map.on('click', async (e: L.LeafletMouseEvent) => {
-      if (!onPerceelClickRef.current) return
       try {
         const perceel = await haalPerceelViaWms(map, e.latlng)
         if (perceel) {
-          onPerceelClickRef.current(perceel)
+          setPreviewPerceel(perceel)
         }
       } catch (err) {
         console.warn('Fout bij ophalen perceel via kaart klik:', err)
@@ -165,8 +171,31 @@ export function AdresKaart({
       map.remove()
       mapRef.current = null
       markerRef.current = null
+      highlightLayerRef.current = null
     }
   }, [])
+
+  // Update highlight layer when preview perceel changes
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    if (highlightLayerRef.current) {
+      highlightLayerRef.current.remove()
+      highlightLayerRef.current = null
+    }
+
+    if (previewPerceel?.geometry) {
+      highlightLayerRef.current = L.geoJSON(previewPerceel.geometry, {
+        style: {
+          fillColor: '#3388ff',
+          fillOpacity: 0.4,
+          color: '#3388ff',
+          weight: 2,
+        },
+      }).addTo(map)
+    }
+  }, [previewPerceel])
 
   // Update marker and view when coordinates change
   useEffect(() => {
@@ -191,6 +220,18 @@ export function AdresKaart({
       map.setView(NL_CENTER, NL_ZOOM)
     }
   }, [coordinaten?.lat, coordinaten?.lng])
+
+  const handleToevoegen = () => {
+    if (previewPerceel && onPerceelClickRef.current) {
+      const { geometry: _geometry, ...perceelData } = previewPerceel
+      if (highlightLayerRef.current) {
+        highlightLayerRef.current.remove()
+        highlightLayerRef.current = null
+      }
+      onPerceelClickRef.current(perceelData)
+      setPreviewPerceel(null)
+    }
+  }
 
   return (
     <div className="relative w-full rounded-lg border overflow-hidden" style={{ height: '320px' }}>
@@ -232,6 +273,22 @@ export function AdresKaart({
               </div>
             )}
           </div>
+        </div>
+      )}
+      {previewPerceel && (
+        <div
+          role="dialog"
+          aria-label={`Perceel ${previewPerceel.volledigeAanduiding} toevoegen`}
+          className="absolute bottom-6 right-2 z-[1000] flex items-center gap-2 rounded-md border bg-white px-3 py-2 shadow-lg"
+        >
+          <span className="text-sm font-medium">{previewPerceel.volledigeAanduiding}</span>
+          <button
+            type="button"
+            onClick={handleToevoegen}
+            className="rounded-md bg-rose-500 px-3 py-1 text-sm text-white transition-colors hover:bg-rose-600"
+          >
+            Toevoegen…
+          </button>
         </div>
       )}
     </div>

@@ -288,7 +288,7 @@ export function AdresKaart({
         className="w-full h-full"
         style={{ isolation: 'isolate', position: 'absolute', inset: 0, zIndex: 0, cursor: onPerceelClick ? 'crosshair' : undefined }}
       />
-      {onZoektermChange && (
+      {onZoektermChange && !dialogOpen && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-md z-[1000]">
           <div className="relative">
             <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -323,7 +323,7 @@ export function AdresKaart({
           </div>
         </div>
       )}
-      {previewPerceel && (
+      {previewPerceel && !dialogOpen && (
         <div
           role="status"
           aria-label={`Perceel ${previewPerceel.volledigeAanduiding} toevoegen`}

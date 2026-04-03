@@ -33,6 +33,7 @@ import { generateAlleSecties } from '@/lib/templates'
 import { formatBedrag, formatOppervlakte, formatDatum } from '@/lib/fluxFormatter'
 import { SuggestieFeedbackDialog } from './SuggestieFeedbackDialog'
 import { supabase } from '@/lib/supabaseClient'
+import { AdresKaart } from './AdresKaart'
 
 export function WizardFlow({
   activeDossierId,
@@ -997,6 +998,8 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           />
         </div>
       </div>
+
+      <AdresKaart coordinaten={data.coordinaten} />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">

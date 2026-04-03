@@ -999,7 +999,26 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         </div>
       </div>
 
-      <AdresKaart coordinaten={data.coordinaten} />
+      <AdresKaart
+        coordinaten={data.coordinaten}
+        onPerceelClick={(perceel) => {
+          const isDuplicaat = gevondenPercelen.some(
+            (p) => p.gemeente === perceel.gemeente && p.sectie === perceel.sectie && p.perceelnummer === perceel.perceelnummer
+          )
+          if (!isDuplicaat) {
+            setGevondenPercelen((prev) => [...prev, perceel])
+          }
+          onChange({
+            ...dataRef.current,
+            kadasterAanduiding: {
+              gemeente: perceel.gemeente,
+              sectie: perceel.sectie,
+              perceelnummer: perceel.perceelnummer,
+            },
+          })
+          startVerrijkingVoorPerceel(perceel)
+        }}
+      />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">

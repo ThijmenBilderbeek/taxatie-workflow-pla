@@ -40,7 +40,6 @@ const ADRES_ZOOM = 18
 const WMS_URL = 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0?'
 const WFS_URLS = [
   'https://service.pdok.nl/kadaster/kadastralekaart/wfs/v5_0',
-  'https://service.pdok.nl/kadaster/kadastralekaart/wfs/v4_0',
 ]
 
 interface PerceelPreview extends PerceelClickResult {
@@ -80,7 +79,7 @@ async function haalPerceelViaBboxWfs(latlng: L.LatLng): Promise<PerceelPreview |
   // ~50m buffer in degrees to find a parcel near the click point
   const bufferLat = 0.0005
   const bufferLng = 0.0007
-  const bbox = `${latlng.lat - bufferLat},${latlng.lng - bufferLng},${latlng.lat + bufferLat},${latlng.lng + bufferLng},EPSG:4326`
+  const bbox = `${latlng.lng - bufferLng},${latlng.lat - bufferLat},${latlng.lng + bufferLng},${latlng.lat + bufferLat},EPSG:4326`
   for (const url of WFS_URLS) {
     try {
       const params = new URLSearchParams({
@@ -232,9 +231,10 @@ export function AdresKaart({
     // Klik-handler: toon perceel preview + highlight op kaart
     map.on('click', async (e: L.LeafletMouseEvent) => {
       try {
-        let perceel = await haalPerceelViaWms(map, e.latlng)
+        // Try WFS first (more reliable from browser, less CORS issues)
+        let perceel = await haalPerceelViaBboxWfs(e.latlng)
         if (!perceel) {
-          perceel = await haalPerceelViaBboxWfs(e.latlng)
+          perceel = await haalPerceelViaWms(map, e.latlng)
         }
         if (perceel) {
           setPreviewPerceel(perceel)

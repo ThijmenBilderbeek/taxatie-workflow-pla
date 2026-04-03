@@ -13,18 +13,82 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
+interface PerceelClickResult {
+  gemeente: string
+  sectie: string
+  perceelnummer: string
+  volledigeAanduiding: string
+}
+
 interface AdresKaartProps {
   coordinaten?: { lat: number; lng: number }
+  onPerceelClick?: (perceel: PerceelClickResult) => void
 }
 
 const NL_CENTER: [number, number] = [52.1326, 5.2913]
 const NL_ZOOM = 7
 const ADRES_ZOOM = 18
 
-export function AdresKaart({ coordinaten }: AdresKaartProps) {
+const WMS_URL = 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0?'
+
+async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelClickResult | null> {
+  const size = map.getSize()
+  const bounds = map.getBounds()
+  const sw = bounds.getSouthWest()
+  const ne = bounds.getNorthEast()
+  const bbox = `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`
+
+  const containerPoint = map.latLngToContainerPoint(latlng)
+  const x = Math.round(containerPoint.x)
+  const y = Math.round(containerPoint.y)
+
+  const params = new URLSearchParams({
+    SERVICE: 'WMS',
+    VERSION: '1.1.1',
+    REQUEST: 'GetFeatureInfo',
+    LAYERS: 'Perceelvlak',
+    QUERY_LAYERS: 'Perceelvlak',
+    INFO_FORMAT: 'application/json',
+    SRS: 'EPSG:4326',
+    BBOX: bbox,
+    WIDTH: String(size.x),
+    HEIGHT: String(size.y),
+    X: String(x),
+    Y: String(y),
+  })
+
+  const resp = await fetch(`${WMS_URL}${params.toString()}`)
+  if (!resp.ok) return null
+
+  const json = await resp.json()
+  const feature = json?.features?.[0]
+  if (!feature) return null
+
+  const props = feature.properties
+  const gemeente: string = props?.akr_kadastrale_gemeente_code ?? props?.kadastrale_gemeente ?? props?.gemeente_waarde ?? ''
+  const sectie: string = props?.sectie ?? ''
+  const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
+
+  if (!gemeente || !sectie || !perceelnummer) return null
+
+  return {
+    gemeente,
+    sectie,
+    perceelnummer,
+    volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
+  }
+}
+
+export function AdresKaart({ coordinaten, onPerceelClick }: AdresKaartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
+  const onPerceelClickRef = useRef(onPerceelClick)
+
+  // Keep ref in sync so the map click handler always uses the latest callback
+  useEffect(() => {
+    onPerceelClickRef.current = onPerceelClick
+  }, [onPerceelClick])
 
   // Initialize map once
   useEffect(() => {
@@ -49,7 +113,7 @@ export function AdresKaart({ coordinaten }: AdresKaartProps) {
     ).addTo(map)
 
     // PDOK Kadastrale kaart WMS overlay
-    L.tileLayer.wms('https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0?', {
+    L.tileLayer.wms(WMS_URL, {
       layers: 'Perceelvlak',
       format: 'image/png',
       transparent: true,
@@ -58,6 +122,19 @@ export function AdresKaart({ coordinaten }: AdresKaartProps) {
       maxZoom: 20,
       maxNativeZoom: 19,
     }).addTo(map)
+
+    // Klik-handler: haal perceel op via WMS GetFeatureInfo
+    map.on('click', async (e: L.LeafletMouseEvent) => {
+      if (!onPerceelClickRef.current) return
+      try {
+        const perceel = await haalPerceelViaWms(map, e.latlng)
+        if (perceel) {
+          onPerceelClickRef.current(perceel)
+        }
+      } catch {
+        // silently ignore click errors
+      }
+    })
 
     mapRef.current = map
 
@@ -96,7 +173,7 @@ export function AdresKaart({ coordinaten }: AdresKaartProps) {
     <div
       ref={containerRef}
       className="w-full rounded-lg border overflow-hidden"
-      style={{ height: '320px', isolation: 'isolate', position: 'relative', zIndex: 0 }}
+      style={{ height: '320px', isolation: 'isolate', position: 'relative', zIndex: 0, cursor: onPerceelClick ? 'crosshair' : undefined }}
     />
   )
 }

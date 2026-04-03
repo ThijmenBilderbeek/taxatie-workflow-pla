@@ -35,6 +35,7 @@ export function AdresKaart({ coordinaten }: AdresKaartProps) {
       zoom: NL_ZOOM,
       zoomControl: true,
       attributionControl: true,
+      maxZoom: 19,
     })
 
     // PDOK BRT Achtergrondkaart tiles
@@ -54,6 +55,8 @@ export function AdresKaart({ coordinaten }: AdresKaartProps) {
       transparent: true,
       opacity: 0.5,
       attribution: '© Kadaster',
+      maxZoom: 20,
+      maxNativeZoom: 19,
     }).addTo(map)
 
     mapRef.current = map

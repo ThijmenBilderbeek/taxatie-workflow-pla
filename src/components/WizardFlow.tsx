@@ -696,6 +696,11 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [pdokSuggesties, setPdokSuggesties] = useState<Array<{ id: string; weergavenaam: string }>>([])
   const [toonSuggesties, setToonSuggesties] = useState(false)
   const [isLaden, setIsLaden] = useState(false)
+  const [zoekterm, setZoekterm] = useState(() => [data.straatnaam, data.huisnummer].filter(Boolean).join(' '))
+  // Sync zoekterm when straatnaam/huisnummer fields below the map are edited directly
+  useEffect(() => {
+    setZoekterm([data.straatnaam, data.huisnummer].filter(Boolean).join(' '))
+  }, [data.straatnaam, data.huisnummer])
   // --- PDOK Perceel: kadastrale perceel state ---
   const [percelenLaden, setPercelenLaden] = useState(false)
   const [gevondenPercelen, setGevondenPercelen] = useState<PerceelData[]>([])
@@ -726,17 +731,15 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   dataRef.current = data
 
   useEffect(() => {
-    const zoekterm = data.straatnaam || ''
     if (zoekterm.length < 3) {
       setPdokSuggesties([])
       setToonSuggesties(false)
       return
     }
-    const q = data.huisnummer ? `${zoekterm} ${data.huisnummer}` : zoekterm
     const timer = setTimeout(async () => {
       setIsLaden(true)
       try {
-        const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest?q=${encodeURIComponent(q)}&rows=6&fq=type:adres`
+        const url = `https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest?q=${encodeURIComponent(zoekterm)}&rows=6&fq=type:adres`
         const resp = await fetch(url)
         const json = await resp.json()
         const docs: Array<{ id: string; weergavenaam: string }> = json?.response?.docs ?? []
@@ -750,7 +753,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [data.straatnaam, data.huisnummer])
+  }, [zoekterm])
 
   const DROPDOWN_CLOSE_DELAY = 200
 
@@ -866,6 +869,10 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         ...(lat !== undefined && lng !== undefined ? { coordinaten: { lat, lng } } : {}),
       }
       onChange(newAdresData)
+      // Update zoekterm to reflect the selected address
+      const newStraatnaam = doc.straatnaam || data.straatnaam || ''
+      const newHuisnummer = doc.huis_nlt || data.huisnummer || ''
+      setZoekterm([newStraatnaam, newHuisnummer].filter(Boolean).join(' '))
 
       // --- PDOK Perceel: verwerk percelen uit het reeds opgehaalde doc (geen extra API-call) ---
       lastPdokIdRef.current = id
@@ -883,7 +890,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     }
   }
 
-  const handleStraatnaamBlur = () => {
+  const handleZoekOverlayBlur = () => {
     setTimeout(() => setToonSuggesties(false), DROPDOWN_CLOSE_DELAY)
   }
 
@@ -976,39 +983,26 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   }
   return (
     <div className="grid gap-4">
+      <AdresKaart
+        coordinaten={data.coordinaten}
+        onPerceelClick={handlePerceelKlik}
+        zoekterm={zoekterm}
+        onZoektermChange={setZoekterm}
+        pdokSuggesties={pdokSuggesties}
+        onSuggestieSelect={selecteerPdokSuggestie}
+        isLaden={isLaden}
+        toonSuggesties={toonSuggesties}
+        onBlur={handleZoekOverlayBlur}
+      />
+
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 grid gap-2">
           <Label htmlFor="straatnaam">Straatnaam *</Label>
-          <div className="relative z-[1000]">
-            <Input
-              id="straatnaam"
-              value={data.straatnaam || ''}
-              onChange={(e) => onChange({ ...data, straatnaam: e.target.value })}
-              onBlur={handleStraatnaamBlur}
-              autoComplete="off"
-            />
-            {toonSuggesties && (
-              <Card className="absolute z-50 w-full mt-1 shadow-lg">
-                <CardContent className="p-1">
-                  {isLaden ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">Zoeken…</div>
-                  ) : (
-                    pdokSuggesties.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm rounded hover:bg-accent hover:text-accent-foreground transition-colors"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => selecteerPdokSuggestie(s.id)}
-                      >
-                        {s.weergavenaam}
-                      </button>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          <Input
+            id="straatnaam"
+            value={data.straatnaam || ''}
+            onChange={(e) => onChange({ ...data, straatnaam: e.target.value })}
+          />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="huisnummer">Huisnummer *</Label>
@@ -1019,11 +1013,6 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           />
         </div>
       </div>
-
-      <AdresKaart
-        coordinaten={data.coordinaten}
-        onPerceelClick={handlePerceelKlik}
-      />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">

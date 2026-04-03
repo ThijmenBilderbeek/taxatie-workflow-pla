@@ -115,7 +115,7 @@ function AppContent() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Laden...</p>
+        <img src="/valyze_logo2.svg" alt="Laden..." className="h-24 w-auto valyze-generating" />
       </div>
     )
   }
@@ -132,7 +132,7 @@ function AppContent() {
   if (kantoorLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Kantoor laden...</p>
+        <img src="/valyze_logo2.svg" alt="Laden..." className="h-24 w-auto valyze-generating" />
       </div>
     )
   }

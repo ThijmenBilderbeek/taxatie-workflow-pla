@@ -958,7 +958,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 grid gap-2">
           <Label htmlFor="straatnaam">Straatnaam *</Label>
-          <div className="relative">
+          <div className="relative z-[1000]">
             <Input
               id="straatnaam"
               value={data.straatnaam || ''}

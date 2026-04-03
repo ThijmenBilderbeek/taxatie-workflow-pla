@@ -926,6 +926,27 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     setToonHandmatigInvoer(false)
   }
 
+  const handlePerceelKlik = (perceel: PerceelData) => {
+    const bestaand = gevondenPercelen.find(
+      (p) => p.gemeente === perceel.gemeente && p.sectie === perceel.sectie && p.perceelnummer === perceel.perceelnummer
+    )
+
+    if (!bestaand) {
+      setGevondenPercelen((prev) => [...prev, perceel])
+    }
+
+    onChange({
+      ...dataRef.current,
+      kadasterAanduiding: {
+        gemeente: perceel.gemeente,
+        sectie: perceel.sectie,
+        perceelnummer: perceel.perceelnummer,
+      },
+    })
+    startVerrijkingVoorPerceel(bestaand ?? perceel)
+    toast.success(`Perceel geselecteerd: ${perceel.volledigeAanduiding}`)
+  }
+
   const renderVeld = (veldNaam: string, textarea: React.ReactNode) => {
     if (isLoadingSuggesties) {
       return (
@@ -1001,24 +1022,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
 
       <AdresKaart
         coordinaten={data.coordinaten}
-        onPerceelClick={(perceel) => {
-          const isDuplicaat = gevondenPercelen.some(
-            (p) => p.volledigeAanduiding === perceel.volledigeAanduiding
-          )
-          if (!isDuplicaat) {
-            setGevondenPercelen((prev) => [...prev, perceel])
-          }
-          onChange({
-            ...dataRef.current,
-            kadasterAanduiding: {
-              gemeente: perceel.gemeente,
-              sectie: perceel.sectie,
-              perceelnummer: perceel.perceelnummer,
-            },
-          })
-          startVerrijkingVoorPerceel(perceel)
-          toast.success(`Perceel geselecteerd: ${perceel.volledigeAanduiding}`)
-        }}
+        onPerceelClick={handlePerceelKlik}
       />
 
       <div className="grid grid-cols-2 gap-4">

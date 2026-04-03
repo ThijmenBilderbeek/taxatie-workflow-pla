@@ -45,7 +45,7 @@ interface PerceelPreview extends PerceelClickResult {
 }
 
 async function haalPerceelViaBboxOgcApi(latlng: L.LatLng): Promise<PerceelPreview | null> {
-  // ~50m buffer in degrees to find a parcel near the click point
+  // ~50m buffer in degrees (lat ≈ 55m, lng ≈ 50m at NL latitudes ~52°N where cos(52°)≈0.616)
   const bufferLat = 0.0005
   const bufferLng = 0.0007
   const bbox = `${latlng.lng - bufferLng},${latlng.lat - bufferLat},${latlng.lng + bufferLng},${latlng.lat + bufferLat}`

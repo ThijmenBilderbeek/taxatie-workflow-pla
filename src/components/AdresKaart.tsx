@@ -61,14 +61,17 @@ async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelC
   if (!resp.ok) return null
 
   const json = await resp.json()
+  console.log('WMS GetFeatureInfo response:', JSON.stringify(json, null, 2))
   const feature = json?.features?.[0]
   if (!feature) return null
 
   const props = feature.properties
-  // PDOK WMS v5_0 Perceelvlak uses `akr_kadastrale_gemeente_code`; fall back to
-  // legacy property names that may appear in older or alternative WMS responses.
-  const gemeente: string = props?.akr_kadastrale_gemeente_code ?? props?.kadastrale_gemeente ?? props?.gemeente_waarde ?? ''
-  const sectie: string = props?.sectie ?? ''
+  // PDOK WMS v5_0 Perceelvlak GetFeatureInfo property names:
+  // - akr_kadastrale_gemeente_code_waarde (gemeente code)
+  // - kadastrale_sectie (sectie letter)
+  // - perceelnummer (perceelnummer)
+  const gemeente: string = props?.akr_kadastrale_gemeente_code_waarde ?? props?.akr_kadastrale_gemeente_code ?? props?.kadastrale_gemeente_code ?? ''
+  const sectie: string = props?.kadastrale_sectie ?? props?.sectie ?? ''
   const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
 
   if (!gemeente || !sectie || !perceelnummer) return null

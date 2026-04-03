@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MagnifyingGlass } from '@phosphor-icons/react'
+import { PerceelToevoegenDialog } from '@/components/PerceelToevoegenDialog'
 
 // Fix Leaflet marker icon issue with Vite/webpack builds:
 // Leaflet's default icon resolution relies on a private `_getIconUrl` method which
@@ -149,6 +150,7 @@ export function AdresKaart({
   const highlightLayerRef = useRef<L.GeoJSON | null>(null)
   const onPerceelClickRef = useRef(onPerceelClick)
   const [previewPerceel, setPreviewPerceel] = useState<PerceelPreview | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   // Keep ref in sync so the map click handler always uses the latest callback
   useEffect(() => {
@@ -257,6 +259,12 @@ export function AdresKaart({
   }, [coordinaten?.lat, coordinaten?.lng])
 
   const handleToevoegen = () => {
+    if (previewPerceel) {
+      setDialogOpen(true)
+    }
+  }
+
+  const handleDialogBevestigen = () => {
     if (previewPerceel && onPerceelClickRef.current) {
       const { geometry: _geometry, ...perceelData } = previewPerceel
       if (highlightLayerRef.current) {
@@ -266,6 +274,11 @@ export function AdresKaart({
       onPerceelClickRef.current(perceelData)
       setPreviewPerceel(null)
     }
+    setDialogOpen(false)
+  }
+
+  const handleDialogAnnuleren = () => {
+    setDialogOpen(false)
   }
 
   return (
@@ -312,7 +325,7 @@ export function AdresKaart({
       )}
       {previewPerceel && (
         <div
-          role="dialog"
+          role="status"
           aria-label={`Perceel ${previewPerceel.volledigeAanduiding} toevoegen`}
           className="absolute bottom-6 right-2 z-[1000] flex items-center gap-2 rounded-md border bg-white px-3 py-2 shadow-lg"
         >
@@ -325,6 +338,15 @@ export function AdresKaart({
             Toevoegen…
           </button>
         </div>
+      )}
+      {previewPerceel && (
+        <PerceelToevoegenDialog
+          open={dialogOpen}
+          volledigeAanduiding={previewPerceel.volledigeAanduiding}
+          perceelGeometry={previewPerceel.geometry}
+          onAnnuleren={handleDialogAnnuleren}
+          onBevestigen={handleDialogBevestigen}
+        />
       )}
     </div>
   )

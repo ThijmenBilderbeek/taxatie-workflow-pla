@@ -9,10 +9,34 @@ const BAG_API_URL = 'https://api.pdok.nl/bzk/bag/ogc/v1/collections'
 const MAX_BAG_OBJECTS_PER_QUERY = 50
 
 /**
- * Kleine buffer in graden om objecten net aan de perceelrand mee te nemen.
- * 0.000005° ≈ 0.5m in WGS84-coördinaten (op Nederlandse breedte).
+ * Converteert WGS84 (lat/lng) naar RD New (EPSG:28992) coördinaten.
+ * Gebaseerd op de officiële benaderingsformules (RDNAPTRANS2018).
  */
-const BBOX_BUFFER_DEGREES = 0.000005
+function wgs84ToRd(lat: number, lng: number): { x: number; y: number } {
+  const dLat = 0.36 * (lat - 52.15517440)
+  const dLng = 0.36 * (lng - 5.38720621)
+
+  const x = 155000
+    + 190094.945 * dLng
+    - 11832.228 * dLat * dLng
+    - 114.221 * dLat * dLat * dLng
+    + 0.3 * dLng * dLng * dLng
+    - 32.162 * dLat * dLng * dLng * dLng
+    - 0.608 * dLat * dLat * dLat * dLng
+
+  const y = 463000
+    + 309056.544 * dLat
+    - 3638.893 * dLng * dLng
+    + 73.077 * dLat * dLat
+    - 157.984 * dLat * dLng * dLng
+    + 59.788 * dLat * dLat * dLat
+    + 0.433 * dLng * dLng * dLng * dLng
+    - 6.439 * dLat * dLat * dLng * dLng
+    + 0.092 * dLng * dLng * dLng * dLng * dLng
+    - 0.054 * dLat * dLat * dLat * dLng * dLng
+
+  return { x, y }
+}
 
 export interface BagPand {
   identificatie: string
@@ -115,19 +139,31 @@ function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
  * Gebruikt de perceelgeometrie om de bounding box te berekenen.
  */
 export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJsonObject): Promise<BagPerceelData> {
-  const bbox = berekenBbox(perceelGeometry)
+  const wgs84Bbox = berekenBbox(perceelGeometry)
 
-  // Voeg kleine buffer toe zodat we objecten net aan de rand ook meenemen
-  const bboxStr = `${bbox.minLng - BBOX_BUFFER_DEGREES},${bbox.minLat - BBOX_BUFFER_DEGREES},${bbox.maxLng + BBOX_BUFFER_DEGREES},${bbox.maxLat + BBOX_BUFFER_DEGREES}`
+  // Converteer WGS84 naar RD coördinaten
+  const rdMin = wgs84ToRd(wgs84Bbox.minLat, wgs84Bbox.minLng)
+  const rdMax = wgs84ToRd(wgs84Bbox.maxLat, wgs84Bbox.maxLng)
+
+  // Buffer van 5 meter in RD coördinaten
+  const BUFFER_M = 5
+  const bboxStr = `${rdMin.x - BUFFER_M},${rdMin.y - BUFFER_M},${rdMax.x + BUFFER_M},${rdMax.y + BUFFER_M}`
 
   async function fetchCollection(collection: string): Promise<GeoJSON.Feature[]> {
     try {
-      const params = new URLSearchParams({ bbox: bboxStr, 'bbox-crs': 'http://www.opengis.net/def/crs/OGC/1.3/CRS84', limit: String(MAX_BAG_OBJECTS_PER_QUERY), f: 'json' })
-      const resp = await fetch(`${BAG_API_URL}/${collection}/items?${params.toString()}`)
-      if (!resp.ok) return []
+      const params = new URLSearchParams({ bbox: bboxStr, limit: String(MAX_BAG_OBJECTS_PER_QUERY), f: 'json' })
+      const url = `${BAG_API_URL}/${collection}/items?${params.toString()}`
+      console.log(`[BAG] Fetching ${collection}:`, url)
+      const resp = await fetch(url)
+      if (!resp.ok) {
+        console.warn(`[BAG] ${collection}: HTTP ${resp.status}`)
+        return []
+      }
       const json = await resp.json()
+      console.log(`[BAG] ${collection} features:`, json?.features?.length ?? 0)
       return json?.features ?? []
-    } catch {
+    } catch (err) {
+      console.warn(`[BAG] ${collection} failed:`, err)
       return []
     }
   }

@@ -697,6 +697,10 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   const [toonSuggesties, setToonSuggesties] = useState(false)
   const [isLaden, setIsLaden] = useState(false)
   const [zoekterm, setZoekterm] = useState(() => [data.straatnaam, data.huisnummer].filter(Boolean).join(' '))
+  // Sync zoekterm when straatnaam/huisnummer fields below the map are edited directly
+  useEffect(() => {
+    setZoekterm([data.straatnaam, data.huisnummer].filter(Boolean).join(' '))
+  }, [data.straatnaam, data.huisnummer])
   // --- PDOK Perceel: kadastrale perceel state ---
   const [percelenLaden, setPercelenLaden] = useState(false)
   const [gevondenPercelen, setGevondenPercelen] = useState<PerceelData[]>([])
@@ -886,6 +890,10 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
     }
   }
 
+  const handleZoekOverlayBlur = () => {
+    setTimeout(() => setToonSuggesties(false), DROPDOWN_CLOSE_DELAY)
+  }
+
   // --- Handmatig perceel: helper om perceel toe te voegen (met of zonder validatie) ---
   const voegHandmatigPerceelToe = (g: string, s: string, p: string, oppervlakte?: number, gevalideerd = false, appartementsrecht?: string) => {
     const volledigeAanduiding = `${g}-${s}-${p}`
@@ -984,7 +992,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         onSuggestieSelect={selecteerPdokSuggestie}
         isLaden={isLaden}
         toonSuggesties={toonSuggesties}
-        onBlur={() => setTimeout(() => setToonSuggesties(false), DROPDOWN_CLOSE_DELAY)}
+        onBlur={handleZoekOverlayBlur}
       />
 
       <div className="grid grid-cols-3 gap-4">

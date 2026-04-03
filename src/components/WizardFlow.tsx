@@ -967,7 +967,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
               autoComplete="off"
             />
             {toonSuggesties && (
-              <Card className="absolute z-50 w-full mt-1 shadow-lg">
+              <Card className="absolute z-[1000] w-full mt-1 shadow-lg">
                 <CardContent className="p-1">
                   {isLaden ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">Zoeken…</div>

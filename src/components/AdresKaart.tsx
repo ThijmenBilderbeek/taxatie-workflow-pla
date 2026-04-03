@@ -40,8 +40,7 @@ const ADRES_ZOOM = 18
 const WMS_URL = 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0?'
 
 interface PerceelPreview extends PerceelClickResult {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  geometry: any | null
+  geometry: GeoJSON.GeoJsonObject | null
 }
 
 async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelPreview | null> {
@@ -225,6 +224,10 @@ export function AdresKaart({
   const handleToevoegen = () => {
     if (previewPerceel && onPerceelClickRef.current) {
       const { geometry: _geometry, ...perceelData } = previewPerceel
+      if (highlightLayerRef.current) {
+        highlightLayerRef.current.remove()
+        highlightLayerRef.current = null
+      }
       onPerceelClickRef.current(perceelData)
       setPreviewPerceel(null)
     }
@@ -273,7 +276,11 @@ export function AdresKaart({
         </div>
       )}
       {previewPerceel && (
-        <div className="absolute bottom-6 right-2 z-[1000] flex items-center gap-2 rounded-md border bg-white px-3 py-2 shadow-lg">
+        <div
+          role="dialog"
+          aria-label={`Perceel ${previewPerceel.volledigeAanduiding} toevoegen`}
+          className="absolute bottom-6 right-2 z-[1000] flex items-center gap-2 rounded-md border bg-white px-3 py-2 shadow-lg"
+        >
           <span className="text-sm font-medium">{previewPerceel.volledigeAanduiding}</span>
           <button
             type="button"

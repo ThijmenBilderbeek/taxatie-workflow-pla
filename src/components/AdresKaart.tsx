@@ -38,138 +38,44 @@ const NL_ZOOM = 7
 const ADRES_ZOOM = 18
 
 const WMS_URL = 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0?'
-const WFS_URLS = [
-  'https://service.pdok.nl/kadaster/kadastralekaart/wfs/v5_0',
-]
+const OGC_API_URL = 'https://api.pdok.nl/kadaster/brk-kadastrale-kaart/ogc/v1/collections/perceel/items'
 
 interface PerceelPreview extends PerceelClickResult {
   geometry: GeoJSON.GeoJsonObject | null
 }
 
-function escapeCqlString(value: string): string {
-  return value.replace(/'/g, "''")
-}
-
-async function haalGeometryViaWfs(gemeente: string, sectie: string, perceelnummer: string): Promise<GeoJSON.GeoJsonObject | null> {
-  const cqlFilter = `kadastraleGemeenteCode='${escapeCqlString(gemeente)}' AND sectie='${escapeCqlString(sectie)}' AND perceelnummer='${escapeCqlString(perceelnummer)}'`
-  for (const url of WFS_URLS) {
-    try {
-      const params = new URLSearchParams({
-        service: 'WFS',
-        version: '2.0.0',
-        request: 'GetFeature',
-        typeName: 'kadastralekaartv5:Perceelvlak',
-        outputFormat: 'application/json',
-        srsName: 'EPSG:4326',
-        CQL_FILTER: cqlFilter,
-      })
-      const resp = await fetch(`${url}?${params.toString()}`)
-      if (!resp.ok) continue
-      const json = await resp.json()
-      const geometry = json?.features?.[0]?.geometry
-      if (geometry) return geometry
-    } catch (err) {
-      console.warn(`WFS geometry call failed for ${url}:`, err)
-    }
-  }
-  return null
-}
-
-async function haalPerceelViaBboxWfs(latlng: L.LatLng): Promise<PerceelPreview | null> {
+async function haalPerceelViaBboxOgcApi(latlng: L.LatLng): Promise<PerceelPreview | null> {
   // ~50m buffer in degrees to find a parcel near the click point
   const bufferLat = 0.0005
   const bufferLng = 0.0007
-  const bbox = `${latlng.lng - bufferLng},${latlng.lat - bufferLat},${latlng.lng + bufferLng},${latlng.lat + bufferLat},EPSG:4326`
-  for (const url of WFS_URLS) {
-    try {
-      const params = new URLSearchParams({
-        service: 'WFS',
-        version: '2.0.0',
-        request: 'GetFeature',
-        typeName: 'kadastralekaartv5:Perceelvlak',
-        outputFormat: 'application/json',
-        srsName: 'EPSG:4326',
-        count: '1',
-        BBOX: bbox,
-      })
-      const resp = await fetch(`${url}?${params.toString()}`)
-      if (!resp.ok) continue
-      const json = await resp.json()
-      const feature = json?.features?.[0]
-      if (!feature) continue
-      const props = feature.properties
-      const gemeente: string = props?.kadastraleGemeenteCode ?? props?.akr_kadastrale_gemeente_code_waarde ?? props?.kadastrale_gemeente_code ?? ''
-      const sectie: string = props?.sectie ?? props?.kadastrale_sectie ?? ''
-      const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
-      if (!gemeente || !sectie || !perceelnummer) continue
-      return {
-        gemeente,
-        sectie,
-        perceelnummer,
-        volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
-        geometry: feature.geometry ?? null,
-      }
-    } catch (err) {
-      console.warn(`WFS BBOX call failed for ${url}:`, err)
+  const bbox = `${latlng.lng - bufferLng},${latlng.lat - bufferLat},${latlng.lng + bufferLng},${latlng.lat + bufferLat}`
+  try {
+    const params = new URLSearchParams({
+      bbox,
+      limit: '1',
+      f: 'json',
+    })
+    const resp = await fetch(`${OGC_API_URL}?${params.toString()}`)
+    if (!resp.ok) return null
+    const json = await resp.json()
+    const feature = json?.features?.[0]
+    if (!feature) return null
+    const props = feature.properties
+    const gemeente: string = props?.akr_kadastrale_gemeente_code_waarde ?? ''
+    const sectie: string = props?.sectie ?? ''
+    const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
+    if (!gemeente || !sectie || !perceelnummer) return null
+    return {
+      gemeente,
+      sectie,
+      perceelnummer,
+      volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
+      geometry: feature.geometry ?? null,
     }
+  } catch (err) {
+    console.warn('OGC API BBOX call failed:', err)
   }
   return null
-}
-
-async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelPreview | null> {
-  const size = map.getSize()
-  const bounds = map.getBounds()
-  const sw = bounds.getSouthWest()
-  const ne = bounds.getNorthEast()
-  const bbox = `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`
-
-  const containerPoint = map.latLngToContainerPoint(latlng)
-  const x = Math.round(containerPoint.x)
-  const y = Math.round(containerPoint.y)
-
-  const params = new URLSearchParams({
-    SERVICE: 'WMS',
-    VERSION: '1.1.1',
-    REQUEST: 'GetFeatureInfo',
-    LAYERS: 'Perceelvlak',
-    QUERY_LAYERS: 'Perceelvlak',
-    INFO_FORMAT: 'application/json',
-    SRS: 'EPSG:4326',
-    BBOX: bbox,
-    WIDTH: String(size.x),
-    HEIGHT: String(size.y),
-    X: String(x),
-    Y: String(y),
-  })
-
-  const resp = await fetch(`${WMS_URL}${params.toString()}`)
-  if (!resp.ok) return null
-
-  const json = await resp.json()
-  console.log('WMS GetFeatureInfo response:', JSON.stringify(json, null, 2))
-  const feature = json?.features?.[0]
-  if (!feature) return null
-
-  const props = feature.properties
-  // PDOK WMS v5_0 Perceelvlak GetFeatureInfo property names:
-  // - akr_kadastrale_gemeente_code_waarde (gemeente code)
-  // - kadastrale_sectie (sectie letter)
-  // - perceelnummer (perceelnummer)
-  const gemeente: string = props?.akr_kadastrale_gemeente_code_waarde ?? props?.akr_kadastrale_gemeente_code ?? props?.kadastrale_gemeente_code ?? ''
-  const sectie: string = props?.kadastrale_sectie ?? props?.sectie ?? ''
-  const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
-
-  if (!gemeente || !sectie || !perceelnummer) return null
-
-  const geometry = await haalGeometryViaWfs(gemeente, sectie, perceelnummer)
-
-  return {
-    gemeente,
-    sectie,
-    perceelnummer,
-    volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
-    geometry,
-  }
 }
 
 export function AdresKaart({
@@ -231,11 +137,7 @@ export function AdresKaart({
     // Klik-handler: toon perceel preview + highlight op kaart
     map.on('click', async (e: L.LeafletMouseEvent) => {
       try {
-        // Try WFS first (more reliable from browser, less CORS issues)
-        let perceel = await haalPerceelViaBboxWfs(e.latlng)
-        if (!perceel) {
-          perceel = await haalPerceelViaWms(map, e.latlng)
-        }
+        const perceel = await haalPerceelViaBboxOgcApi(e.latlng)
         if (perceel) {
           setPreviewPerceel(perceel)
         }

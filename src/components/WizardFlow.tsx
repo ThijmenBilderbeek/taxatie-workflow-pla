@@ -1003,7 +1003,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
         coordinaten={data.coordinaten}
         onPerceelClick={(perceel) => {
           const isDuplicaat = gevondenPercelen.some(
-            (p) => p.gemeente === perceel.gemeente && p.sectie === perceel.sectie && p.perceelnummer === perceel.perceelnummer
+            (p) => p.volledigeAanduiding === perceel.volledigeAanduiding
           )
           if (!isDuplicaat) {
             setGevondenPercelen((prev) => [...prev, perceel])
@@ -1017,6 +1017,7 @@ function Stap2({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
             },
           })
           startVerrijkingVoorPerceel(perceel)
+          toast.success(`Perceel geselecteerd: ${perceel.volledigeAanduiding}`)
         }}
       />
 

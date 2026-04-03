@@ -38,9 +38,83 @@ const NL_ZOOM = 7
 const ADRES_ZOOM = 18
 
 const WMS_URL = 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0?'
+const WFS_URLS = [
+  'https://service.pdok.nl/kadaster/kadastralekaart/wfs/v5_0',
+  'https://service.pdok.nl/kadaster/kadastralekaart/wfs/v4_0',
+]
 
 interface PerceelPreview extends PerceelClickResult {
   geometry: GeoJSON.GeoJsonObject | null
+}
+
+function escapeCqlString(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+async function haalGeometryViaWfs(gemeente: string, sectie: string, perceelnummer: string): Promise<GeoJSON.GeoJsonObject | null> {
+  const cqlFilter = `kadastraleGemeenteCode='${escapeCqlString(gemeente)}' AND sectie='${escapeCqlString(sectie)}' AND perceelnummer='${escapeCqlString(perceelnummer)}'`
+  for (const url of WFS_URLS) {
+    try {
+      const params = new URLSearchParams({
+        service: 'WFS',
+        version: '2.0.0',
+        request: 'GetFeature',
+        typeName: 'kadastralekaartv5:Perceelvlak',
+        outputFormat: 'application/json',
+        srsName: 'EPSG:4326',
+        CQL_FILTER: cqlFilter,
+      })
+      const resp = await fetch(`${url}?${params.toString()}`)
+      if (!resp.ok) continue
+      const json = await resp.json()
+      const geometry = json?.features?.[0]?.geometry
+      if (geometry) return geometry
+    } catch (err) {
+      console.warn(`WFS geometry call failed for ${url}:`, err)
+    }
+  }
+  return null
+}
+
+async function haalPerceelViaBboxWfs(latlng: L.LatLng): Promise<PerceelPreview | null> {
+  // ~50m buffer in degrees to find a parcel near the click point
+  const bufferLat = 0.0005
+  const bufferLng = 0.0007
+  const bbox = `${latlng.lat - bufferLat},${latlng.lng - bufferLng},${latlng.lat + bufferLat},${latlng.lng + bufferLng},EPSG:4326`
+  for (const url of WFS_URLS) {
+    try {
+      const params = new URLSearchParams({
+        service: 'WFS',
+        version: '2.0.0',
+        request: 'GetFeature',
+        typeName: 'kadastralekaartv5:Perceelvlak',
+        outputFormat: 'application/json',
+        srsName: 'EPSG:4326',
+        count: '1',
+        BBOX: bbox,
+      })
+      const resp = await fetch(`${url}?${params.toString()}`)
+      if (!resp.ok) continue
+      const json = await resp.json()
+      const feature = json?.features?.[0]
+      if (!feature) continue
+      const props = feature.properties
+      const gemeente: string = props?.kadastraleGemeenteCode ?? props?.akr_kadastrale_gemeente_code_waarde ?? props?.kadastrale_gemeente_code ?? ''
+      const sectie: string = props?.sectie ?? props?.kadastrale_sectie ?? ''
+      const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
+      if (!gemeente || !sectie || !perceelnummer) continue
+      return {
+        gemeente,
+        sectie,
+        perceelnummer,
+        volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
+        geometry: feature.geometry ?? null,
+      }
+    } catch (err) {
+      console.warn(`WFS BBOX call failed for ${url}:`, err)
+    }
+  }
+  return null
 }
 
 async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelPreview | null> {
@@ -88,12 +162,14 @@ async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelP
 
   if (!gemeente || !sectie || !perceelnummer) return null
 
+  const geometry = await haalGeometryViaWfs(gemeente, sectie, perceelnummer)
+
   return {
     gemeente,
     sectie,
     perceelnummer,
     volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
-    geometry: feature.geometry ?? null,
+    geometry,
   }
 }
 
@@ -156,7 +232,10 @@ export function AdresKaart({
     // Klik-handler: toon perceel preview + highlight op kaart
     map.on('click', async (e: L.LeafletMouseEvent) => {
       try {
-        const perceel = await haalPerceelViaWms(map, e.latlng)
+        let perceel = await haalPerceelViaWms(map, e.latlng)
+        if (!perceel) {
+          perceel = await haalPerceelViaBboxWfs(e.latlng)
+        }
         if (perceel) {
           setPreviewPerceel(perceel)
         }

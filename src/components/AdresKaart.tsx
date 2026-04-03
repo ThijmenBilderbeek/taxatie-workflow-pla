@@ -93,7 +93,7 @@ export function AdresKaart({ coordinaten }: AdresKaartProps) {
     <div
       ref={containerRef}
       className="w-full rounded-lg border overflow-hidden"
-      style={{ height: '320px', position: 'relative', zIndex: 0 }}
+      style={{ height: '320px', position: 'relative', zIndex: 0, isolation: 'isolate' }}
     />
   )
 }

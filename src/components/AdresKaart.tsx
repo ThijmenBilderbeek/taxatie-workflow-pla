@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
+import { MagnifyingGlass } from '@phosphor-icons/react'
 
 // Fix Leaflet marker icon issue with Vite/webpack builds:
 // Leaflet's default icon resolution relies on a private `_getIconUrl` method which
@@ -23,6 +24,13 @@ interface PerceelClickResult {
 interface AdresKaartProps {
   coordinaten?: { lat: number; lng: number }
   onPerceelClick?: (perceel: PerceelClickResult) => void
+  zoekterm?: string
+  onZoektermChange?: (value: string) => void
+  pdokSuggesties?: Array<{ id: string; weergavenaam: string }>
+  onSuggestieSelect?: (id: string) => void
+  isLaden?: boolean
+  toonSuggesties?: boolean
+  onBlur?: () => void
 }
 
 const NL_CENTER: [number, number] = [52.1326, 5.2913]
@@ -84,7 +92,17 @@ async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelC
   }
 }
 
-export function AdresKaart({ coordinaten, onPerceelClick }: AdresKaartProps) {
+export function AdresKaart({
+  coordinaten,
+  onPerceelClick,
+  zoekterm,
+  onZoektermChange,
+  pdokSuggesties = [],
+  onSuggestieSelect,
+  isLaden = false,
+  toonSuggesties = false,
+  onBlur,
+}: AdresKaartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
@@ -175,10 +193,47 @@ export function AdresKaart({ coordinaten, onPerceelClick }: AdresKaartProps) {
   }, [coordinaten?.lat, coordinaten?.lng])
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full rounded-lg border overflow-hidden"
-      style={{ height: '320px', isolation: 'isolate', position: 'relative', zIndex: 0, cursor: onPerceelClick ? 'crosshair' : undefined }}
-    />
+    <div className="relative w-full rounded-lg border overflow-hidden" style={{ height: '320px' }}>
+      <div
+        ref={containerRef}
+        className="w-full h-full"
+        style={{ isolation: 'isolate', position: 'absolute', inset: 0, zIndex: 0, cursor: onPerceelClick ? 'crosshair' : undefined }}
+      />
+      {onZoektermChange && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-md z-[1000]">
+          <div className="relative">
+            <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <input
+              type="text"
+              value={zoekterm ?? ''}
+              onChange={(e) => onZoektermChange(e.target.value)}
+              onBlur={onBlur}
+              placeholder="Zoek adres of perceel"
+              autoComplete="off"
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-md border bg-white shadow-md focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            {toonSuggesties && (
+              <div className="absolute z-50 w-full mt-1 bg-white rounded-md border shadow-lg">
+                {isLaden ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">Zoeken…</div>
+                ) : (
+                  pdokSuggesties.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onSuggestieSelect?.(s.id)}
+                    >
+                      {s.weergavenaam}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

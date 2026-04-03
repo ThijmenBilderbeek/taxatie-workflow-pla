@@ -65,6 +65,8 @@ async function haalPerceelViaWms(map: L.Map, latlng: L.LatLng): Promise<PerceelC
   if (!feature) return null
 
   const props = feature.properties
+  // PDOK WMS v5_0 Perceelvlak uses `akr_kadastrale_gemeente_code`; fall back to
+  // legacy property names that may appear in older or alternative WMS responses.
   const gemeente: string = props?.akr_kadastrale_gemeente_code ?? props?.kadastrale_gemeente ?? props?.gemeente_waarde ?? ''
   const sectie: string = props?.sectie ?? ''
   const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
@@ -131,8 +133,8 @@ export function AdresKaart({ coordinaten, onPerceelClick }: AdresKaartProps) {
         if (perceel) {
           onPerceelClickRef.current(perceel)
         }
-      } catch {
-        // silently ignore click errors
+      } catch (err) {
+        console.warn('Fout bij ophalen perceel via kaart klik:', err)
       }
     })
 

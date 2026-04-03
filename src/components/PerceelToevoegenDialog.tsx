@@ -50,7 +50,7 @@ function PandRij({ pand, verblijfsobjecten, nummeraanduidingen }: {
           </button>
         </TableCell>
         <TableCell className="font-mono text-xs">{pand.identificatie}</TableCell>
-        <TableCell>{pand.oppervlakte != null ? `${pand.oppervlakte}` : '—'}</TableCell>
+        <TableCell>{pand.oppervlakte != null ? `${pand.oppervlakte} m²` : '—'}</TableCell>
         <TableCell colSpan={7} className="text-muted-foreground text-xs">
           {formatGebruiksdoel(pand.gebruiksdoel)}{pand.bouwjaar ? ` · bouwjaar ${pand.bouwjaar}` : ''}
         </TableCell>
@@ -80,7 +80,7 @@ function VerblijfsobjectRij({ vbo, na }: {
         </span>
       </TableCell>
       <TableCell className="font-mono text-xs">{vbo.identificatie}</TableCell>
-      <TableCell>{vbo.oppervlakte != null ? `${vbo.oppervlakte}` : '—'}</TableCell>
+      <TableCell>{vbo.oppervlakte != null ? `${vbo.oppervlakte} m²` : '—'}</TableCell>
       <TableCell>{na?.straatnaam ?? '—'}</TableCell>
       <TableCell>{na?.huisnummer ?? '—'}</TableCell>
       <TableCell>{na?.huisletter ?? '—'}</TableCell>

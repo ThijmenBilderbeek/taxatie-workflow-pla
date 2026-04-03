@@ -5,6 +5,15 @@
 
 const BAG_API_URL = 'https://api.pdok.nl/bzk/bag/ogc/v1/collections'
 
+/** Maximaal aantal BAG objecten per query (API limiet) */
+const MAX_BAG_OBJECTS_PER_QUERY = 50
+
+/**
+ * Kleine buffer in graden om objecten net aan de perceelrand mee te nemen.
+ * 0.000005° ≈ 0.5m in WGS84-coördinaten (op Nederlandse breedte).
+ */
+const BBOX_BUFFER_DEGREES = 0.000005
+
 export interface BagPand {
   identificatie: string
   gebruiksdoel?: string
@@ -109,13 +118,11 @@ export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJso
   const bbox = berekenBbox(perceelGeometry)
 
   // Voeg kleine buffer toe zodat we objecten net aan de rand ook meenemen
-  const bufferLng = 0.000005
-  const bufferLat = 0.000005
-  const bboxStr = `${bbox.minLng - bufferLng},${bbox.minLat - bufferLat},${bbox.maxLng + bufferLng},${bbox.maxLat + bufferLat}`
+  const bboxStr = `${bbox.minLng - BBOX_BUFFER_DEGREES},${bbox.minLat - BBOX_BUFFER_DEGREES},${bbox.maxLng + BBOX_BUFFER_DEGREES},${bbox.maxLat + BBOX_BUFFER_DEGREES}`
 
   async function fetchCollection(collection: string): Promise<GeoJSON.Feature[]> {
     try {
-      const params = new URLSearchParams({ bbox: bboxStr, limit: '50', f: 'json' })
+      const params = new URLSearchParams({ bbox: bboxStr, limit: String(MAX_BAG_OBJECTS_PER_QUERY), f: 'json' })
       const resp = await fetch(`${BAG_API_URL}/${collection}/items?${params.toString()}`)
       if (!resp.ok) return []
       const json = await resp.json()

@@ -44,34 +44,88 @@ interface PerceelPreview extends PerceelClickResult {
   geometry: GeoJSON.GeoJsonObject | null
 }
 
+/**
+ * Simple point-in-polygon check using ray casting algorithm.
+ * Works for GeoJSON Polygon and MultiPolygon geometries.
+ */
+function pointInGeoJsonGeometry(lng: number, lat: number, geometry: GeoJSON.GeoJsonObject): boolean {
+  if (!geometry) return false
+  if ((geometry as GeoJSON.Polygon).type === 'Polygon') {
+    return pointInPolygonRings(lng, lat, (geometry as GeoJSON.Polygon).coordinates)
+  }
+  if ((geometry as GeoJSON.MultiPolygon).type === 'MultiPolygon') {
+    return (geometry as GeoJSON.MultiPolygon).coordinates.some((polygon) => pointInPolygonRings(lng, lat, polygon))
+  }
+  return false
+}
+
+function pointInPolygonRings(lng: number, lat: number, rings: number[][][]): boolean {
+  if (!rings || rings.length === 0) return false
+  if (!pointInRing(lng, lat, rings[0])) return false
+  for (let i = 1; i < rings.length; i++) {
+    if (pointInRing(lng, lat, rings[i])) return false
+  }
+  return true
+}
+
+function pointInRing(lng: number, lat: number, ring: number[][]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1]
+    const xj = ring[j][0], yj = ring[j][1]
+    const intersect = ((yi > lat) !== (yj > lat)) &&
+      (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+function perceelFromFeatures(features: GeoJSON.Feature[], latlng: L.LatLng): PerceelPreview | null {
+  if (!features || features.length === 0) return null
+  const bestFeature =
+    features.find((f) => f.geometry && pointInGeoJsonGeometry(latlng.lng, latlng.lat, f.geometry)) ?? features[0]
+  const props = bestFeature.properties
+  const gemeente: string = props?.akr_kadastrale_gemeente_code_waarde ?? ''
+  const sectie: string = props?.sectie ?? ''
+  const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
+  if (!gemeente || !sectie || !perceelnummer) return null
+  return {
+    gemeente,
+    sectie,
+    perceelnummer,
+    volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
+    geometry: bestFeature.geometry ?? null,
+  }
+}
+
 async function haalPerceelViaBboxOgcApi(latlng: L.LatLng): Promise<PerceelPreview | null> {
-  // ~50m buffer in degrees (lat ≈ 55m, lng ≈ 50m at NL latitudes ~52°N where cos(52°)≈0.616)
-  const bufferLat = 0.0005
-  const bufferLng = 0.0007
+  // Very small buffer (~2m) so bbox is almost a point query
+  const bufferLat = 0.00002
+  const bufferLng = 0.00003
   const bbox = `${latlng.lng - bufferLng},${latlng.lat - bufferLat},${latlng.lng + bufferLng},${latlng.lat + bufferLat}`
   try {
     const params = new URLSearchParams({
       bbox,
-      limit: '1',
+      limit: '10',
       f: 'json',
     })
     const resp = await fetch(`${OGC_API_URL}?${params.toString()}`)
     if (!resp.ok) return null
     const json = await resp.json()
-    const feature = json?.features?.[0]
-    if (!feature) return null
-    const props = feature.properties
-    const gemeente: string = props?.akr_kadastrale_gemeente_code_waarde ?? ''
-    const sectie: string = props?.sectie ?? ''
-    const perceelnummer: string = props?.perceelnummer != null ? String(props.perceelnummer) : ''
-    if (!gemeente || !sectie || !perceelnummer) return null
-    return {
-      gemeente,
-      sectie,
-      perceelnummer,
-      volledigeAanduiding: `${gemeente}-${sectie}-${perceelnummer}`,
-      geometry: feature.geometry ?? null,
+    let features: GeoJSON.Feature[] = json?.features
+    if (!features || features.length === 0) {
+      // Retry with larger buffer (~20m) as fallback
+      const largerBufferLat = 0.0002
+      const largerBufferLng = 0.0003
+      const largerBbox = `${latlng.lng - largerBufferLng},${latlng.lat - largerBufferLat},${latlng.lng + largerBufferLng},${latlng.lat + largerBufferLat}`
+      const retryParams = new URLSearchParams({ bbox: largerBbox, limit: '10', f: 'json' })
+      const retryResp = await fetch(`${OGC_API_URL}?${retryParams.toString()}`)
+      if (!retryResp.ok) return null
+      const retryJson = await retryResp.json()
+      features = retryJson?.features
+      if (!features || features.length === 0) return null
     }
+    return perceelFromFeatures(features, latlng)
   } catch (err) {
     console.warn('OGC API BBOX call failed:', err)
   }

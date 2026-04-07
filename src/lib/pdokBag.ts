@@ -169,11 +169,11 @@ export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJso
     fetchCollection('nummeraanduiding'),
   ]);
 
-  const gefilterdesPanden = pandenFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));
+  const gefilterdePanden = pandenFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));
   const gefilterdeVbos = vboFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));
 
   return {
-    panden: gefilterdesPanden.map(mapPand),
+    panden: gefilterdePanden.map(mapPand),
     verblijfsobjecten: gefilterdeVbos.map(mapVerblijfsobject),
     nummeraanduidingen: naFeatures.map(mapNummeraanduiding),
   };

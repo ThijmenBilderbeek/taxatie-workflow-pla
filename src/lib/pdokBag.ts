@@ -128,9 +128,9 @@ export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJso
   }
 
   const [pandenFeatures, vboFeatures, naFeatures] = await Promise.all([
-    fetchCollection('panden'),
-    fetchCollection('verblijfsobjecten'),
-    fetchCollection('nummeraanduidingen'),
+    fetchCollection('pand'),
+    fetchCollection('verblijfsobject'),
+    fetchCollection('nummeraanduiding'),
   ])
 
   return {

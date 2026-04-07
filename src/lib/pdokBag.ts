@@ -77,13 +77,22 @@ function mapPand(feature: GeoJSON.Feature): BagPand {
   };
 }
 
+function extractId(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  if (value.startsWith('http')) {
+    const parts = value.split('/');
+    return parts[parts.length - 1] || '';
+  }
+  return value;
+}
+
 function mapVerblijfsobject(feature: GeoJSON.Feature): BagVerblijfsobject {
   const p = feature.properties ?? {};
-  const pandIds: string[] = Array.isArray(p.maaktDeelUitVan)
+  const pandIds: string[] = (Array.isArray(p.maaktDeelUitVan)
     ? p.maaktDeelUitVan
-    : p.maaktDeelUitVan
-      ? [p.maaktDeelUitVan]
-      : [];
+    : p.maaktDeelUitVan ? [p.maaktDeelUitVan] : [])
+    .map((v: unknown) => extractId(v))
+    .filter(Boolean);
   return {
     identificatie: p.identificatie ?? p.id ?? '',
     gebruiksdoel: Array.isArray(p.gebruiksdoel) ? p.gebruiksdoel[0] : p.gebruiksdoel,
@@ -102,7 +111,7 @@ function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
     postcode: p.postcode,
     woonplaats: p.woonplaatsnaam ?? p.woonplaats,
     straatnaam: p.openbareRuimtenaam ?? p.straatnaam,
-    verblijfsobjectIdentificatie: p.adresseertVerblijfsobject ?? p.verblijfsobjectIdentificatie,
+    verblijfsobjectIdentificatie: extractId(p.adresseertVerblijfsobject) || extractId(p.verblijfsobjectIdentificatie),
   };
 }
 

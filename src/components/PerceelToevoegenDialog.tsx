@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CaretRight, CaretDown, Buildings, House, MapPin } from '@phosphor-icons/react'
+import { CaretRight, CaretDown, Buildings, House } from '@phosphor-icons/react'
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import { haalBagObjectenVoorPerceel, type BagPerceelData, type BagPand, type BagVerblijfsobject, type BagNummeraanduiding } from '@/lib/pdokBag'
 
 interface PerceelToevoegenDialogProps {
@@ -24,43 +25,6 @@ function formatGebruiksdoel(g?: string): string {
   return g.charAt(0).toUpperCase() + g.slice(1).replace(/_/g, ' ')
 }
 
-function VerblijfsobjectKaart({ vbo, na }: {
-  vbo: BagVerblijfsobject
-  na: BagNummeraanduiding | undefined
-}) {
-  const adresRegels = na
-    ? [
-        [na.straatnaam, na.huisnummer, na.huisletter, na.huisnummertoevoeging].filter(Boolean).join(' '),
-        [na.postcode, na.woonplaats].filter(Boolean).join(' '),
-      ].filter(Boolean)
-    : []
-
-  return (
-    <div className="rounded border bg-background p-2 text-xs min-w-[140px]">
-      <div className="flex items-center gap-1 font-medium mb-1">
-        <House className="h-3 w-3 text-slate-400 shrink-0" />
-        <span className="font-mono break-all">{vbo.identificatie}</span>
-      </div>
-      <div className="text-muted-foreground space-y-0.5">
-        {vbo.oppervlakte != null && <div>{vbo.oppervlakte} m²</div>}
-        {adresRegels.map((regel, i) => (
-          <div key={i} className={i > 0 ? 'pl-3.5' : 'flex items-start gap-0.5'}>
-            {i === 0 && <MapPin className="h-3 w-3 shrink-0 mt-0.5" />}
-            {regel}
-          </div>
-        ))}
-        {na && (
-          <div className="font-mono text-[10px] text-muted-foreground/70 flex items-center gap-0.5">
-            <MapPin className="h-2.5 w-2.5 shrink-0" />
-            {na.identificatie}
-          </div>
-        )}
-        {vbo.gebruiksdoel && <div>{formatGebruiksdoel(vbo.gebruiksdoel)}</div>}
-      </div>
-    </div>
-  )
-}
-
 function PandRij({ pand, verblijfsobjecten, nummeraanduidingen }: {
   pand: BagPand
   verblijfsobjecten: BagVerblijfsobject[]
@@ -70,11 +34,6 @@ function PandRij({ pand, verblijfsobjecten, nummeraanduidingen }: {
   const vbosVoorPand = verblijfsobjecten.filter(
     (v) => v.pandIdentificaties?.includes(pand.identificatie)
   )
-
-  const samenvatting = [
-    formatGebruiksdoel(pand.gebruiksdoel),
-    pand.bouwjaar ? `bouwjaar ${pand.bouwjaar}` : null,
-  ].filter(Boolean).join(' · ')
 
   return (
     <>
@@ -91,55 +50,50 @@ function PandRij({ pand, verblijfsobjecten, nummeraanduidingen }: {
             <span>Pand</span>
           </button>
         </TableCell>
-        <TableCell className="font-mono text-xs">{pand.identificatie}</TableCell>
+        <TableCell className="font-mono text-xs whitespace-nowrap">{pand.identificatie}</TableCell>
         <TableCell>{pand.oppervlakte != null ? `${pand.oppervlakte} m²` : '—'}</TableCell>
-        <TableCell className="text-muted-foreground text-xs whitespace-normal">
-          {samenvatting}
-        </TableCell>
+        <TableCell>—</TableCell>
+        <TableCell>—</TableCell>
+        <TableCell>—</TableCell>
+        <TableCell>—</TableCell>
+        <TableCell>—</TableCell>
+        <TableCell>—</TableCell>
+        <TableCell>{pand.bouwjaar ?? '—'}</TableCell>
+        <TableCell>{pand.gebruiksdoel ? formatGebruiksdoel(pand.gebruiksdoel) : '—'}</TableCell>
       </TableRow>
-      {open && vbosVoorPand.length > 0 && (
-        <TableRow>
-          <TableCell colSpan={4} className="py-2 pl-8 pr-3">
-            <div className="flex flex-wrap gap-2">
-              {vbosVoorPand.map((vbo) => {
-                const na = nummeraanduidingen.find(
-                  (n) => n.verblijfsobjectIdentificatie === vbo.identificatie
-                )
-                return <VerblijfsobjectKaart key={vbo.identificatie} vbo={vbo} na={na} />
-              })}
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
+      {open && vbosVoorPand.map((vbo) => {
+        const na = nummeraanduidingen.find(
+          (n) => n.verblijfsobjectIdentificatie === vbo.identificatie
+        )
+        return <VerblijfsobjectRij key={vbo.identificatie} vbo={vbo} na={na} isNested />
+      })}
     </>
   )
 }
 
-function VerblijfsobjectRij({ vbo, na }: {
+function VerblijfsobjectRij({ vbo, na, isNested }: {
   vbo: BagVerblijfsobject
   na: BagNummeraanduiding | undefined
+  isNested?: boolean
 }) {
-  const adres = na
-    ? [na.straatnaam, na.huisnummer, na.huisletter, na.huisnummertoevoeging].filter(Boolean).join(' ')
-    : null
-  const postcodeWoonplaats = na
-    ? [na.postcode, na.woonplaats].filter(Boolean).join(' ')
-    : null
-  const details = [adres, postcodeWoonplaats, na ? `NA: ${na.identificatie}` : null]
-    .filter(Boolean)
-    .join(' · ')
-
   return (
     <TableRow>
       <TableCell>
-        <span className="ml-5 flex items-center gap-1">
+        <span className={cn('flex items-center gap-1', isNested && 'ml-5')}>
           <House className="h-4 w-4 text-slate-400" />
           <span>Verblijfsobject</span>
         </span>
       </TableCell>
-      <TableCell className="font-mono text-xs">{vbo.identificatie}</TableCell>
+      <TableCell className="font-mono text-xs whitespace-nowrap">{vbo.identificatie}</TableCell>
       <TableCell>{vbo.oppervlakte != null ? `${vbo.oppervlakte} m²` : '—'}</TableCell>
-      <TableCell className="text-xs text-muted-foreground whitespace-normal">{details || '—'}</TableCell>
+      <TableCell>{na?.straatnaam ?? '—'}</TableCell>
+      <TableCell>{na?.huisnummer ?? '—'}</TableCell>
+      <TableCell>{na?.huisletter ?? '—'}</TableCell>
+      <TableCell>{na?.huisnummertoevoeging ?? '—'}</TableCell>
+      <TableCell>{na?.postcode ?? '—'}</TableCell>
+      <TableCell>{na?.woonplaats ?? '—'}</TableCell>
+      <TableCell>—</TableCell>
+      <TableCell>{vbo.gebruiksdoel ? formatGebruiksdoel(vbo.gebruiksdoel) : '—'}</TableCell>
     </TableRow>
   )
 }
@@ -174,14 +128,14 @@ export function PerceelToevoegenDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onAnnuleren() }}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-[95vw]">
         <DialogHeader>
           <DialogTitle>
             Perceel toevoegen — <span className="font-mono">{volledigeAanduiding}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[60vh] overflow-y-auto overflow-x-auto">
           {isLaden ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
               BAG objecten worden opgehaald…
@@ -193,7 +147,14 @@ export function PerceelToevoegenDialog({
                   <TableHead>Type</TableHead>
                   <TableHead>BAG Object ID</TableHead>
                   <TableHead>GBO m²</TableHead>
-                  <TableHead>Details</TableHead>
+                  <TableHead>Straat</TableHead>
+                  <TableHead>Huisnummer</TableHead>
+                  <TableHead>Huisletter</TableHead>
+                  <TableHead>Huisnummer toevoeging</TableHead>
+                  <TableHead>Postcode</TableHead>
+                  <TableHead>Plaats</TableHead>
+                  <TableHead>Bouwjaar</TableHead>
+                  <TableHead>Gebruiksdoel</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

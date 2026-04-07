@@ -110,7 +110,7 @@ function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
     huisnummertoevoeging: p.huisnummertoevoeging,
     postcode: p.postcode,
     woonplaats: p.woonplaatsnaam ?? p.woonplaats,
-    straatnaam: p.openbareRuimtenaam ?? p.straatnaam,
+    straatnaam: p.openbareruimtenaam ?? p.openbareRuimtenaam ?? p.straatnaam,
     verblijfsobjectIdentificatie: extractId(p.adresseertVerblijfsobject) || extractId(p.verblijfsobjectIdentificatie),
   };
 }
@@ -176,7 +176,7 @@ export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJso
   const [pandenFeatures, vboFeatures, naFeatures] = await Promise.all([
     fetchCollection('pand'),
     fetchCollection('verblijfsobject'),
-    fetchCollection('nummeraanduiding'),
+    fetchCollection('adres'),
   ]);
 
   const gefilterdePanden = pandenFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));

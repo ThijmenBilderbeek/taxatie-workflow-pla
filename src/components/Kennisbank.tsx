@@ -1238,7 +1238,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       </Dialog>
 
       <Dialog open={showVerwijderDialog} onOpenChange={(open) => !open && setShowVerwijderDialog(false)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Rapporten verwijderen?</DialogTitle>
             <DialogDescription>

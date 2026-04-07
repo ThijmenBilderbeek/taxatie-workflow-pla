@@ -348,7 +348,7 @@ function AppContent() {
       </main>
 
       <Dialog open={showNieuwDossierDialog} onOpenChange={setShowNieuwDossierDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Nieuw dossier aanmaken</DialogTitle>
           </DialogHeader>

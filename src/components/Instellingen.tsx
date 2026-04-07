@@ -360,7 +360,7 @@ export function Instellingen({
       </Card>
 
       <Dialog open={showSeedConfirm} onOpenChange={setShowSeedConfirm}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Testdata toevoegen</DialogTitle>
           </DialogHeader>

@@ -80,7 +80,7 @@ function mapPand(feature: GeoJSON.Feature): BagPand {
 function extractId(value: unknown): string {
   if (typeof value !== 'string') return '';
   if (value.startsWith('http')) {
-    const parts = value.split('/');
+    const parts = value.split('/').filter(Boolean);
     return parts[parts.length - 1] || '';
   }
   return value;

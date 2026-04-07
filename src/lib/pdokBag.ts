@@ -117,8 +117,8 @@ export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJso
 
   async function fetchCollection(collection: string): Promise<GeoJSON.Feature[]> {
     try {
-      const params = new URLSearchParams({ bbox: bboxStr, limit: String(MAX_BAG_OBJECTS_PER_QUERY), f: 'json' })
-      const resp = await fetch(`${BAG_API_URL}/${collection}/items?${params.toString()}`)
+      const url = `${BAG_API_URL}/${encodeURIComponent(collection)}/items?bbox=${bboxStr}&bbox-crs=${encodeURIComponent('http://www.opengis.net/def/crs/OGC/1.3/CRS84')}&limit=${MAX_BAG_OBJECTS_PER_QUERY}&f=json`
+      const resp = await fetch(url)
       if (!resp.ok) return []
       const json = await resp.json()
       return json?.features ?? []

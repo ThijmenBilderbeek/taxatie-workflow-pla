@@ -8,36 +8,6 @@ const BAG_API_URL = 'https://api.pdok.nl/bzk/bag/ogc/v1/collections'
 /** Maximaal aantal BAG objecten per query (API limiet) */
 const MAX_BAG_OBJECTS_PER_QUERY = 50
 
-/**
- * Converteert WGS84 (lat/lng) naar RD New (EPSG:28992) coördinaten.
- * Gebaseerd op de officiële benaderingsformules (RDNAPTRANS2018).
- */
-function wgs84ToRd(lat: number, lng: number): { x: number; y: number } {
-  const dLat = 0.36 * (lat - 52.15517440)
-  const dLng = 0.36 * (lng - 5.38720621)
-
-  const x = 155000
-    + 190094.945 * dLng
-    - 11832.228 * dLat * dLng
-    - 114.221 * dLat * dLat * dLng
-    + 0.3 * dLng * dLng * dLng
-    - 32.162 * dLat * dLng * dLng * dLng
-    - 0.608 * dLat * dLat * dLat * dLng
-
-  const y = 463000
-    + 309056.544 * dLat
-    - 3638.893 * dLng * dLng
-    + 73.077 * dLat * dLat
-    - 157.984 * dLat * dLng * dLng
-    + 59.788 * dLat * dLat * dLat
-    + 0.433 * dLng * dLng * dLng * dLng
-    - 6.439 * dLat * dLat * dLng * dLng
-    + 0.092 * dLng * dLng * dLng * dLng * dLng
-    - 0.054 * dLat * dLat * dLat * dLng * dLng
-
-  return { x, y }
-}
-
 export interface BagPand {
   identificatie: string
   gebruiksdoel?: string
@@ -139,31 +109,20 @@ function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
  * Gebruikt de perceelgeometrie om de bounding box te berekenen.
  */
 export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJsonObject): Promise<BagPerceelData> {
-  const wgs84Bbox = berekenBbox(perceelGeometry)
+  const bbox = berekenBbox(perceelGeometry)
 
-  // Converteer WGS84 naar RD coördinaten
-  const rdMin = wgs84ToRd(wgs84Bbox.minLat, wgs84Bbox.minLng)
-  const rdMax = wgs84ToRd(wgs84Bbox.maxLat, wgs84Bbox.maxLng)
-
-  // Buffer van 5 meter in RD coördinaten
-  const BUFFER_M = 5
-  const bboxStr = `${rdMin.x - BUFFER_M},${rdMin.y - BUFFER_M},${rdMax.x + BUFFER_M},${rdMax.y + BUFFER_M}`
+  // Buffer van ~5m in WGS84 graden (op Nederlandse breedte)
+  const BUFFER = 0.00005
+  const bboxStr = `${bbox.minLng - BUFFER},${bbox.minLat - BUFFER},${bbox.maxLng + BUFFER},${bbox.maxLat + BUFFER}`
 
   async function fetchCollection(collection: string): Promise<GeoJSON.Feature[]> {
     try {
       const params = new URLSearchParams({ bbox: bboxStr, limit: String(MAX_BAG_OBJECTS_PER_QUERY), f: 'json' })
-      const url = `${BAG_API_URL}/${collection}/items?${params.toString()}`
-      console.log(`[BAG] Fetching ${collection}:`, url)
-      const resp = await fetch(url)
-      if (!resp.ok) {
-        console.warn(`[BAG] ${collection}: HTTP ${resp.status}`)
-        return []
-      }
+      const resp = await fetch(`${BAG_API_URL}/${collection}/items?${params.toString()}`)
+      if (!resp.ok) return []
       const json = await resp.json()
-      console.log(`[BAG] ${collection} features:`, json?.features?.length ?? 0)
       return json?.features ?? []
-    } catch (err) {
-      console.warn(`[BAG] ${collection} failed:`, err)
+    } catch {
       return []
     }
   }

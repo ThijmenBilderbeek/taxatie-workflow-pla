@@ -105,7 +105,7 @@ function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
   const p = feature.properties ?? {};
   return {
     identificatie: p.identificatie ?? p.id ?? '',
-    huisnummer: p.huisnummer != null ? Number(p.huisnummer) : undefined,
+    huisnummer: p.huisnummer != null ? parseInt(String(p.huisnummer), 10) || undefined : undefined,
     huisletter: p.huisletter,
     huisnummertoevoeging: p.toevoeging ?? p.huisnummertoevoeging,
     postcode: p.postcode,

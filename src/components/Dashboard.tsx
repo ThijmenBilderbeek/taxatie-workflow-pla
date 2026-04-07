@@ -266,7 +266,7 @@ export function Dashboard({
         open={toonBevestigDialog}
         onOpenChange={(open) => !open && setToonBevestigDialog(false)}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Dossier(s) verwijderen?</DialogTitle>
             <DialogDescription>

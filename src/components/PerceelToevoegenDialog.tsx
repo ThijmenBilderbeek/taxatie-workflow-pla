@@ -29,7 +29,7 @@ function PandRij({ pand, verblijfsobjecten, nummeraanduidingen }: {
   verblijfsobjecten: BagVerblijfsobject[]
   nummeraanduidingen: BagNummeraanduiding[]
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const vbosVoorPand = verblijfsobjecten.filter(
     (v) => v.pandIdentificaties?.includes(pand.identificatie)
   )

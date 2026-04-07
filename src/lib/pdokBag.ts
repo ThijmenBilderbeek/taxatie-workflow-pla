@@ -104,14 +104,17 @@ function mapVerblijfsobject(feature: GeoJSON.Feature): BagVerblijfsobject {
 function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
   const p = feature.properties ?? {};
   return {
-    identificatie: p.identificatie ?? p.id ?? '',
+    identificatie: p.nummeraanduidingIdentificatie ?? p.identificatie ?? p.id ?? '',
     huisnummer: p.huisnummer,
     huisletter: p.huisletter,
     huisnummertoevoeging: p.huisnummertoevoeging,
     postcode: p.postcode,
-    woonplaats: p.woonplaatsnaam ?? p.woonplaats,
-    straatnaam: p.openbareruimtenaam ?? p.openbareRuimtenaam ?? p.straatnaam,
-    verblijfsobjectIdentificatie: extractId(p.adresseertVerblijfsobject) || extractId(p.verblijfsobjectIdentificatie),
+    woonplaats: p.woonplaatsNaam ?? p.woonplaatsnaam ?? p.woonplaats,
+    straatnaam: p.openbareRuimteNaam ?? p.openbareruimtenaam ?? p.openbareRuimtenaam ?? p.straatnaam,
+    verblijfsobjectIdentificatie:
+      extractId(p.adresseerbaarObjectIdentificatie) ||
+      extractId(p.adresseertVerblijfsobject) ||
+      extractId(p.verblijfsobjectIdentificatie),
   };
 }
 

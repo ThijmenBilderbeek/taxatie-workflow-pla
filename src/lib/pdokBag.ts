@@ -3,6 +3,8 @@
  * De PDOK BAG OGC API ondersteunt CORS en kan vanuit de browser worden aangeroepen.
  */
 
+import { pointInGeoJsonGeometry } from './geoUtils';
+
 const BAG_API_URL = 'https://api.pdok.nl/kadaster/bag/ogc/v2/collections';
 
 /** Maximaal aantal BAG objecten per query (API limiet) */
@@ -105,6 +107,40 @@ function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
 }
 
 /**
+ * Controleert of een BAG feature geometrisch overlapt met de perceelgeometrie.
+ * - Voor Point: check of het punt binnen het perceel valt.
+ * - Voor Polygon/MultiPolygon: check of minstens één coördinaat van de feature
+ *   binnen het perceel valt, OF minstens één coördinaat van het perceel binnen de feature valt.
+ */
+function featureOverlaptMetPerceel(feature: GeoJSON.Feature, perceelGeometry: GeoJSON.GeoJsonObject): boolean {
+  const geom = feature.geometry;
+  if (!geom) return false;
+
+  if (geom.type === 'Point') {
+    const [lng, lat] = (geom as GeoJSON.Point).coordinates;
+    return pointInGeoJsonGeometry(lng, lat, perceelGeometry);
+  }
+
+  // Verzamel alle coördinaten van de feature
+  function alleCoords(g: GeoJSON.Geometry): number[][] {
+    if (g.type === 'Polygon') return (g as GeoJSON.Polygon).coordinates.flat();
+    if (g.type === 'MultiPolygon') return (g as GeoJSON.MultiPolygon).coordinates.flat(2);
+    return [];
+  }
+
+  // Minstens één punt van de feature valt binnen het perceel
+  const featureCoords = alleCoords(geom as GeoJSON.Geometry);
+  if (featureCoords.some(([lng, lat]) => pointInGeoJsonGeometry(lng, lat, perceelGeometry))) return true;
+
+  // Minstens één punt van het perceel valt binnen de feature
+  const perceelCoords = alleCoords(perceelGeometry as GeoJSON.Geometry);
+  if (perceelCoords.some(([lng, lat]) => pointInGeoJsonGeometry(lng, lat, geom))) return true;
+
+  return false;
+}
+
+
+/**
  * Haalt BAG objecten op voor een perceel via de PDOK BAG OGC API.
  * Gebruikt de perceelgeometrie om de bounding box te berekenen.
  */
@@ -133,9 +169,12 @@ export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJso
     fetchCollection('nummeraanduiding'),
   ]);
 
+  const gefilterdesPanden = pandenFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));
+  const gefilterdeVbos = vboFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));
+
   return {
-    panden: pandenFeatures.map(mapPand),
-    verblijfsobjecten: vboFeatures.map(mapVerblijfsobject),
+    panden: gefilterdesPanden.map(mapPand),
+    verblijfsobjecten: gefilterdeVbos.map(mapVerblijfsobject),
     nummeraanduidingen: naFeatures.map(mapNummeraanduiding),
   };
 }

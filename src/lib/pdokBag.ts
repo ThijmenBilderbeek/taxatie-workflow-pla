@@ -3,7 +3,7 @@
  * De PDOK BAG OGC API ondersteunt CORS en kan vanuit de browser worden aangeroepen.
  */
 
-const BAG_API_URL = 'https://api.pdok.nl/kadaster/bag/ogc/v2/collections'
+const BAG_API_URL = 'https://api.pdok.nl/bzk/bag/ogc/v2/collections'
 
 /** Maximaal aantal BAG objecten per query (API limiet) */
 const MAX_BAG_OBJECTS_PER_QUERY = 50

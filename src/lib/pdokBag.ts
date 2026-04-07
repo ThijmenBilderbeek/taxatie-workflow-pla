@@ -109,8 +109,10 @@ function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
 /**
  * Controleert of een BAG feature geometrisch overlapt met de perceelgeometrie.
  * - Voor Point: check of het punt binnen het perceel valt.
- * - Voor Polygon/MultiPolygon: check of minstens één coördinaat van de feature
- *   binnen het perceel valt, OF minstens één coördinaat van het perceel binnen de feature valt.
+ * - Voor Polygon/MultiPolygon: vereist dat >50% van de coördinaten van de feature
+ *   binnen het perceel vallen. Dit voorkomt dat gebouwen die slechts met een
+ *   klein hoekje over de perceelgrens steken (zoals de garage van een buurperceel)
+ *   worden meegenomen.
  */
 function featureOverlaptMetPerceel(feature: GeoJSON.Feature, perceelGeometry: GeoJSON.GeoJsonObject): boolean {
   const geom = feature.geometry;
@@ -128,15 +130,14 @@ function featureOverlaptMetPerceel(feature: GeoJSON.Feature, perceelGeometry: Ge
     return [];
   }
 
-  // Minstens één punt van de feature valt binnen het perceel
+  // Meer dan 50% van de coördinaten van de feature moet binnen het perceel vallen
   const featureCoords = alleCoords(geom as GeoJSON.Geometry);
-  if (featureCoords.some(([lng, lat]) => pointInGeoJsonGeometry(lng, lat, perceelGeometry))) return true;
-
-  // Minstens één punt van het perceel valt binnen de feature
-  const perceelCoords = alleCoords(perceelGeometry as GeoJSON.Geometry);
-  if (perceelCoords.some(([lng, lat]) => pointInGeoJsonGeometry(lng, lat, geom))) return true;
-
-  return false;
+  if (featureCoords.length === 0) return false;
+  let aantalBinnen = 0;
+  for (const [lng, lat] of featureCoords) {
+    if (pointInGeoJsonGeometry(lng, lat, perceelGeometry)) aantalBinnen++;
+  }
+  return aantalBinnen / featureCoords.length > 0.5;
 }
 
 

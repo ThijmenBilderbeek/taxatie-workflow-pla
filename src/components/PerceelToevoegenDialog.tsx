@@ -128,7 +128,7 @@ export function PerceelToevoegenDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onAnnuleren() }}>
-      <DialogContent className="max-w-[95vw]">
+      <DialogContent className="sm:max-w-[95vw]">
         <DialogHeader>
           <DialogTitle>
             Perceel toevoegen — <span className="font-mono">{volledigeAanduiding}</span>

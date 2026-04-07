@@ -103,19 +103,27 @@ function mapVerblijfsobject(feature: GeoJSON.Feature): BagVerblijfsobject {
 
 function mapNummeraanduiding(feature: GeoJSON.Feature): BagNummeraanduiding {
   const p = feature.properties ?? {};
+
+  // De adres collectie kan een geneste 'nummeraanduiding' sub-object bevatten
+  const na = p.nummeraanduiding ?? {};
+
   return {
-    identificatie: p.nummeraanduiding_id ?? p.nummeraanduidingIdentificatie ?? p.identificatie ?? p.id ?? '',
-    huisnummer: p.huisnummer,
-    huisletter: p.huisletter,
-    huisnummertoevoeging: p.huisnummertoevoeging,
-    postcode: p.postcode,
-    woonplaats: p.woonplaatsnaam ?? p.woonplaatsNaam ?? p.woonplaats,
-    straatnaam: p.openbareruimtenaam ?? p.openbareRuimteNaam ?? p.openbareRuimtenaam ?? p.straatnaam,
+    identificatie: p.nummeraanduiding_id ?? p.nummeraanduidingIdentificatie ?? na.identificatie ?? p.identificatie ?? p.id ?? '',
+    huisnummer: p.huisnummer ?? na.huisnummer,
+    huisletter: p.huisletter ?? na.huisletter,
+    huisnummertoevoeging: p.huisnummertoevoeging ?? na.huisnummertoevoeging,
+    postcode: p.postcode ?? na.postcode,
+    woonplaats: p.woonplaatsnaam ?? p.woonplaatsNaam ?? p.woonplaats ?? na.woonplaatsnaam ?? na.woonplaats,
+    straatnaam: p.openbareruimtenaam ?? p.openbareRuimteNaam ?? p.openbareRuimtenaam ?? p.straatnaam ?? na.openbareruimte ?? na.openbareruimtenaam ?? na.straatnaam,
     verblijfsobjectIdentificatie:
       extractId(p.adresseerbaar_object_id) ||
       extractId(p.adresseerbaarObjectIdentificatie) ||
       extractId(p.adresseertVerblijfsobject) ||
-      extractId(p.verblijfsobjectIdentificatie),
+      extractId(p.verblijfsobjectIdentificatie) ||
+      // Probeer ook het feature id — sommige PDOK responses gebruiken het adresseerbaar object als feature id
+      (p.adresseerbaarObjectType === 'verblijfsobject' || p.type_adresseerbaar_object === 'verblijfsobject'
+        ? extractId(p.adresseerbaar_object_id ?? p.identificatie ?? feature.id?.toString() ?? '')
+        : ''),
   };
 }
 
@@ -182,6 +190,14 @@ export async function haalBagObjectenVoorPerceel(perceelGeometry: GeoJSON.GeoJso
     fetchCollection('verblijfsobject'),
     fetchCollection('adres'),
   ]);
+
+  // DEBUG: Log raw adres features om de exacte property-namen te zien
+  if (naFeatures.length > 0) {
+    console.log('[BAG Debug] Eerste adres feature properties:', JSON.stringify(naFeatures[0].properties, null, 2));
+    console.log('[BAG Debug] Alle adres feature property keys:', Object.keys(naFeatures[0].properties ?? {}));
+  } else {
+    console.log('[BAG Debug] Geen adres features gevonden in bbox');
+  }
 
   const gefilterdePanden = pandenFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));
   const gefilterdeVbos = vboFeatures.filter((f) => featureOverlaptMetPerceel(f, perceelGeometry));

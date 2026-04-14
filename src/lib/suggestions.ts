@@ -101,6 +101,26 @@ const VELD_CONFIGS: Record<number, VeldConfig[]> = {
       getUitHistorisch: (r) => r.wizardData?.stap9?.bijzondereOmstandigheden,
       getHuidigeWaarde: (d) => d.stap9?.bijzondereOmstandigheden,
     },
+    {
+      veldNaam: 'swotSterktes',
+      getUitHistorisch: (r) => r.wizardData?.stap9?.swotSterktes,
+      getHuidigeWaarde: (d) => d.stap9?.swotSterktes,
+    },
+    {
+      veldNaam: 'swotZwaktes',
+      getUitHistorisch: (r) => r.wizardData?.stap9?.swotZwaktes,
+      getHuidigeWaarde: (d) => d.stap9?.swotZwaktes,
+    },
+    {
+      veldNaam: 'swotKansen',
+      getUitHistorisch: (r) => r.wizardData?.stap9?.swotKansen,
+      getHuidigeWaarde: (d) => d.stap9?.swotKansen,
+    },
+    {
+      veldNaam: 'swotBedreigingen',
+      getUitHistorisch: (r) => r.wizardData?.stap9?.swotBedreigingen,
+      getHuidigeWaarde: (d) => d.stap9?.swotBedreigingen,
+    },
   ],
 }
 

@@ -349,8 +349,28 @@ De marktwaarde van {{marktwaarde}} per waardepeildatum {{waardepeildatum}} wordt
   return replacePlaceholders(template, dossier)
 }
 
+/** Converteert een multiline string naar bulletpunten voor Flux plain text output */
+function toBulletList(text: string | undefined): string[] {
+  if (!text || text.trim() === '') return []
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => (line.startsWith('-') ? line : `- ${line}`))
+}
+
 export function generateC1_SWOT(dossier: Dossier): string {
-  return `C.1 SWOT-ANALYSE
+  const sterktes = toBulletList(dossier.stap9?.swotSterktes)
+  const zwaktes = toBulletList(dossier.stap9?.swotZwaktes)
+  const kansen = toBulletList(dossier.stap9?.swotKansen)
+  const bedreigingen = toBulletList(dossier.stap9?.swotBedreigingen)
+
+  const heeftSWOTData =
+    sterktes.length > 0 || zwaktes.length > 0 || kansen.length > 0 || bedreigingen.length > 0
+
+  if (!heeftSWOTData) {
+    // Fallback naar generieke tekst als SWOT nog niet ingevuld is
+    return `C.1 SWOT-ANALYSE
 
 STERKTES
 - Goede locatie met voldoende bereikbaarheid
@@ -369,26 +389,150 @@ KANSEN
 BEDREIGINGEN
 - Economische neergang kan vraag verminderen
 - Wijzigingen in wet- en regelgeving`
+  }
+
+  let output = `C.1 SWOT-ANALYSE\n\n`
+
+  output += `STERKTES\n`
+  output += sterktes.length > 0 ? sterktes.join('\n') : '- Niet ingevuld'
+
+  output += `\n\nZWAKTES\n`
+  output += zwaktes.length > 0 ? zwaktes.join('\n') : '- Niet ingevuld'
+
+  output += `\n\nKANSEN\n`
+  output += kansen.length > 0 ? kansen.join('\n') : '- Niet ingevuld'
+
+  output += `\n\nBEDREIGINGEN\n`
+  output += bedreigingen.length > 0 ? bedreigingen.join('\n') : '- Niet ingevuld'
+
+  return output
 }
 
 export function generateC2_Beoordeling(dossier: Dossier): string {
-  return `C.2 BEOORDELING COURANTHEID
+  const stap1 = dossier.stap1
+  const stap2 = dossier.stap2
+  const stap3 = dossier.stap3
+  const stap4 = dossier.stap4
+  const stap6 = dossier.stap6
+  const stap7 = dossier.stap7
+  const swot = dossier.stap9
 
-COURANTHEID VERHUUR
+  const typeObject = stap1?.typeObject || 'kantoor'
+  const objectLabel = typeObject === 'woning' || typeObject === 'appartement' ? 'de woning' : 'het object'
+  const ligging = stap2?.ligging || ''
+  const locatiescore = stap2?.locatiescore || ''
+  const bereikbaarheid = stap2?.bereikbaarheid || ''
+  const bvo = stap3?.bvo
+  const bouwjaar = stap3?.bouwjaar
+  const exterieurStaat = stap6?.exterieurStaat || ''
+  const interieurStaat = stap6?.interieurStaat || ''
+  const achterstalligOnderhoud = stap6?.achterstalligOnderhoud ?? false
+  const energielabel = stap7?.energielabel || ''
+  const verhuurd = stap4?.verhuurd ?? false
+  const huurprijsPerJaar = stap4?.huurprijsPerJaar
+  const leegstandsrisico = stap4?.leegstandsrisico || ''
 
-Score: [score]
-Verhuurbaarheid: De verhuurbaarheid van het object wordt als redelijk tot goed beoordeeld.
+  // Derive courantheid qualification based on available data
+  let verhuurScore = 'redelijk tot goed'
+  let verhuurPeriode = '6 tot 12 maanden'
+  let verkoopScore = 'redelijk tot goed'
+  let verkoopPeriode = '9 tot 15 maanden'
 
-Verhuurtijd: Bij een verhuurprocedure wordt een verhuurperiode van 6 tot 12 maanden realistisch geacht.
+  if (['binnenstad', 'woonwijk'].includes(ligging)) {
+    verhuurScore = 'goed'
+    verhuurPeriode = '3 tot 9 maanden'
+    verkoopScore = 'goed'
+    verkoopPeriode = '6 tot 12 maanden'
+  } else if (ligging === 'buitengebied') {
+    verhuurScore = 'matig'
+    verhuurPeriode = '9 tot 18 maanden'
+    verkoopScore = 'matig'
+    verkoopPeriode = '12 tot 24 maanden'
+  }
 
-COURANTHEID VERKOOP
+  if (
+    achterstalligOnderhoud ||
+    ['matig', 'slecht'].includes(exterieurStaat) ||
+    ['matig', 'slecht'].includes(interieurStaat)
+  ) {
+    verhuurScore = verhuurScore === 'goed' ? 'redelijk tot goed' : 'matig'
+    verkoopScore = verkoopScore === 'goed' ? 'redelijk tot goed' : 'matig'
+  }
 
-Score: [score]
-Verkoopbaarheid: De verkoopbaarheid van het object wordt als redelijk tot goed beoordeeld.
+  if (energielabel && ['E', 'F', 'G'].includes(energielabel)) {
+    if (verhuurScore === 'goed') verhuurScore = 'redelijk'
+    if (verkoopScore === 'goed') verkoopScore = 'redelijk'
+  }
 
-Verkooptijd: Bij een verkoopprocedure wordt een verkoopperiode van 9 tot 15 maanden realistisch geacht.
+  if (bvo && bvo > 5000) {
+    verhuurPeriode = '9 tot 15 maanden'
+    verkoopPeriode = '12 tot 18 maanden'
+  }
 
-Alles overwegende is de courantheid als redelijk tot goed aan te duiden.`
+  let output = `C.2 BEOORDELING COURANTHEID\n\n`
+
+  // Beoordelingscontext
+  const contextRegels: string[] = []
+  if (ligging) contextRegels.push(`Ligging: ${ligging.replace(/_/g, ' ')}`)
+  if (bereikbaarheid) contextRegels.push(`Bereikbaarheid: ${bereikbaarheid}`)
+  if (locatiescore) contextRegels.push(`Locatiescore: ${locatiescore}`)
+  if (bvo) contextRegels.push(`BVO: ${formatOppervlakte(bvo)}`)
+  if (bouwjaar) contextRegels.push(`Bouwjaar: ${bouwjaar}`)
+  if (energielabel && energielabel !== 'geen') contextRegels.push(`Energielabel: ${energielabel}`)
+
+  if (contextRegels.length > 0) {
+    output += `BEOORDELINGSCONTEXT\n\n${contextRegels.join('\n')}\n\n`
+  }
+
+  // Verhuur
+  output += `COURANTHEID VERHUUR\n\nScore: ${verhuurScore}\n`
+  output += `Verhuurbaarheid: De verhuurbaarheid van ${objectLabel} wordt als ${verhuurScore} beoordeeld.`
+  if (verhuurd && huurprijsPerJaar) {
+    output += ` Het object is thans verhuurd voor ${formatBedrag(huurprijsPerJaar)} per jaar.`
+  } else if (!verhuurd) {
+    output += ` Het object is thans leegstaand.`
+  }
+  if (leegstandsrisico) {
+    output += ` ${leegstandsrisico}`
+  }
+  output += `\n\nVerhuurtijd: Bij een verhuurprocedure wordt een verhuurperiode van ${verhuurPeriode} realistisch geacht.\n\n`
+
+  // Verkoop
+  output += `COURANTHEID VERKOOP\n\nScore: ${verkoopScore}\n`
+  output += `Verkoopbaarheid: De verkoopbaarheid van ${objectLabel} wordt als ${verkoopScore} beoordeeld.`
+  output += `\n\nVerkooptijd: Bij een verkoopprocedure wordt een verkoopperiode van ${verkoopPeriode} realistisch geacht.\n\n`
+
+  // Bouwkundige staat
+  if (exterieurStaat || interieurStaat) {
+    output += `BOUWKUNDIGE BEOORDELING\n\n`
+    if (exterieurStaat) {
+      output += `De bouwtechnische staat van het exterieur wordt beoordeeld als ${exterieurStaat}.`
+    }
+    if (interieurStaat) {
+      output += ` De bouwtechnische staat van het interieur wordt beoordeeld als ${interieurStaat}.`
+    }
+    if (achterstalligOnderhoud) {
+      output += ` Er is sprake van achterstallig onderhoud.`
+    }
+    output += `\n\n`
+  }
+
+  // Eindconclusie
+  const eindOordeel = verkoopScore
+  output += `Alles overwegende is de courantheid als ${eindOordeel} aan te duiden.`
+
+  // SWOT-context voor aandachtspunten
+  if (swot?.swotZwaktes || swot?.swotBedreigingen) {
+    output += `\n\nBIJZONDERE AANDACHTSPUNTEN`
+    if (swot.swotZwaktes) {
+      output += `\n\nZwaktes:\n${toBulletList(swot.swotZwaktes).join('\n')}`
+    }
+    if (swot.swotBedreigingen) {
+      output += `\n\nBedreigingen:\n${toBulletList(swot.swotBedreigingen).join('\n')}`
+    }
+  }
+
+  return output
 }
 
 export function generateD1_Privaatrechtelijk(dossier: Dossier): string {

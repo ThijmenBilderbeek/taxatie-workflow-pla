@@ -159,6 +159,11 @@ export interface Aannames {
   ontvangenInformatie?: string
   wezenlijkeVeranderingen?: string
   taxatieOnnauwkeurigheid?: string
+  /** SWOT-analyse — opgeslagen als multiline string (één punt per regel) */
+  swotSterktes?: string
+  swotZwaktes?: string
+  swotKansen?: string
+  swotBedreigingen?: string
 }
 
 export interface DuurzaamheidGegevens {

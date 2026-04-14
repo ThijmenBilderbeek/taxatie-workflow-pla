@@ -33,6 +33,11 @@ const VELD_GETTERS_HISTORISCH: Record<string, VeldGetter<HistorischRapport>> = {
   zakelijkeRechten: (r) => r.wizardData?.stap5?.zakelijkeRechten,
   kwalitatieveVerplichtingen: (r) => r.wizardData?.stap5?.kwalitatieveVerplichtingen,
   bestemmingsplan: (r) => r.wizardData?.stap5?.bestemmingsplan,
+  teTaxerenBelang: (r) => r.wizardData?.stap5?.teTaxerenBelang,
+  aantekeningenKadastraalObject: (r) => r.wizardData?.stap5?.aantekeningenKadastraalObject,
+  toelichtingEigendomPerceel: (r) => r.wizardData?.stap5?.toelichtingEigendomPerceel,
+  gebruikConformOmgevingsplan: (r) => r.wizardData?.stap5?.gebruikConformOmgevingsplan,
+  bijzonderePubliekrechtelijkeBepalingen: (r) => r.wizardData?.stap5?.bijzonderePubliekrechtelijkeBepalingen,
   fundering: (r) => r.wizardData?.stap6?.fundering,
   dakbedekking: (r) => r.wizardData?.stap6?.dakbedekking,
   installaties: (r) => r.wizardData?.stap6?.installaties,
@@ -54,6 +59,11 @@ const VELD_GETTERS_HUIDIG: Record<string, VeldGetter<Partial<Dossier>>> = {
   zakelijkeRechten: (d) => d.stap5?.zakelijkeRechten,
   kwalitatieveVerplichtingen: (d) => d.stap5?.kwalitatieveVerplichtingen,
   bestemmingsplan: (d) => d.stap5?.bestemmingsplan,
+  teTaxerenBelang: (d) => d.stap5?.teTaxerenBelang,
+  aantekeningenKadastraalObject: (d) => d.stap5?.aantekeningenKadastraalObject,
+  toelichtingEigendomPerceel: (d) => d.stap5?.toelichtingEigendomPerceel,
+  gebruikConformOmgevingsplan: (d) => d.stap5?.gebruikConformOmgevingsplan,
+  bijzonderePubliekrechtelijkeBepalingen: (d) => d.stap5?.bijzonderePubliekrechtelijkeBepalingen,
   fundering: (d) => d.stap6?.fundering,
   dakbedekking: (d) => d.stap6?.dakbedekking,
   installaties: (d) => d.stap6?.installaties,
@@ -114,7 +124,14 @@ export async function getAISuggestiesVoorStap(
   // Determine which fields to suggest for this step
   const veldNamenPerStap: Record<number, string[]> = {
     2: ['bereikbaarheid'],
-    5: ['eigendomssituatie', 'erfpacht', 'zakelijkeRechten', 'kwalitatieveVerplichtingen', 'bestemmingsplan'],
+    // Only toelichtingEigendomPerceel gets AI assistance for stap5.
+    // The other juridical fields (eigendomssituatie, erfpacht, zakelijkeRechten,
+    // kwalitatieveVerplichtingen, bestemmingsplan, teTaxerenBelang,
+    // aantekeningenKadastraalObject, gebruikConformOmgevingsplan,
+    // bijzonderePubliekrechtelijkeBepalingen) are factual-legal values that must
+    // come from actual documents or knowledge, not AI generation. They receive
+    // historical-report suggestions only (via suggestions.ts).
+    5: ['eigendomssituatie', 'erfpacht', 'zakelijkeRechten', 'kwalitatieveVerplichtingen', 'bestemmingsplan', 'toelichtingEigendomPerceel'],
     6: ['fundering', 'dakbedekking', 'installaties', 'achterstalligOnderhoudBeschrijving'],
     7: ['toelichting'],
     9: ['aannames', 'voorbehouden', 'bijzondereOmstandigheden', 'swotSterktes', 'swotZwaktes', 'swotKansen', 'swotBedreigingen'],
@@ -171,6 +188,7 @@ export async function getAISuggestiesVoorStap(
   const stap2 = huidigeDossier.stap2
   const stap3 = huidigeDossier.stap3
   const stap4 = huidigeDossier.stap4
+  const stap5 = huidigeDossier.stap5
   const stap6 = huidigeDossier.stap6
   const stap7 = huidigeDossier.stap7
   const stap8 = huidigeDossier.stap8
@@ -197,6 +215,9 @@ export async function getAISuggestiesVoorStap(
     verhuurd: stap4?.verhuurd,
     huurprijsPerJaar: stap4?.huurprijsPerJaar,
     marktwaarde: stap8?.marktwaarde,
+    // Juridische context voor stap5-veldsuggesties
+    eigendomssituatie: stap5?.eigendomssituatie,
+    teTaxerenBelang: stap5?.teTaxerenBelang,
   }
 
   // Process each field

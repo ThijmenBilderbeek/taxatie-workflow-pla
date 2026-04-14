@@ -2405,7 +2405,12 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
     'Overige',
   ]
 
-  const inzageItems: InzageItem[] = data.inzageItems ?? INZAGE_LABELS.map((label) => ({ label, status: 'N.v.t.' as InzageStatus }))
+  function getInzageItems(): InzageItem[] {
+    if (data.inzageItems && data.inzageItems.length > 0) return data.inzageItems
+    return INZAGE_LABELS.map((label) => ({ label, status: 'N.v.t.' as InzageStatus }))
+  }
+
+  const inzageItems = getInzageItems()
 
   const [uploadingLabel, setUploadingLabel] = useState<string | null>(null)
 
@@ -2417,6 +2422,10 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
   }
 
   async function handleInzageUpload(label: string, file: File) {
+    if (!dossierId) {
+      toast.error('Sla het dossier eerst op voordat u documenten kunt uploaden.')
+      return
+    }
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       toast.error('Alleen PDF-bestanden zijn toegestaan.')
       return
@@ -2429,7 +2438,7 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
         toast.error('Kon geen tekst uit het PDF-bestand lezen.')
         return
       }
-      const documentId = `inzage-${dossierId ?? 'onbekend'}-${label.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`
+      const documentId = `inzage-${dossierId}-${label.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`
       const knowledge = extractDocumentKnowledge(fullText, documentId, {
         documentType: label,
       })
@@ -2438,15 +2447,18 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
         ...chunk,
         metadata: {
           ...chunk.metadata,
-          dossier_id: dossierId ?? null,
+          dossier_id: dossierId,
           document_type: label,
         },
       }))
 
       if (chunksMetTagging.length > 0) {
         const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const rows = chunksMetTagging.map((c) => ({
+        if (!user) {
+          toast.error('U moet ingelogd zijn om documenten op te slaan.')
+          return
+        }
+        const rows = chunksMetTagging.map((c) => ({
             user_id: user.id,
             document_id: c.documentId,
             chapter: c.chapter,
@@ -2474,7 +2486,6 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
           if (error) {
             console.error('[Inzage] document_chunks insert error:', error)
           }
-        }
       }
 
       const item = inzageItems.find((i) => i.label === label)

@@ -128,6 +128,113 @@ function extractSectionAfterKeyword(
 }
 
 /**
+ * Parses bullet items from a text block.
+ * Bullets may be prefixed with -, •, –, *, or appear on their own line.
+ */
+function parseBulletItems(text: string): string[] {
+  const MIN_BULLET_ITEM_LENGTH = 2
+  const lines = text.split('\n')
+  const items: string[] = []
+  for (const line of lines) {
+    const trimmed = line.replace(/^[\s\-–•*]+/, '').trim()
+    if (trimmed.length > MIN_BULLET_ITEM_LENGTH) {
+      items.push(trimmed)
+    }
+  }
+  return items
+}
+
+/** Maximum characters to scan after a SWOT category heading. */
+const MAX_SWOT_SECTION_CHARS = 600
+
+/**
+ * Extracts SWOT sections (Sterktes, Zwaktes, Kansen, Bedreigingen) from raw text.
+ * Returns newline-separated strings for each SWOT category.
+ */
+export function extractSwotFromText(text: string): {
+  swotSterktes?: string
+  swotZwaktes?: string
+  swotKansen?: string
+  swotBedreigingen?: string
+} {
+  const result: {
+    swotSterktes?: string
+    swotZwaktes?: string
+    swotKansen?: string
+    swotBedreigingen?: string
+  } = {}
+
+  // SWOT category headings and their output key
+  const categories: Array<{ headings: string[]; key: keyof typeof result }> = [
+    { headings: ['sterktes', 'strengths'], key: 'swotSterktes' },
+    { headings: ['zwaktes', 'weaknesses', 'zwakheden'], key: 'swotZwaktes' },
+    { headings: ['kansen', 'opportunities'], key: 'swotKansen' },
+    { headings: ['bedreigingen', 'threats'], key: 'swotBedreigingen' },
+  ]
+
+  // All possible SWOT heading labels for section-end detection
+  const ALL_SWOT_HEADINGS = categories.flatMap((c) => c.headings)
+  const lowerText = text.toLowerCase()
+
+  for (const { headings, key } of categories) {
+    for (const heading of headings) {
+      // Look for the heading as a standalone line or followed by a colon/newline
+      const re = new RegExp(`(?:^|\\n)[\\s]*${heading}[:\\s]*\\n`, 'i')
+      const match = re.exec(text)
+      if (!match) {
+        // Also try finding it inline after "SWOT" section header
+        const idx = lowerText.indexOf('\n' + heading)
+        if (idx === -1) continue
+        // Extract up to MAX_SWOT_SECTION_CHARS after the heading
+        const afterHeading = text.slice(idx + heading.length + 1, idx + MAX_SWOT_SECTION_CHARS)
+        // Stop at the next SWOT category heading
+        let endIdx = afterHeading.length
+        for (const otherHeading of ALL_SWOT_HEADINGS) {
+          if (otherHeading === heading) continue
+          const re2 = new RegExp(`(?:^|\\n)[\\s]*${otherHeading}[:\\s]*`, 'i')
+          const m2 = re2.exec(afterHeading)
+          if (m2 && m2.index < endIdx) endIdx = m2.index
+        }
+        // Also stop at double newline (paragraph break)
+        const dnl = afterHeading.indexOf('\n\n')
+        if (dnl !== -1 && dnl < endIdx) endIdx = dnl
+        const section = afterHeading.slice(0, endIdx).trim()
+        if (section.length > 0) {
+          const items = parseBulletItems(section)
+          if (items.length > 0) {
+            result[key] = items.join('\n')
+            break
+          }
+        }
+        continue
+      }
+      // Extract up to MAX_SWOT_SECTION_CHARS after the heading match
+      const afterHeading = text.slice(match.index + match[0].length, match.index + match[0].length + MAX_SWOT_SECTION_CHARS)
+      // Stop at the next SWOT category heading
+      let endIdx = afterHeading.length
+      for (const otherHeading of ALL_SWOT_HEADINGS) {
+        if (otherHeading === heading) continue
+        const re2 = new RegExp(`(?:^|\\n)[\\s]*${otherHeading}[:\\s]*`, 'i')
+        const m2 = re2.exec(afterHeading)
+        if (m2 && m2.index < endIdx) endIdx = m2.index
+      }
+      const dnl = afterHeading.indexOf('\n\n')
+      if (dnl !== -1 && dnl < endIdx) endIdx = dnl
+      const section = afterHeading.slice(0, endIdx).trim()
+      if (section.length > 0) {
+        const items = parseBulletItems(section)
+        if (items.length > 0) {
+          result[key] = items.join('\n')
+          break
+        }
+      }
+    }
+  }
+
+  return result
+}
+
+/**
  * Extracts wizard-relevant fields from raw PDF text.
  * Returns a partial Dossier with the sections found.
  * This is best-effort: missing sections simply return undefined.
@@ -297,6 +404,26 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap2bereikbaarheid = stap2bereikbaarheidRaw
     ? cleanupLongFieldText(compactWhitespace(stap2bereikbaarheidRaw), 250)
     : undefined
+
+  // Omgeving en belendingen
+  const stap2omgevingEnBelendingen = extractSectionAfterKeyword(text, [
+    'omgeving en belendingen:',
+    'belendingen:',
+    'belendende percelen:',
+  ], 300)
+
+  // Voorzieningen
+  const stap2voorzieningen = extractSectionAfterKeyword(text, [
+    'voorzieningen:',
+    'voorzieningen in de omgeving:',
+  ], 300)
+
+  // Verwachte ontwikkelingen
+  const stap2verwachteOntwikkelingen = extractSectionAfterKeyword(text, [
+    'verwachte ontwikkelingen:',
+    'toekomstige ontwikkelingen:',
+    'geplande ontwikkelingen:',
+  ], 300)
 
   // --- Stap 3: Oppervlaktes ---
   // BVO: extended label synonyms including "Totaal BVO m² of stuks"
@@ -532,6 +659,49 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'onderhoudstoestand:',
   ], 100)
 
+  // Terrein
+  const stap6terreinRaw = extractSectionAfterKeyword(text, [
+    'terrein:',
+    'terreinbeschrijving:',
+    'buitenterrein:',
+  ], 200)
+  const stap6terrein = stap6terreinRaw ? summarizeTechnicalField(stap6terreinRaw, 200) || undefined : undefined
+
+  // Gevels
+  const stap6gevelsRaw = extractSectionAfterKeyword(text, [
+    'gevels:',
+    'gevel:',
+    'gevelbekleding:',
+  ], 200)
+  const stap6gevels = stap6gevelsRaw ? summarizeTechnicalField(stap6gevelsRaw, 200) || undefined : undefined
+
+  // Afwerking
+  const stap6afwerkingRaw = extractSectionAfterKeyword(text, [
+    'afwerking:',
+    'binnenafwerking:',
+    'afwerkingsniveau:',
+  ], 200)
+  const stap6afwerking = stap6afwerkingRaw ? summarizeTechnicalField(stap6afwerkingRaw, 200) || undefined : undefined
+
+  // Beveiliging
+  const stap6beveiligingRaw = extractSectionAfterKeyword(text, [
+    'beveiliging:',
+    'beveiligingsinstallatie:',
+    'beveiligingssysteem:',
+  ], 200)
+  const stap6beveiliging = stap6beveiligingRaw ? summarizeTechnicalField(stap6beveiligingRaw, 200) || undefined : undefined
+
+  // Omschrijving milieuaspecten
+  const stap6omschrijvingMilieuaspectenRaw = extractSectionAfterKeyword(text, [
+    'milieuaspecten:',
+    'milieu:',
+    'omschrijving milieuaspecten:',
+    'milieu-aspecten:',
+  ], 300)
+  const stap6omschrijvingMilieuaspecten = stap6omschrijvingMilieuaspectenRaw
+    ? cleanupLongFieldText(stap6omschrijvingMilieuaspectenRaw, 300) || undefined
+    : undefined
+
   // --- Stap 5: Juridische Info ---
   // Eigendomssituatie: limit to 100 chars, stop at unrelated field markers
   // stopAtInlineLabel stops before "Te taxeren belang:" and similar inline follow-up labels
@@ -624,6 +794,20 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       .trim()
     stap5bestemmingsplan = cleanupLongFieldText(stap5bestemmingsplan, 300) || undefined
   }
+
+  // Gebruik conform omgevingsplan
+  const stap5gebruikConformOmgevingsplan = extractSectionAfterKeyword(text, [
+    'gebruik conform omgevingsplan:',
+    'conform omgevingsplan:',
+    'gebruik conform bestemmingsplan:',
+  ], 200)
+
+  // Bijzondere publiekrechtelijke bepalingen
+  const stap5bijzonderePubliekrechtelijkeBepalingen = extractSectionAfterKeyword(text, [
+    'bijzondere publiekrechtelijke bepalingen:',
+    'publiekrechtelijke bepalingen:',
+    'publiekrechtelijke beperkingen:',
+  ], 300)
 
   // --- Stap 7: Vergunningen ---
   // Energielabel: check for "Geen"/"-"/undefined values first
@@ -865,6 +1049,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap2gemeente) stap2Fields.gemeente = truncateField(stap2gemeente, MAX_FIELD_LENGTH_SHORT)
   if (stap2provincie) stap2Fields.provincie = truncateField(stap2provincie, MAX_FIELD_LENGTH_SHORT)
   if (stap2ligging) stap2Fields.ligging = stap2ligging
+  if (stap2omgevingEnBelendingen) stap2Fields.omgevingEnBelendingen = truncateField(stap2omgevingEnBelendingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap2voorzieningen) stap2Fields.voorzieningen = truncateField(stap2voorzieningen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap2verwachteOntwikkelingen) stap2Fields.verwachteOntwikkelingen = truncateField(stap2verwachteOntwikkelingen, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap2Fields).length > 0) {
     wizardData.stap2 = stap2Fields as Dossier['stap2']
   }
@@ -899,6 +1086,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap5kwalitatieveVerplichtingen) stap5Fields.kwalitatieveVerplichtingen = truncateField(stap5kwalitatieveVerplichtingen, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5bestemmingsplan) stap5Fields.bestemmingsplan = truncateField(stap5bestemmingsplan, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5teTaxerenBelang) stap5Fields.teTaxerenBelang = truncateField(stap5teTaxerenBelang, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5gebruikConformOmgevingsplan) stap5Fields.gebruikConformOmgevingsplan = truncateField(stap5gebruikConformOmgevingsplan, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5bijzonderePubliekrechtelijkeBepalingen) stap5Fields.bijzonderePubliekrechtelijkeBepalingen = truncateField(stap5bijzonderePubliekrechtelijkeBepalingen, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap5Fields).length > 0) {
     wizardData.stap5 = stap5Fields as Dossier['stap5']
   }
@@ -907,10 +1096,16 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap6fundering) stap6Fields.fundering = truncateField(stap6fundering, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap6dakbedekking) stap6Fields.dakbedekking = truncateField(stap6dakbedekking, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap6installaties) stap6Fields.installaties = truncateField(stap6installaties, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6constructie) stap6Fields.constructie = truncateField(stap6constructie, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap6achterstallig) stap6Fields.achterstalligOnderhoudBeschrijving = truncateField(stap6achterstallig, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap6exterieurStaat) stap6Fields.exterieurStaat = stap6exterieurStaat
   if (stap6interieurStaat) stap6Fields.interieurStaat = stap6interieurStaat
   if (stap6onderhoudskosten !== undefined) stap6Fields.onderhoudskosten = stap6onderhoudskosten
+  if (stap6terrein) stap6Fields.terrein = truncateField(stap6terrein, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6gevels) stap6Fields.gevels = truncateField(stap6gevels, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6afwerking) stap6Fields.afwerking = truncateField(stap6afwerking, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6beveiliging) stap6Fields.beveiliging = truncateField(stap6beveiliging, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6omschrijvingMilieuaspecten) stap6Fields.omschrijvingMilieuaspecten = truncateField(stap6omschrijvingMilieuaspecten, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap6Fields).length > 0) {
     wizardData.stap6 = stap6Fields as Dossier['stap6']
   }
@@ -944,6 +1139,14 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap9aannames) stap9Fields.aannames = truncateField(stap9aannames, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap9voorbehouden) stap9Fields.voorbehouden = truncateField(stap9voorbehouden, MAX_FIELD_LENGTH_TEXTAREA)
   if (stap9bijzondereOmstandigheden) stap9Fields.bijzondereOmstandigheden = truncateField(stap9bijzondereOmstandigheden, MAX_FIELD_LENGTH_TEXTAREA)
+
+  // SWOT extraction — merged into stap9
+  const swotData = extractSwotFromText(text)
+  if (swotData.swotSterktes) stap9Fields.swotSterktes = truncateField(swotData.swotSterktes, MAX_FIELD_LENGTH_TEXTAREA)
+  if (swotData.swotZwaktes) stap9Fields.swotZwaktes = truncateField(swotData.swotZwaktes, MAX_FIELD_LENGTH_TEXTAREA)
+  if (swotData.swotKansen) stap9Fields.swotKansen = truncateField(swotData.swotKansen, MAX_FIELD_LENGTH_TEXTAREA)
+  if (swotData.swotBedreigingen) stap9Fields.swotBedreigingen = truncateField(swotData.swotBedreigingen, MAX_FIELD_LENGTH_TEXTAREA)
+
   if (Object.keys(stap9Fields).length > 0) {
     wizardData.stap9 = stap9Fields as Dossier['stap9']
   }

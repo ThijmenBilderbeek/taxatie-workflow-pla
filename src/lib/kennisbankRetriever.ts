@@ -66,6 +66,21 @@ export function sectieKeyNaarChapter(sectieKey: string): string | null {
 }
 
 /**
+ * Leidt het semantische type af uit een sectieKey.
+ * Retourneert null als geen specifieke mapping bestaat.
+ */
+export function sectieKeyNaarSemanticType(sectieKey: string): string | null {
+  const lower = sectieKey.toLowerCase()
+  if (lower.startsWith('c')) return 'swot'
+  if (lower.startsWith('d')) return 'juridisch'
+  if (lower.startsWith('e')) return 'locatie'
+  if (lower.startsWith('f')) return 'technisch'
+  if (lower.startsWith('h') || lower.startsWith('b')) return 'waardering'
+  if (lower.startsWith('j')) return 'aannames'
+  return null
+}
+
+/**
  * Trunkeer tekst tot maximaal maxChars tekens.
  */
 function trunceer(text: string, maxChars: number): string {
@@ -114,6 +129,7 @@ export async function getKennisbankContextForSectie(
 
   try {
     const chapter = sectieKeyNaarChapter(sectieKey)
+    const semanticType = sectieKeyNaarSemanticType(sectieKey)
 
     // -----------------------------------------------------------------------
     // 1. Haal template chunks op (template_candidate = true)
@@ -125,6 +141,9 @@ export async function getKennisbankContextForSectie(
 
     if (chapter) {
       templateQuery = templateQuery.ilike('chapter', `${chapter}%`)
+    }
+    if (semanticType) {
+      templateQuery = templateQuery.filter('metadata->>semantic_type', 'eq', semanticType)
     }
     if (objectType) {
       templateQuery = templateQuery.eq('object_type', objectType)
@@ -319,11 +338,21 @@ export async function getKennisbankContextForSectieSemantic(
       rowNaarChunk(row, MAX_CHUNK_CHARS)
     )
 
-    const templateChunks = allChunks
+    // Post-filter on semantic_type if a mapping exists for this sectieKey
+    const semanticType = sectieKeyNaarSemanticType(sectieKey)
+    const filteredChunks = semanticType
+      ? allChunks.filter(
+          (c) =>
+            (c.metadata as Record<string, unknown>)?.semantic_type === semanticType ||
+            !(c.metadata as Record<string, unknown>)?.semantic_type
+        )
+      : allChunks
+
+    const templateChunks = filteredChunks
       .filter((c) => c.templateCandidate)
       .slice(0, MAX_TEMPLATE_CHUNKS)
 
-    const styleExamples = allChunks
+    const styleExamples = filteredChunks
       .filter((c) => c.reuseAsStyleExample)
       .slice(0, MAX_STYLE_EXAMPLES)
 

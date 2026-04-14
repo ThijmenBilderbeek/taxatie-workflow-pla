@@ -363,7 +363,7 @@ export async function getInzageChunksForDossier(
   try {
     let query = supabase
       .from('document_chunks')
-      .select('*')
+      .select('id, document_id, chapter, subchapter, chunk_type, raw_text, clean_text, writing_function, tones, specificity, reuse_score, reuse_as_style_example, template_candidate, template_text, variables_detected, object_address, object_type, market_segment, city, region, metadata, created_at, updated_at')
       .filter('metadata->>dossier_id', 'eq', dossierId)
       .order('created_at', { ascending: true })
 

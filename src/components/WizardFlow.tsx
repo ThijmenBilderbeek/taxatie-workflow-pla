@@ -2438,7 +2438,7 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
         toast.error('Kon geen tekst uit het PDF-bestand lezen.')
         return
       }
-      const documentId = `inzage-${dossierId}-${label.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`
+      const documentId = `inzage-${dossierId}-${label.toLowerCase().replace(/\s+/g, '-')}-${crypto.randomUUID()}`
       const knowledge = extractDocumentKnowledge(fullText, documentId, {
         documentType: label,
       })
@@ -2459,33 +2459,33 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
           return
         }
         const rows = chunksMetTagging.map((c) => ({
-            user_id: user.id,
-            document_id: c.documentId,
-            chapter: c.chapter,
-            subchapter: c.subchapter,
-            chunk_type: c.chunkType,
-            raw_text: c.rawText,
-            clean_text: c.cleanText,
-            writing_function: c.writingFunction,
-            tones: c.tones,
-            specificity: c.specificity,
-            reuse_score: c.reuseScore,
-            reuse_as_style_example: c.reuseAsStyleExample,
-            template_candidate: c.templateCandidate,
-            template_text: c.templateText ?? null,
-            variables_detected: c.variablesDetected,
-            object_address: c.objectAddress ?? null,
-            object_type: c.objectType ?? null,
-            market_segment: c.marketSegment ?? null,
-            city: c.city ?? null,
-            region: c.region ?? null,
-            metadata: c.metadata,
-            updated_at: new Date().toISOString(),
-          }))
-          const { error } = await supabase.from('document_chunks').insert(rows)
-          if (error) {
-            console.error('[Inzage] document_chunks insert error:', error)
-          }
+          user_id: user.id,
+          document_id: c.documentId,
+          chapter: c.chapter,
+          subchapter: c.subchapter,
+          chunk_type: c.chunkType,
+          raw_text: c.rawText,
+          clean_text: c.cleanText,
+          writing_function: c.writingFunction,
+          tones: c.tones,
+          specificity: c.specificity,
+          reuse_score: c.reuseScore,
+          reuse_as_style_example: c.reuseAsStyleExample,
+          template_candidate: c.templateCandidate,
+          template_text: c.templateText ?? null,
+          variables_detected: c.variablesDetected,
+          object_address: c.objectAddress ?? null,
+          object_type: c.objectType ?? null,
+          market_segment: c.marketSegment ?? null,
+          city: c.city ?? null,
+          region: c.region ?? null,
+          metadata: c.metadata,
+          updated_at: new Date().toISOString(),
+        }))
+        const { error } = await supabase.from('document_chunks').insert(rows)
+        if (error) {
+          console.error('[Inzage] document_chunks insert error:', error)
+        }
       }
 
       const item = inzageItems.find((i) => i.label === label)
@@ -2687,35 +2687,34 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
                   </td>
                   <td className="py-2 align-top">
                     <div className="flex flex-col gap-1">
-                      <label className="cursor-pointer">
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf"
-                          className="sr-only"
-                          disabled={uploadingLabel === item.label}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              e.target.value = ''
-                              handleInzageUpload(item.label, file)
-                            }
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs pointer-events-none"
-                          disabled={uploadingLabel === item.label}
-                          asChild={false}
-                        >
-                          {uploadingLabel === item.label ? (
-                            <span className="flex items-center gap-1"><Upload size={12} className="animate-pulse" /> Bezig...</span>
-                          ) : (
-                            <span className="flex items-center gap-1"><Upload size={12} /> PDF</span>
-                          )}
-                        </Button>
-                      </label>
+                      <input
+                        id={`inzage-upload-${item.label}`}
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        className="sr-only"
+                        disabled={uploadingLabel === item.label}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            e.target.value = ''
+                            handleInzageUpload(item.label, file)
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={uploadingLabel === item.label}
+                        onClick={() => document.getElementById(`inzage-upload-${item.label}`)?.click()}
+                      >
+                        {uploadingLabel === item.label ? (
+                          <span className="flex items-center gap-1"><Upload size={12} className="animate-pulse" /> Bezig...</span>
+                        ) : (
+                          <span className="flex items-center gap-1"><Upload size={12} /> PDF</span>
+                        )}
+                      </Button>
                       {(item.attachments ?? []).map((att) => (
                         <span key={att.naam} className="text-xs text-muted-foreground truncate max-w-[80px]" title={att.naam}>
                           {att.naam}

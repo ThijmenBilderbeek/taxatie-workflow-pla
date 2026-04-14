@@ -61,6 +61,7 @@ function mockQuery(data: unknown[] | null, error: unknown = null) {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     ilike: vi.fn().mockReturnThis(),
+    filter: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     then(

@@ -34,6 +34,29 @@ export function deriveMarketSegment(objectType?: ObjectType): MarketSegment | un
 }
 
 /**
+ * Derives a semantic type string from a chunk's chapter label and raw text.
+ * Used to tag document chunks for improved AI retrieval.
+ */
+export function deriveSemanticType(chapter: string, rawText: string): string {
+  const upperChapter = chapter.trim().toUpperCase()
+
+  // Chapter-based mapping
+  if (upperChapter.startsWith('C')) return 'swot'
+  if (upperChapter.startsWith('D')) return 'juridisch'
+  if (upperChapter.startsWith('E')) return 'locatie'
+  if (upperChapter.startsWith('F')) return 'technisch'
+  if (upperChapter.startsWith('B') || upperChapter.startsWith('H')) return 'waardering'
+  if (upperChapter.startsWith('J')) return 'aannames'
+
+  // Text-based fallback detection
+  const lowerText = rawText.toLowerCase()
+  if (/swot|sterktes|zwaktes|kansen|bedreigingen/.test(lowerText)) return 'swot'
+  if (/aanname|voorbehoud|uitgangspunten/.test(lowerText)) return 'aannames'
+
+  return 'algemeen'
+}
+
+/**
  * Orchestrates the full document knowledge extraction pipeline:
  * 1. Chapter detection
  * 2. Narrative chunking
@@ -105,7 +128,7 @@ export function extractDocumentKnowledge(
       marketSegment: options?.marketSegment,
       city: options?.city,
       region: options?.region,
-      metadata: {},
+      metadata: { semantic_type: deriveSemanticType(chunk.chapter, chunk.rawText) },
       createdAt: now,
       updatedAt: now,
     }))

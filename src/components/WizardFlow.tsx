@@ -1796,64 +1796,139 @@ function Stap5({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
   }
   return (
     <div className="grid gap-4">
-      <div className="grid gap-2">
-        <Label htmlFor="eigendomssituatie">Eigendomssituatie *</Label>
-        {renderVeld('eigendomssituatie', (
-          <Textarea
-            id="eigendomssituatie"
-            value={data.eigendomssituatie || ''}
-            onChange={(e) => onChange({ ...data, eigendomssituatie: e.target.value })}
-            rows={2}
-          />
-        ))}
+      <div className="border-t pt-4">
+        <p className="text-sm font-semibold mb-3">Privaatrechtelijk</p>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="teTaxerenBelang">Te taxeren belang</Label>
+            {renderVeld('teTaxerenBelang', (
+              <Textarea
+                id="teTaxerenBelang"
+                placeholder="Bijv. volledig eigendom, 50% aandeel, erfpachtrecht..."
+                value={data.teTaxerenBelang || ''}
+                onChange={(e) => onChange({ ...data, teTaxerenBelang: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="eigendomssituatie">Eigendomssituatie *</Label>
+            {renderVeld('eigendomssituatie', (
+              <Textarea
+                id="eigendomssituatie"
+                value={data.eigendomssituatie || ''}
+                onChange={(e) => onChange({ ...data, eigendomssituatie: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="toelichtingEigendomPerceel">Toelichting eigendom / perceel</Label>
+            {renderVeld('toelichtingEigendomPerceel', (
+              <Textarea
+                id="toelichtingEigendomPerceel"
+                placeholder="Bijzonderheden over eigendom of perceelgrenzen..."
+                value={data.toelichtingEigendomPerceel || ''}
+                onChange={(e) => onChange({ ...data, toelichtingEigendomPerceel: e.target.value })}
+                rows={3}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="aantekeningenKadastraalObject">Aantekeningen kadastraal object</Label>
+            {renderVeld('aantekeningenKadastraalObject', (
+              <Textarea
+                id="aantekeningenKadastraalObject"
+                placeholder="Bijzondere aantekeningen in het kadaster..."
+                value={data.aantekeningenKadastraalObject || ''}
+                onChange={(e) => onChange({ ...data, aantekeningenKadastraalObject: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="erfpacht">Erfpacht</Label>
+            {renderVeld('erfpacht', (
+              <Textarea
+                id="erfpacht"
+                value={data.erfpacht || ''}
+                onChange={(e) => onChange({ ...data, erfpacht: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="zakelijkeRechten">Zakelijke rechten</Label>
+            {renderVeld('zakelijkeRechten', (
+              <Textarea
+                id="zakelijkeRechten"
+                value={data.zakelijkeRechten || ''}
+                onChange={(e) => onChange({ ...data, zakelijkeRechten: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="kwalitatieveVerplichtingen">Kwalitatieve verplichtingen</Label>
+            {renderVeld('kwalitatieveVerplichtingen', (
+              <Textarea
+                id="kwalitatieveVerplichtingen"
+                value={data.kwalitatieveVerplichtingen || ''}
+                onChange={(e) => onChange({ ...data, kwalitatieveVerplichtingen: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="erfpacht">Erfpacht</Label>
-        {renderVeld('erfpacht', (
-          <Textarea
-            id="erfpacht"
-            value={data.erfpacht || ''}
-            onChange={(e) => onChange({ ...data, erfpacht: e.target.value })}
-            rows={2}
-          />
-        ))}
-      </div>
+      <div className="border-t pt-4">
+        <p className="text-sm font-semibold mb-3">Publiekrechtelijk / Omgevingsplan</p>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="bestemmingsplan">Bestemmingsplan *</Label>
+            {renderVeld('bestemmingsplan', (
+              <Textarea
+                id="bestemmingsplan"
+                value={data.bestemmingsplan || ''}
+                onChange={(e) => onChange({ ...data, bestemmingsplan: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="zakelijkeRechten">Zakelijke rechten</Label>
-        {renderVeld('zakelijkeRechten', (
-          <Textarea
-            id="zakelijkeRechten"
-            value={data.zakelijkeRechten || ''}
-            onChange={(e) => onChange({ ...data, zakelijkeRechten: e.target.value })}
-            rows={2}
-          />
-        ))}
-      </div>
+          <div className="grid gap-2">
+            <Label htmlFor="gebruikConformOmgevingsplan">Gebruik conform omgevingsplan</Label>
+            {renderVeld('gebruikConformOmgevingsplan', (
+              <Textarea
+                id="gebruikConformOmgevingsplan"
+                placeholder="Is het huidige gebruik in overeenstemming met het omgevingsplan?..."
+                value={data.gebruikConformOmgevingsplan || ''}
+                onChange={(e) => onChange({ ...data, gebruikConformOmgevingsplan: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="kwalitatieveVerplichtingen">Kwalitatieve verplichtingen</Label>
-        {renderVeld('kwalitatieveVerplichtingen', (
-          <Textarea
-            id="kwalitatieveVerplichtingen"
-            value={data.kwalitatieveVerplichtingen || ''}
-            onChange={(e) => onChange({ ...data, kwalitatieveVerplichtingen: e.target.value })}
-            rows={2}
-          />
-        ))}
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="bestemmingsplan">Bestemmingsplan *</Label>
-        {renderVeld('bestemmingsplan', (
-          <Textarea
-            id="bestemmingsplan"
-            value={data.bestemmingsplan || ''}
-            onChange={(e) => onChange({ ...data, bestemmingsplan: e.target.value })}
-            rows={2}
-          />
-        ))}
+          <div className="grid gap-2">
+            <Label htmlFor="bijzonderePubliekrechtelijkeBepalingen">Bijzondere publiekrechtelijke bepalingen</Label>
+            {renderVeld('bijzonderePubliekrechtelijkeBepalingen', (
+              <Textarea
+                id="bijzonderePubliekrechtelijkeBepalingen"
+                placeholder="Voorkeursrecht, monument, belemmeringen, etc...."
+                value={data.bijzonderePubliekrechtelijkeBepalingen || ''}
+                onChange={(e) => onChange({ ...data, bijzonderePubliekrechtelijkeBepalingen: e.target.value })}
+                rows={3}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )

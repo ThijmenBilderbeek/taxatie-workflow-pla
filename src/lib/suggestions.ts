@@ -55,6 +55,31 @@ const VELD_CONFIGS: Record<number, VeldConfig[]> = {
       getUitHistorisch: (r) => r.wizardData?.stap5?.bestemmingsplan,
       getHuidigeWaarde: (d) => d.stap5?.bestemmingsplan,
     },
+    {
+      veldNaam: 'teTaxerenBelang',
+      getUitHistorisch: (r) => r.wizardData?.stap5?.teTaxerenBelang,
+      getHuidigeWaarde: (d) => d.stap5?.teTaxerenBelang,
+    },
+    {
+      veldNaam: 'aantekeningenKadastraalObject',
+      getUitHistorisch: (r) => r.wizardData?.stap5?.aantekeningenKadastraalObject,
+      getHuidigeWaarde: (d) => d.stap5?.aantekeningenKadastraalObject,
+    },
+    {
+      veldNaam: 'toelichtingEigendomPerceel',
+      getUitHistorisch: (r) => r.wizardData?.stap5?.toelichtingEigendomPerceel,
+      getHuidigeWaarde: (d) => d.stap5?.toelichtingEigendomPerceel,
+    },
+    {
+      veldNaam: 'gebruikConformOmgevingsplan',
+      getUitHistorisch: (r) => r.wizardData?.stap5?.gebruikConformOmgevingsplan,
+      getHuidigeWaarde: (d) => d.stap5?.gebruikConformOmgevingsplan,
+    },
+    {
+      veldNaam: 'bijzonderePubliekrechtelijkeBepalingen',
+      getUitHistorisch: (r) => r.wizardData?.stap5?.bijzonderePubliekrechtelijkeBepalingen,
+      getHuidigeWaarde: (d) => d.stap5?.bijzonderePubliekrechtelijkeBepalingen,
+    },
   ],
   6: [
     {

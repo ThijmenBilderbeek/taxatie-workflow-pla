@@ -93,6 +93,17 @@ interface HuidigObject {
   coordinaten?: { lat: number; lng: number }
   energielabel?: string
   gebruiksdoel?: string
+  ligging?: string
+  bereikbaarheid?: string
+  locatiescore?: string
+  exterieurStaat?: string
+  interieurStaat?: string
+  achterstalligOnderhoud?: boolean
+  verhuurd?: boolean
+  huurprijsPerJaar?: number
+  marktwaarde?: number
+  eigendomssituatie?: string
+  teTaxerenBelang?: string
 }
 
 interface Referentie {
@@ -176,6 +187,14 @@ Het huidige object:
 
   if (huidigObject.energielabel) {
     prompt += `\n- Energielabel: ${huidigObject.energielabel}`
+  }
+
+  // Juridische context voor stap5-velden
+  if (huidigObject.eigendomssituatie) {
+    prompt += `\n- Eigendomssituatie: ${huidigObject.eigendomssituatie}`
+  }
+  if (huidigObject.teTaxerenBelang) {
+    prompt += `\n- Te taxeren belang: ${huidigObject.teTaxerenBelang}`
   }
 
   if (referenties.length > 0) {

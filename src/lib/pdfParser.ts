@@ -132,16 +132,20 @@ function extractSectionAfterKeyword(
  * Bullets may be prefixed with -, •, –, *, or appear on their own line.
  */
 function parseBulletItems(text: string): string[] {
+  const MIN_BULLET_ITEM_LENGTH = 2
   const lines = text.split('\n')
   const items: string[] = []
   for (const line of lines) {
     const trimmed = line.replace(/^[\s\-–•*]+/, '').trim()
-    if (trimmed.length > 2) {
+    if (trimmed.length > MIN_BULLET_ITEM_LENGTH) {
       items.push(trimmed)
     }
   }
   return items
 }
+
+/** Maximum characters to scan after a SWOT category heading. */
+const MAX_SWOT_SECTION_CHARS = 600
 
 /**
  * Extracts SWOT sections (Sterktes, Zwaktes, Kansen, Bedreigingen) from raw text.
@@ -181,8 +185,8 @@ export function extractSwotFromText(text: string): {
         // Also try finding it inline after "SWOT" section header
         const idx = lowerText.indexOf('\n' + heading)
         if (idx === -1) continue
-        // Extract up to 600 chars after the heading
-        const afterHeading = text.slice(idx + heading.length + 1, idx + 600)
+        // Extract up to MAX_SWOT_SECTION_CHARS after the heading
+        const afterHeading = text.slice(idx + heading.length + 1, idx + MAX_SWOT_SECTION_CHARS)
         // Stop at the next SWOT category heading
         let endIdx = afterHeading.length
         for (const otherHeading of ALL_SWOT_HEADINGS) {
@@ -204,8 +208,8 @@ export function extractSwotFromText(text: string): {
         }
         continue
       }
-      // Extract up to 600 chars after the heading match
-      const afterHeading = text.slice(match.index + match[0].length, match.index + match[0].length + 600)
+      // Extract up to MAX_SWOT_SECTION_CHARS after the heading match
+      const afterHeading = text.slice(match.index + match[0].length, match.index + match[0].length + MAX_SWOT_SECTION_CHARS)
       // Stop at the next SWOT category heading
       let endIdx = afterHeading.length
       for (const otherHeading of ALL_SWOT_HEADINGS) {

@@ -32,6 +32,11 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
     result = result.replace(/{{taxateur}}/g, dossier.stap1.naamTaxateur || '')
     result = result.replace(/{{waardepeildatum}}/g, dossier.stap1.waardepeildatum ? formatDatum(dossier.stap1.waardepeildatum) : '')
     result = result.replace(/{{inspectiedatum}}/g, dossier.stap1.inspectiedatum ? formatDatum(dossier.stap1.inspectiedatum) : '')
+    result = result.replace(/{{mate_van_inspectie}}/g, dossier.stap1.mateVanInspectie || '')
+    result = result.replace(/{{inspectie_uitgevoerd_door}}/g, dossier.stap1.inspectieUitgevoerdDoor || '')
+    result = result.replace(/{{toelichting_inspectie}}/g, dossier.stap1.toelichtingInspectie || '')
+    result = result.replace(/{{huidig_gebruik}}/g, dossier.stap1.huidigGebruik || '')
+    result = result.replace(/{{voorgenomen_gebruik}}/g, dossier.stap1.voorgenomenGebruik || '')
   }
 
   if (dossier.stap2) {
@@ -49,6 +54,10 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
     result = result.replace(/{{kadastraal_oppervlak}}/g, dossier.stap2.kadastraalOppervlak ? formatOppervlakte(dossier.stap2.kadastraalOppervlak) : '')
     result = result.replace(/{{ligging}}/g, dossier.stap2.ligging?.replace(/_/g, ' ') || '')
     result = result.replace(/{{bereikbaarheid}}/g, dossier.stap2.bereikbaarheid || '')
+    result = result.replace(/{{omgeving_en_belendingen}}/g, dossier.stap2.omgevingEnBelendingen || '')
+    result = result.replace(/{{voorzieningen}}/g, dossier.stap2.voorzieningen || '')
+    result = result.replace(/{{verwachte_ontwikkelingen}}/g, dossier.stap2.verwachteOntwikkelingen || '')
+    result = result.replace(/{{locatiescore}}/g, dossier.stap2.locatiescore || '')
   }
 
   if (dossier.stap3) {
@@ -57,6 +66,15 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
     result = result.replace(/{{perceeloppervlak}}/g, dossier.stap3.perceeloppervlak ? formatOppervlakte(dossier.stap3.perceeloppervlak) : '')
     result = result.replace(/{{aantal_bouwlagen}}/g, dossier.stap3.aantalBouwlagen?.toString() || '')
     result = result.replace(/{{bouwjaar}}/g, dossier.stap3.bouwjaar?.toString() || '')
+    result = result.replace(/{{renovatiejaar}}/g, dossier.stap3.renovatiejaar?.toString() || '')
+  }
+
+  if (dossier.stap5) {
+    result = result.replace(/{{te_taxeren_belang}}/g, dossier.stap5.teTaxerenBelang || '')
+    result = result.replace(/{{aantekeningen_kadastraal_object}}/g, dossier.stap5.aantekeningenKadastraalObject || '')
+    result = result.replace(/{{toelichting_eigendom_perceel}}/g, dossier.stap5.toelichtingEigendomPerceel || '')
+    result = result.replace(/{{gebruik_conform_omgevingsplan}}/g, dossier.stap5.gebruikConformOmgevingsplan || '')
+    result = result.replace(/{{bijzondere_publiekrechtelijke_bepalingen}}/g, dossier.stap5.bijzonderePubliekrechtelijkeBepalingen || '')
   }
 
   if (dossier.stap6) {
@@ -65,6 +83,15 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
     result = result.replace(/{{fundering}}/g, dossier.stap6.fundering || '')
     result = result.replace(/{{dakbedekking}}/g, dossier.stap6.dakbedekking || '')
     result = result.replace(/{{installaties}}/g, dossier.stap6.installaties || '')
+    result = result.replace(/{{constructie}}/g, dossier.stap6.constructie || '')
+    result = result.replace(/{{terrein}}/g, dossier.stap6.terrein || '')
+    result = result.replace(/{{gevels}}/g, dossier.stap6.gevels || '')
+    result = result.replace(/{{afwerking}}/g, dossier.stap6.afwerking || '')
+    result = result.replace(/{{beveiliging}}/g, dossier.stap6.beveiliging || '')
+    result = result.replace(/{{toelichting_onderhoud}}/g, dossier.stap6.toelichtingOnderhoud || '')
+    result = result.replace(/{{toelichting_parkeren}}/g, dossier.stap6.toelichtingParkeren || '')
+    result = result.replace(/{{toelichting_functionaliteit}}/g, dossier.stap6.toelichtingFunctionaliteit || '')
+    result = result.replace(/{{omschrijving_milieuaspecten}}/g, dossier.stap6.omschrijvingMilieuaspecten || '')
   }
 
   if (dossier.stap7) {
@@ -89,6 +116,7 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
 export function generateRapportSamenvatting(dossier: Dossier): string {
   const variant = getRapportVariant(dossier)
   const isVerhuurd = variant === 'verhuurd_belegging'
+  const teTaxerenBelang = dossier.stap5?.teTaxerenBelang || '100%'
   
   let template = `I N H O U D S O P G A V E   T A X A T I E R A P P O R T
 
@@ -101,7 +129,7 @@ Complexnaam: {{complexnaam}}
 Adres: {{adres}}
 Postcode en plaats: {{postcode}} {{plaats}}
 Type eigendom: Volledig eigendom
-Te taxeren belang: 100%
+Te taxeren belang: ${teTaxerenBelang}
 
 ===== OBJECT =====
 
@@ -229,13 +257,27 @@ Datum en plaats ondertekening: {{plaats}}, {{inspectiedatum}}`
 }
 
 export function generateB4_Inspectie(dossier: Dossier): string {
-  const template = `B.4 INSPECTIE
+  const mateVanInspectie = dossier.stap1?.mateVanInspectie || 'Volledige externe en interne inspectie'
+  const inspectieUitgevoerdDoor = dossier.stap1?.inspectieUitgevoerdDoor || dossier.stap1?.naamTaxateur || ''
+  const toelichtingInspectie = dossier.stap1?.toelichtingInspectie || ''
+
+  let template = `B.4 INSPECTIE
 
 De inspectie van het object heeft plaatsgevonden op {{inspectiedatum}}.
 
-Mate van inspectie: Volledige externe en interne inspectie
+Mate van inspectie: ${mateVanInspectie}`
+
+  if (inspectieUitgevoerdDoor) {
+    template += `\nInspectie uitgevoerd door: ${inspectieUitgevoerdDoor}`
+  }
+
+  template += `
 
 De taxateur verklaart dat de bezichtiging geen bouwtechnische keuring is. Voor zover tijdens de inspectie is waargenomen, zijn gebreken en bijzonderheden vermeld in dit rapport. Verborgen gebreken kunnen echter niet worden uitgesloten.`
+
+  if (toelichtingInspectie) {
+    template += `\n\nTOELICHTING INSPECTIE\n\n${toelichtingInspectie}`
+  }
 
   return replacePlaceholders(template, dossier)
 }
@@ -352,17 +394,31 @@ Alles overwegende is de courantheid als redelijk tot goed aan te duiden.`
 export function generateD1_Privaatrechtelijk(dossier: Dossier): string {
   if (!dossier.stap5) return ''
 
-  const template = `D.1 PRIVAATRECHTELIJKE ASPECTEN
+  const teTaxerenBelang = dossier.stap5.teTaxerenBelang || '100% eigendom'
+  const aantekeningenKadastraal = dossier.stap5.aantekeningenKadastraalObject || 'Voor zover bekend geen bijzondere aantekeningen'
+  const toelichtingEigendom = dossier.stap5.toelichtingEigendomPerceel || ''
+
+  let template = `D.1 PRIVAATRECHTELIJKE ASPECTEN
 
 KADASTRALE GEGEVENS
 
 Kadastrale aanduiding: {{kadastrale_aanduiding}}
 Perceeloppervlak: {{kadastraal_oppervlak}}
-Aantekeningen: Voor zover bekend geen bijzondere aantekeningen
+Aantekeningen: ${aantekeningenKadastraal}
+
+TE TAXEREN BELANG
+
+Te taxeren belang: ${teTaxerenBelang}
 
 EIGENDOMSSITUATIE
 
-Eigendomssituatie: ${dossier.stap5.eigendomssituatie || 'Volledig eigendom'}
+Eigendomssituatie: ${dossier.stap5.eigendomssituatie || 'Volledig eigendom'}`
+
+  if (toelichtingEigendom) {
+    template += `\n\nToelichting eigendom: ${toelichtingEigendom}`
+  }
+
+  template += `
 
 ERFPACHT
 
@@ -388,6 +444,9 @@ Voor zover bekend zijn er geen belemmeringen die de vrije overdracht of exploita
 export function generateD2_Publiekrechtelijk(dossier: Dossier): string {
   if (!dossier.stap5) return ''
 
+  const gebruikConform = dossier.stap5.gebruikConformOmgevingsplan || 'Het huidige gebruik is in overeenstemming met het omgevingsplan.'
+  const bijzondereBep = dossier.stap5.bijzonderePubliekrechtelijkeBepalingen || 'Voor zover bekend zijn geen bijzondere publiekrechtelijke bepalingen van toepassing.'
+
   const template = `D.2 PUBLIEKRECHTELIJKE ASPECTEN
 
 OMGEVINGSPLAN
@@ -396,7 +455,7 @@ Gemeente: {{gemeente}}
 Bestemmingsplan: ${dossier.stap5.bestemmingsplan || 'Conform bestemming'}
 Bestemming: [bestemming]
 
-Het huidige gebruik is in overeenstemming met het omgevingsplan.
+${gebruikConform}
 
 MONUMENT
 
@@ -406,29 +465,47 @@ VOORKEURSRECHT
 
 Voorkeursrecht: Niet van toepassing
 
-Voor zover bekend zijn geen bijzondere publiekrechtelijke bepalingen van toepassing.`
+BIJZONDERE PUBLIEKRECHTELIJKE BEPALINGEN
+
+${bijzondereBep}`
 
   return replacePlaceholders(template, dossier)
 }
 
 export function generateE1_LocatieOverzicht(dossier: Dossier): string {
-  const template = `E.1 LOCATIEOVERZICHT
+  const omgeving = dossier.stap2?.omgevingEnBelendingen || ''
+  const ligging = dossier.stap2?.ligging?.replace(/_/g, ' ') || ''
+
+  let template = `E.1 LOCATIEOVERZICHT
 
 Het object is gelegen in {{plaats}}, gemeente {{gemeente}}, provincie {{provincie}}.
 
 LIGGING
 
-Het object is gelegen in {{plaats}}. De omgeving kenmerkt zich door [omschrijving].`
+Het object is gelegen in {{plaats}}.`
+
+  if (ligging) {
+    template += ` De omgeving kan worden getypeerd als ${ligging}.`
+  }
+
+  if (omgeving) {
+    template += `\n\nOMGEVING EN BELENDINGEN\n\n${omgeving}`
+  }
 
   return replacePlaceholders(template, dossier)
 }
 
 export function generateE2_LocatieInformatie(dossier: Dossier): string {
-  const template = `E.2 LOCATIE INFORMATIE
+  const voorzieningenTekst = dossier.stap2?.voorzieningen
+    || 'In de directe omgeving zijn diverse voorzieningen aanwezig zoals winkels, horeca, openbaar vervoer en parkeervoorzieningen.'
+  const verwachteOntwikkelingen = dossier.stap2?.verwachteOntwikkelingen || ''
+  const locatiescore = dossier.stap2?.locatiescore || ''
+
+  let template = `E.2 LOCATIE INFORMATIE
 
 VOORZIENINGEN
 
-In de directe omgeving zijn diverse voorzieningen aanwezig zoals winkels, horeca, openbaar vervoer en parkeervoorzieningen.
+${voorzieningenTekst}
 
 BEREIKBAARHEID
 
@@ -441,16 +518,29 @@ Parkeren openbare weg: [omschrijving]
 
 LOCATIESCORE
 
-Locatiescore: [score]
-WalkScore: [score]
+Locatiescore: ${locatiescore || '[score]'}
+WalkScore: [score]`
 
-Alles overwegende is de locatie als goed aan te duiden.`
+  if (verwachteOntwikkelingen) {
+    template += `\n\nVERWACHTE ONTWIKKELINGEN\n\n${verwachteOntwikkelingen}`
+  }
+
+  template += `\n\nAlles overwegende is de locatie als goed aan te duiden.`
 
   return replacePlaceholders(template, dossier)
 }
 
 export function generateF1_ObjectInformatie(dossier: Dossier): string {
-  const template = `F.1 OBJECTINFORMATIE
+  const constructie = dossier.stap6?.constructie || ''
+  const terrein = dossier.stap6?.terrein || ''
+  const gevels = dossier.stap6?.gevels || ''
+  const afwerking = dossier.stap6?.afwerking || ''
+  const beveiliging = dossier.stap6?.beveiliging || ''
+  const toelichtingOnderhoud = dossier.stap6?.toelichtingOnderhoud || ''
+  const toelichtingParkeren = dossier.stap6?.toelichtingParkeren || ''
+  const toelichtingFunctionaliteit = dossier.stap6?.toelichtingFunctionaliteit || ''
+
+  let template = `F.1 OBJECTINFORMATIE
 
 ALGEMEEN
 
@@ -462,7 +552,17 @@ BOUWKUNDIGE KENMERKEN
 
 Bouwjaar: {{bouwjaar}}
 Perceeloppervlak: {{perceeloppervlak}}
-Aantal bouwlagen: {{aantal_bouwlagen}}
+Aantal bouwlagen: {{aantal_bouwlagen}}`
+
+  if (constructie) {
+    template += `\nConstructie: ${constructie}`
+  }
+
+  if (terrein) {
+    template += `\nTerrein: ${terrein}`
+  }
+
+  template += `
 
 BOUWKUNDIGE STAAT
 
@@ -470,26 +570,54 @@ Bouwkundige staat: {{exterieur_staat}}
 Onderhoud buiten: {{exterieur_staat}}
 Onderhoud binnen: {{interieur_staat}}
 
-Gevels: [gevels]
+Gevels: ${gevels || '[gevels]'}
 Dakbedekking: {{dakbedekking}}
 Fundering: {{fundering}}
 Vloeren: [vloeren]
-Installaties: {{installaties}}
+Installaties: {{installaties}}`
+
+  if (afwerking) {
+    template += `\nAfwerking: ${afwerking}`
+  }
+
+  if (beveiliging) {
+    template += `\nBeveiliging: ${beveiliging}`
+  }
+
+  template += `
 
 ONDERHOUD
 
 Het onderhoud van het exterieur wordt gekwalificeerd als {{exterieur_staat}}.
-Het onderhoud van het interieur wordt gekwalificeerd als {{interieur_staat}}.
+Het onderhoud van het interieur wordt gekwalificeerd als {{interieur_staat}}.`
 
-Normonderhoudstype: [type]
+  if (toelichtingOnderhoud) {
+    template += `\n\n${toelichtingOnderhoud}`
+  } else {
+    template += `\n\nNormonderhoudstype: [type]`
+  }
+
+  template += `
 
 PARKEREN EIGEN TERREIN
 
-Parkeren eigen terrein: [aantal parkeerplaatsen]
+Parkeren eigen terrein: [aantal parkeerplaatsen]`
+
+  if (toelichtingParkeren) {
+    template += `\n${toelichtingParkeren}`
+  }
+
+  template += `
 
 FUNCTIONALITEIT
 
-Functionaliteit: [beoordeling]
+Functionaliteit: [beoordeling]`
+
+  if (toelichtingFunctionaliteit) {
+    template += `\n${toelichtingFunctionaliteit}`
+  }
+
+  template += `
 
 Alles overwegende is de bouwkundige staat als {{exterieur_staat}} aan te duiden.`
 
@@ -511,17 +639,37 @@ Verhouding VVO/BVO: [percentage]%`
 }
 
 export function generateF3_Renovatie(dossier: Dossier): string {
-  return `F.3 RENOVATIE
+  const renovatiejaar = dossier.stap3?.renovatiejaar
+  const bouwjaar = dossier.stap3?.bouwjaar
 
-Voor zover bekend zijn er geen recente renovaties uitgevoerd.
+  if (!renovatiejaar) {
+    return `F.3 RENOVATIE
 
-[Indien wel: omschrijving renovatie en jaar]`
+Voor zover bekend zijn er geen recente renovaties uitgevoerd aan het object.`
+  }
+
+  let tekst = `F.3 RENOVATIE
+
+Het object is in ${renovatiejaar} gerenoveerd.`
+
+  if (bouwjaar && renovatiejaar > bouwjaar) {
+    const ouderdom = renovatiejaar - bouwjaar
+    tekst += ` Ten tijde van de renovatie was het object circa ${ouderdom} jaar oud.`
+  }
+
+  tekst += `
+
+De renovatie heeft bijgedragen aan de bouwkundige kwaliteit en functionele bruikbaarheid van het object.`
+
+  return tekst
 }
 
 export function generateF4_Milieuaspecten(dossier: Dossier): string {
   if (!dossier.stap7) return ''
 
-  return `F.4 MILIEUASPECTEN EN BEOORDELING
+  const omschrijvingMilieuaspecten = dossier.stap6?.omschrijvingMilieuaspecten || ''
+
+  let tekst = `F.4 MILIEUASPECTEN EN BEOORDELING
 
 ASBEST
 
@@ -533,33 +681,62 @@ Bodemverontreiniging: ${dossier.stap7.bodemverontreiniging === 'ja' ? 'Aanwezig'
 
 ENERGIELABEL
 
-Energielabel: ${dossier.stap7.energielabel || 'Onbekend'}
+Energielabel: ${dossier.stap7.energielabel || 'Onbekend'}`
 
-De taxateur gaat ervan uit dat er geen milieuverontreiniging aanwezig is die de waarde of het gebruik van het object negatief beïnvloedt. Er heeft geen milieukundig onderzoek plaatsgevonden.`
+  if (omschrijvingMilieuaspecten) {
+    tekst += `\n\nOVERIGE MILIEUASPECTEN\n\n${omschrijvingMilieuaspecten}`
+  }
+
+  tekst += `\n\nDe taxateur gaat ervan uit dat er geen milieuverontreiniging aanwezig is die de waarde of het gebruik van het object negatief beïnvloedt. Er heeft geen milieukundig onderzoek plaatsgevonden.`
+
+  return tekst
 }
 
 export function generateG1_GebruikObject(dossier: Dossier): string {
   const variant = getRapportVariant(dossier)
-  
+  const huidigGebruik = dossier.stap1?.huidigGebruik || ''
+  const voorgenomenGebruik = dossier.stap1?.voorgenomenGebruik || ''
+
+  let tekst: string
+
   if (variant === 'verhuurd_belegging') {
-    return `G.1 GEBRUIK OBJECT
+    tekst = `G.1 GEBRUIK OBJECT
 
-Het object wordt verhuurd en is in gebruik voor de bestemming waarvoor het is ontworpen.
+Het object wordt verhuurd en is in gebruik voor de bestemming waarvoor het is ontworpen.`
 
-Het object is geschikt voor verhuur aan diverse typen huurders binnen de huidige bestemming.`
-  }
-  
-  return `G.1 GEBRUIK OBJECT
+    if (huidigGebruik) {
+      tekst += `\n\nHuidig gebruik: ${huidigGebruik}`
+    }
+
+    tekst += `\n\nHet object is geschikt voor verhuur aan diverse typen huurders binnen de huidige bestemming.`
+  } else {
+    tekst = `G.1 GEBRUIK OBJECT
 
 Het object wordt gebruikt conform de bestemming door de eigenaar voor eigen bedrijfsvoering.`
+
+    if (huidigGebruik) {
+      tekst += `\n\nHuidig gebruik: ${huidigGebruik}`
+    }
+  }
+
+  if (voorgenomenGebruik) {
+    tekst += `\n\nVoorgenomen gebruik: ${voorgenomenGebruik}`
+  }
+
+  return tekst
 }
 
 export function generateG2_AlternatieveAanwendbaarheid(dossier: Dossier): string {
-  return `G.2 ALTERNATIEVE AANWENDBAARHEID
+  const huidigGebruik = dossier.stap1?.huidigGebruik || 'het huidige gebruik conform de bestemming'
+  const voorgenomenGebruik = dossier.stap1?.voorgenomenGebruik || ''
+
+  let tekst = `G.2 ALTERNATIEVE AANWENDBAARHEID
 
 HUIDIG GEBRUIK
 
 Het object is geschikt voor de huidige bestemming.
+
+Huidig gebruik: ${huidigGebruik}
 
 Het taxatieoordeel is gebaseerd op de huidige feitelijke situatie en de daarbij behorende bestemming.
 
@@ -570,6 +747,12 @@ De hoogste en beste use (HABU) wordt bereikt met het huidige gebruik conform de 
 ALTERNATIEVE AANWENDBAARHEID
 
 Het object is geschikt voor de huidige bestemming. De hoogste en beste use (HABU) wordt bereikt met het huidige gebruik conform de bestemming.`
+
+  if (voorgenomenGebruik) {
+    tekst += `\n\nVOORGENOMEN GEBRUIK\n\n${voorgenomenGebruik}`
+  }
+
+  return tekst
 }
 
 export function generateG2_Huursituatie(dossier: Dossier): string {
@@ -703,38 +886,104 @@ BIJZONDERE WAARDECOMPONENTEN
 export function generateI_Duurzaamheid(dossier: Dossier): string {
   if (!dossier.stap7) return ''
 
-  const template = `I. DUURZAAMHEID
+  const s10 = dossier.stap10
+  const energielabel = dossier.stap7.energielabel || 'Onbekend'
+  const epcBeng = dossier.stap7.epcBengWaarde || ''
+  const installaties = dossier.stap6?.installaties || ''
+
+  let tekst = `I. DUURZAAMHEID
 
 ENERGIELABEL
 
-Energielabel: {{energielabel}}
+Energielabel: ${energielabel}`
 
-DUURZAAMHEIDSASPECTEN
+  if (epcBeng) {
+    tekst += `\nEPC/BENG-waarde: ${epcBeng}`
+  }
 
-Flexibiliteit: [beoordeling]
+  tekst += `
+
+DUURZAAMHEIDSASPECTEN`
+
+  if (s10?.flexibiliteit) {
+    tekst += `\n\nFlexibiliteit: ${s10.flexibiliteit}`
+  } else {
+    tekst += `\n\nFlexibiliteit: [beoordeling]`
+  }
+
+  if (s10?.gebruikDuurzameMaterialen) {
+    tekst += `\nGebruik duurzame materialen: ${s10.gebruikDuurzameMaterialen}`
+  }
+
+  tekst += `
 Demontabel/herbruikbaar: [beoordeling]
 
 ECOLOGISCHE VOORZIENINGEN
 
 Ecologische voorzieningen: [omschrijving]
-Licht/ventilatie: [omschrijving]
+Licht/ventilatie: [omschrijving]`
+
+  if (s10?.overwegendLedVerlichting !== undefined) {
+    tekst += `\nOverwegend LED-verlichting: ${s10.overwegendLedVerlichting ? 'Ja' : 'Nee'}`
+  }
+
+  tekst += `
 
 WARMTEOPWEKKING
 
-Warmteopwekking: {{installaties}}
+Warmteopwekking: ${installaties || '[omschrijving]'}
 Verwarmingsafgifte: [omschrijving]
 
 LUCHTBEHANDELING
 
 Luchtbehandeling: [omschrijving]
 
-ISOLATIE
+ISOLATIE`
 
-Isolatie: [omschrijving]
+  if (s10?.isolatieDak || s10?.isolatieGevel || s10?.isolatieVloer || s10?.isolatieGlas) {
+    if (s10?.isolatieDak) tekst += `\nDak: ${s10.isolatieDak}`
+    if (s10?.isolatieGevel) tekst += `\nGevel: ${s10.isolatieGevel}`
+    if (s10?.isolatieVloer) tekst += `\nVloer: ${s10.isolatieVloer}`
+    if (s10?.isolatieGlas) tekst += `\nGlas: ${s10.isolatieGlas}`
+  } else {
+    tekst += `\nIsolatie: [omschrijving]`
+  }
 
-ZONNEPANELEN
+  tekst += `
 
-[Omschrijving zonnepanelen indien aanwezig]
+ZONNEPANELEN`
+
+  if (s10?.dakoppervlakGeschiktVoorZonnepanelen) {
+    tekst += `\nDakoppervlak geschikt voor zonnepanelen: ${s10.dakoppervlakGeschiktVoorZonnepanelen}`
+  } else {
+    tekst += `\n[Omschrijving zonnepanelen indien aanwezig]`
+  }
+
+  if (s10?.aantalOplaadpunten != null) {
+    tekst += `\n\nOPLAADPUNTEN\n\nAantal oplaadpunten (EV): ${s10.aantalOplaadpunten}`
+  }
+
+  if (s10?.duurzaamheidscertificaten) {
+    tekst += `\n\nDUURZAAMHEIDSCERTIFICATEN\n\n${s10.duurzaamheidscertificaten}`
+  }
+
+  if (s10?.klimaatrisicos) {
+    tekst += `\n\nKLIMAATRISICO'S\n\n${s10.klimaatrisicos}`
+  }
+
+  if (s10?.greenLease !== undefined) {
+    tekst += `\n\nGREEN LEASE\n\nGreen lease: ${s10.greenLease ? 'Van toepassing' : 'Niet van toepassing'}`
+  }
+
+  if (s10?.maatregelenVerduurzaming) {
+    tekst += `\n\nMAAT­REGELEN VERDUURZAMING\n\n${s10.maatregelenVerduurzaming}`
+  }
+
+  if (s10?.marktwaardeNaVerduurzaming) {
+    tekst += `\n\nMARKTWAARDE NA VERDUURZAMING\n\nIndicatieve marktwaarde na verduurzaming: ${formatBedrag(s10.marktwaardeNaVerduurzaming)}`
+  }
+
+  tekst += `
 
 TOEKOMSTBESTENDIGHEID
 
@@ -746,7 +995,7 @@ DUURZAAMHEIDSDISCLAIMER
 
 De taxateur gaat ervan uit dat de verstrekte informatie over duurzaamheid en energielabel correct is. De taxateur heeft geen specifiek onderzoek gedaan naar de energetische kwaliteit van het object. De informatie is gebaseerd op het energielabel en visuele waarneming tijdens de inspectie.`
 
-  return replacePlaceholders(template, dossier)
+  return tekst
 }
 
 export function generateJ_AlgemeneUitgangspunten(dossier: Dossier): string {

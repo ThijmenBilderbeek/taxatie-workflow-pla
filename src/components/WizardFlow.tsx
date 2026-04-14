@@ -2360,6 +2360,65 @@ function Stap9({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
           rows={4}
         />
       </div>
+
+      <div className="border-t pt-4">
+        <p className="text-sm font-semibold mb-3">SWOT-analyse</p>
+        <p className="text-xs text-muted-foreground mb-4">Voer per onderdeel de punten in (één per regel). AI-suggesties worden ondersteund.</p>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="swotSterktes">Sterktes</Label>
+            {renderVeld('swotSterktes', (
+              <Textarea
+                id="swotSterktes"
+                placeholder="Één sterkte per regel..."
+                value={data.swotSterktes || ''}
+                onChange={(e) => onChange({ ...data, swotSterktes: e.target.value })}
+                rows={4}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="swotZwaktes">Zwaktes</Label>
+            {renderVeld('swotZwaktes', (
+              <Textarea
+                id="swotZwaktes"
+                placeholder="Één zwakte per regel..."
+                value={data.swotZwaktes || ''}
+                onChange={(e) => onChange({ ...data, swotZwaktes: e.target.value })}
+                rows={4}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="swotKansen">Kansen</Label>
+            {renderVeld('swotKansen', (
+              <Textarea
+                id="swotKansen"
+                placeholder="Één kans per regel..."
+                value={data.swotKansen || ''}
+                onChange={(e) => onChange({ ...data, swotKansen: e.target.value })}
+                rows={4}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="swotBedreigingen">Bedreigingen</Label>
+            {renderVeld('swotBedreigingen', (
+              <Textarea
+                id="swotBedreigingen"
+                placeholder="Één bedreiging per regel..."
+                value={data.swotBedreigingen || ''}
+                onChange={(e) => onChange({ ...data, swotBedreigingen: e.target.value })}
+                rows={4}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

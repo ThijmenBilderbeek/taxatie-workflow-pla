@@ -41,6 +41,10 @@ const VELD_GETTERS_HISTORISCH: Record<string, VeldGetter<HistorischRapport>> = {
   aannames: (r) => r.wizardData?.stap9?.aannames,
   voorbehouden: (r) => r.wizardData?.stap9?.voorbehouden,
   bijzondereOmstandigheden: (r) => r.wizardData?.stap9?.bijzondereOmstandigheden,
+  swotSterktes: (r) => r.wizardData?.stap9?.swotSterktes,
+  swotZwaktes: (r) => r.wizardData?.stap9?.swotZwaktes,
+  swotKansen: (r) => r.wizardData?.stap9?.swotKansen,
+  swotBedreigingen: (r) => r.wizardData?.stap9?.swotBedreigingen,
 }
 
 const VELD_GETTERS_HUIDIG: Record<string, VeldGetter<Partial<Dossier>>> = {
@@ -58,6 +62,10 @@ const VELD_GETTERS_HUIDIG: Record<string, VeldGetter<Partial<Dossier>>> = {
   aannames: (d) => d.stap9?.aannames,
   voorbehouden: (d) => d.stap9?.voorbehouden,
   bijzondereOmstandigheden: (d) => d.stap9?.bijzondereOmstandigheden,
+  swotSterktes: (d) => d.stap9?.swotSterktes,
+  swotZwaktes: (d) => d.stap9?.swotZwaktes,
+  swotKansen: (d) => d.stap9?.swotKansen,
+  swotBedreigingen: (d) => d.stap9?.swotBedreigingen,
 }
 
 async function getEerdereFeedback(veldNaam: string): Promise<VeldFeedbackContext> {
@@ -109,7 +117,7 @@ export async function getAISuggestiesVoorStap(
     5: ['eigendomssituatie', 'erfpacht', 'zakelijkeRechten', 'kwalitatieveVerplichtingen', 'bestemmingsplan'],
     6: ['fundering', 'dakbedekking', 'installaties', 'achterstalligOnderhoudBeschrijving'],
     7: ['toelichting'],
-    9: ['aannames', 'voorbehouden', 'bijzondereOmstandigheden'],
+    9: ['aannames', 'voorbehouden', 'bijzondereOmstandigheden', 'swotSterktes', 'swotZwaktes', 'swotKansen', 'swotBedreigingen'],
   }
 
   const veldNamen = veldNamenPerStap[stap]
@@ -162,7 +170,10 @@ export async function getAISuggestiesVoorStap(
   const stap1 = huidigeDossier.stap1
   const stap2 = huidigeDossier.stap2
   const stap3 = huidigeDossier.stap3
+  const stap4 = huidigeDossier.stap4
+  const stap6 = huidigeDossier.stap6
   const stap7 = huidigeDossier.stap7
+  const stap8 = huidigeDossier.stap8
 
   const adres = stap2
     ? `${stap2.straatnaam ?? ''} ${stap2.huisnummer ?? ''}, ${stap2.plaats ?? ''}`.trim()
@@ -176,6 +187,16 @@ export async function getAISuggestiesVoorStap(
     coordinaten: stap2?.coordinaten,
     energielabel: stap7?.energielabel,
     gebruiksdoel: stap1?.gebruiksdoel,
+    // Extended context for SWOT suggestions
+    ligging: stap2?.ligging,
+    bereikbaarheid: stap2?.bereikbaarheid,
+    locatiescore: stap2?.locatiescore,
+    exterieurStaat: stap6?.exterieurStaat,
+    interieurStaat: stap6?.interieurStaat,
+    achterstalligOnderhoud: stap6?.achterstalligOnderhoud,
+    verhuurd: stap4?.verhuurd,
+    huurprijsPerJaar: stap4?.huurprijsPerJaar,
+    marktwaarde: stap8?.marktwaarde,
   }
 
   // Process each field

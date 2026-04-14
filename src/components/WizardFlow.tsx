@@ -38,6 +38,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { AdresKaart } from './AdresKaart'
 import { parsePdfToRapport } from '@/lib/pdfParser'
 import { extractDocumentKnowledge } from '@/lib/documentKnowledgeExtractor'
+import { useKantoor } from '@/hooks/useKantoor'
 
 export function WizardFlow({
   activeDossierId,
@@ -2414,9 +2415,10 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
     return INZAGE_LABELS.map((label) => ({ label, status: 'N.v.t.' as InzageStatus }))
   }
 
-  const inzageItems = getInzageItems()
-
+  const { kantoorId } = useKantoor()
   const [uploadingLabel, setUploadingLabel] = useState<string | null>(null)
+
+  const inzageItems = getInzageItems()
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
 
   function updateInzageItem(label: string, patch: Partial<InzageItem>) {
@@ -2465,6 +2467,7 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
         }
         const rows = chunksMetTagging.map((c) => ({
           user_id: user.id,
+          kantoor_id: kantoorId ?? null,
           document_id: c.documentId,
           chapter: c.chapter,
           subchapter: c.subchapter,
@@ -2490,6 +2493,39 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
         const { error } = await supabase.from('document_chunks').insert(rows)
         if (error) {
           console.error('[Inzage] document_chunks insert error:', error)
+        } else {
+          // Fire-and-forget: generate embeddings async so upload UX is not delayed
+          void (async () => {
+            const BATCH_SIZE = 5
+            for (let i = 0; i < chunksMetTagging.length; i += BATCH_SIZE) {
+              const batch = chunksMetTagging.slice(i, i + BATCH_SIZE)
+              await Promise.all(batch.map(async (c) => {
+                try {
+                  const text = c.cleanText || c.rawText
+                  if (!text) return
+                  const { data: embData, error: embError } = await supabase.functions.invoke<{ embedding?: number[] }>(
+                    'openai-classify',
+                    { body: { text, generateEmbedding: true } }
+                  )
+                  if (embError || !embData?.embedding) {
+                    console.warn('[Inzage] embedding generatie mislukt voor chunk:', c.chapter)
+                    return
+                  }
+                  const { error: updateError } = await supabase
+                    .from('document_chunks')
+                    .update({ embedding: embData.embedding })
+                    .eq('document_id', c.documentId)
+                    .eq('chapter', c.chapter)
+                    .eq('subchapter', c.subchapter)
+                  if (updateError) {
+                    console.warn('[Inzage] embedding update mislukt voor chunk:', c.chapter, updateError)
+                  }
+                } catch (err) {
+                  console.warn('[Inzage] embedding generatie fout voor chunk:', c.chapter, err)
+                }
+              }))
+            }
+          })()
         }
       }
 

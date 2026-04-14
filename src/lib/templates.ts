@@ -652,11 +652,9 @@ Voor zover bekend zijn er geen recente renovaties uitgevoerd aan het object.`
 
 Het object is in ${renovatiejaar} gerenoveerd.`
 
-  if (bouwjaar) {
+  if (bouwjaar && renovatiejaar > bouwjaar) {
     const ouderdom = renovatiejaar - bouwjaar
-    if (ouderdom > 0) {
-      tekst += ` Ten tijde van de renovatie was het object circa ${ouderdom} jaar oud.`
-    }
+    tekst += ` Ten tijde van de renovatie was het object circa ${ouderdom} jaar oud.`
   }
 
   tekst += `
@@ -961,7 +959,7 @@ ZONNEPANELEN`
     tekst += `\n[Omschrijving zonnepanelen indien aanwezig]`
   }
 
-  if (s10?.aantalOplaadpunten !== undefined && s10.aantalOplaadpunten !== null) {
+  if (s10?.aantalOplaadpunten != null) {
     tekst += `\n\nOPLAADPUNTEN\n\nAantal oplaadpunten (EV): ${s10.aantalOplaadpunten}`
   }
 

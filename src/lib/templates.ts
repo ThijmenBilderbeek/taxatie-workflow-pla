@@ -625,22 +625,160 @@ ${bijzondereBep}`
   return replacePlaceholders(template, dossier)
 }
 
-export function generateE1_LocatieOverzicht(dossier: Dossier): string {
-  const omgeving = dossier.stap2?.omgevingEnBelendingen || ''
-  const ligging = dossier.stap2?.ligging?.replace(/_/g, ' ') || ''
+/** Objecttypen die als woning/residentieel worden aangemerkt. */
+const RESIDENTIEEL_TYPES = ['woning', 'appartement'] as const
 
-  let template = `E.1 LOCATIEOVERZICHT
+/** Professionele beschrijving per liggingstype voor gebruik in locatieteksten. */
+const LIGGING_BESCHRIJVING: Record<string, string> = {
+  binnenstad: 'een centrale, goed ontsloten locatie in het stadscentrum',
+  woonwijk: 'een woonlocatie in een stedelijke omgeving met nabijgelegen voorzieningen',
+  bedrijventerrein: 'een functionele werklocatie op een bedrijventerrein',
+  buitengebied: 'een locatie in het buitengebied, buiten de bebouwde kom',
+  gemengd: 'een gemengd gebied met zowel woon- als bedrijfsfuncties',
+}
 
-Het object is gelegen in {{plaats}}, gemeente {{gemeente}}, provincie {{provincie}}.
+/** Basis locatiekwalificatie per liggingstype. */
+const LIGGING_KWALIFICATIE: Record<string, string> = {
+  binnenstad: 'goed',
+  woonwijk: 'goed',
+  bedrijventerrein: 'redelijk tot goed',
+  buitengebied: 'matig',
+  gemengd: 'redelijk',
+}
 
-LIGGING
+/** Verwijdert een eventueel voorloopstreepje (bullet) uit een tekstregel. */
+function removeBullet(text: string): string {
+  return text.replace(/^-\s*/, '')
+}
 
-Het object is gelegen in {{plaats}}.`
+/**
+ * Genereert een syntheserende locatiebeoordeling op basis van stap2-data,
+ * objectschaal (stap3) en SWOT-context (stap9).
+ * Wordt gebruikt als afsluiting van E.2.
+ */
+function generateLocatieBeoordeling(dossier: Dossier): string {
+  const ligging = dossier.stap2?.ligging || ''
+  const bereikbaarheid = dossier.stap2?.bereikbaarheid || ''
+  const voorzieningen = dossier.stap2?.voorzieningen || ''
+  const verwachteOntwikkelingen = dossier.stap2?.verwachteOntwikkelingen || ''
+  const locatiescore = dossier.stap2?.locatiescore || ''
+  const bvo = dossier.stap3?.bvo
+  const typeObject = dossier.stap1?.typeObject || ''
 
-  if (ligging) {
-    template += ` De omgeving kan worden getypeerd als ${ligging}.`
+  const swotSterktes = toBulletList(dossier.stap9?.swotSterktes)
+  const swotZwaktes = toBulletList(dossier.stap9?.swotZwaktes)
+  const swotKansen = toBulletList(dossier.stap9?.swotKansen)
+  const swotBedreigingen = toBulletList(dossier.stap9?.swotBedreigingen)
+
+  const objectLabel = (RESIDENTIEEL_TYPES as readonly string[]).includes(typeObject) ? 'de woning' : 'het object'
+
+  // Determine base qualification from ligging, then refine
+  let kwalificatie = LIGGING_KWALIFICATIE[ligging] || 'redelijk'
+
+  // Explicit locatiescore overrides the derived qualification
+  if (locatiescore) {
+    kwalificatie = locatiescore
+  } else {
+    // Adjust downward when SWOT signals weaknesses or threats
+    const heeftNegatieveSWOT = swotZwaktes.length > 0 || swotBedreigingen.length > 0
+    if (heeftNegatieveSWOT && kwalificatie === 'goed') {
+      kwalificatie = 'redelijk tot goed'
+    }
   }
 
+  let output = `LOCATIEBEOORDELING\n\n`
+
+  // Opening sentence: ligging + objecttype context
+  if (ligging) {
+    const liggingBeschrijving = LIGGING_BESCHRIJVING[ligging] || ligging.replace(/_/g, ' ')
+    output += `De locatie van ${objectLabel} betreft ${liggingBeschrijving}.`
+  } else {
+    output += `De locatie van ${objectLabel} is beoordeeld op basis van beschikbare locatiegegevens.`
+  }
+
+  // Bereikbaarheid
+  if (bereikbaarheid) {
+    output += ` De bereikbaarheid per auto is ${bereikbaarheid}.`
+  }
+
+  // Voorzieningen (condensed)
+  if (voorzieningen) {
+    output += ` Voorzieningen in de directe omgeving zijn aanwezig.`
+  }
+
+  // Scale context
+  if (bvo) {
+    if (bvo > 5000) {
+      output += ` Met een bruto vloeroppervlak van ${formatOppervlakte(bvo)} betreft het een grootschalig object, waarvoor een diepere markt bestaat in stedelijke locaties.`
+    } else if (bvo < 300) {
+      output += ` Het betreft een kleinschalig object met een bruto vloeroppervlak van ${formatOppervlakte(bvo)}.`
+    }
+  }
+
+  // SWOT strengths as supporting argument (if available)
+  if (swotSterktes.length > 0) {
+    const sterktePunt = removeBullet(swotSterktes[0])
+    output += ` Een positief kenmerk van de locatie is: ${sterktePunt}.`
+  }
+
+  // Future developments
+  if (verwachteOntwikkelingen) {
+    output += `\n\nDe verwachte ontwikkelingen in de omgeving zijn van invloed op de toekomstige locatiekwaliteit en verdienen opvolging.`
+  }
+
+  // SWOT kansen as opportunities
+  if (swotKansen.length > 0) {
+    const kansPunt = removeBullet(swotKansen[0])
+    output += ` Een relevant kansen-aspect is: ${kansPunt}.`
+  }
+
+  // SWOT weaknesses/threats as attention points
+  const aandachtspunten: string[] = []
+  if (swotZwaktes.length > 0) aandachtspunten.push(removeBullet(swotZwaktes[0]))
+  if (swotBedreigingen.length > 0) aandachtspunten.push(removeBullet(swotBedreigingen[0]))
+
+  if (aandachtspunten.length > 0) {
+    output += `\n\nAandachtspunten voor de locatiekwaliteit betreffen: ${aandachtspunten.join('; ')}.`
+  }
+
+  // Final conclusion
+  output += `\n\nAlles overwegende wordt de locatiekwaliteit gekwalificeerd als ${kwalificatie}.`
+
+  return output
+}
+
+export function generateE1_LocatieOverzicht(dossier: Dossier): string {
+  const omgeving = dossier.stap2?.omgevingEnBelendingen || ''
+  const ligging = dossier.stap2?.ligging || ''
+  const liggingBeschrijving = LIGGING_BESCHRIJVING[ligging] || ligging.replace(/_/g, ' ')
+  const typeObject = dossier.stap1?.typeObject || ''
+  const gebruiksdoel = dossier.stap1?.gebruiksdoel?.replace(/_/g, ' ') || ''
+  const bvo = dossier.stap3?.bvo
+
+  let template = `E.1 LOCATIEOVERZICHT\n\n`
+  template += `Het object is gelegen aan {{adres}}, {{postcode}} {{plaats}}, gemeente {{gemeente}}, provincie {{provincie}}.\n\n`
+
+  // Object type context
+  if (typeObject) {
+    const isWoning = (RESIDENTIEEL_TYPES as readonly string[]).includes(typeObject)
+    const objectLabel = isWoning ? 'De woning betreft' : `Het object betreft`
+    const gebruikLabel = gebruiksdoel || typeObject
+    if (bvo) {
+      template += `${objectLabel} een ${gebruikLabel} met een bruto vloeroppervlak van {{bvo}}.\n\n`
+    } else {
+      template += `${objectLabel} een ${gebruikLabel}.\n\n`
+    }
+  }
+
+  // Ligging section
+  template += `LIGGING\n\n`
+  if (liggingBeschrijving) {
+    template += `Het object is gelegen in {{gemeente}} op ${liggingBeschrijving}.`
+  } else {
+    template += `Het object is gelegen in {{gemeente}}.`
+  }
+
+  // Omgeving en belendingen
   if (omgeving) {
     template += `\n\nOMGEVING EN BELENDINGEN\n\n${omgeving}`
   }
@@ -649,36 +787,71 @@ Het object is gelegen in {{plaats}}.`
 }
 
 export function generateE2_LocatieInformatie(dossier: Dossier): string {
-  const voorzieningenTekst = dossier.stap2?.voorzieningen
-    || 'In de directe omgeving zijn diverse voorzieningen aanwezig zoals winkels, horeca, openbaar vervoer en parkeervoorzieningen.'
+  const voorzieningen = dossier.stap2?.voorzieningen || ''
   const verwachteOntwikkelingen = dossier.stap2?.verwachteOntwikkelingen || ''
   const locatiescore = dossier.stap2?.locatiescore || ''
+  const bereikbaarheid = dossier.stap2?.bereikbaarheid || ''
+  const ligging = dossier.stap2?.ligging || ''
+  const toelichtingParkeren = dossier.stap6?.toelichtingParkeren || ''
 
-  let template = `E.2 LOCATIE INFORMATIE
+  // Smart OV bereikbaarheid fallback based on ligging type
+  const ovFallback: Record<string, string> = {
+    binnenstad: 'goed — meerdere bus- en tramlijnen op loopafstand',
+    woonwijk: 'redelijk tot goed — diverse bushaltes in de nabijheid',
+    bedrijventerrein: 'matig — beperkt openbaar vervoer in de directe omgeving',
+    buitengebied: 'matig tot slecht — weinig tot geen openbaar vervoer aanwezig',
+    gemengd: 'redelijk — enige busverbindingen beschikbaar',
+  }
+  const ovBereikbaarheid = ligging && ovFallback[ligging] ? ovFallback[ligging] : 'conform ligging in de omgeving'
 
-VOORZIENINGEN
+  // Parking description: use stap6 toelichting if available, otherwise ligging-based fallback
+  const parkerenFallback: Record<string, string> = {
+    binnenstad: 'parkeren op de openbare weg is beperkt beschikbaar; betaald parkeren van toepassing in de directe omgeving',
+    woonwijk: 'parkeren op de openbare weg is doorgaans mogelijk in de directe omgeving',
+    bedrijventerrein: 'voldoende parkeermogelijkheden aanwezig op het terrein en in de directe omgeving',
+    buitengebied: 'ruime parkeermogelijkheden beschikbaar op eigen terrein en langs de rijweg',
+    gemengd: 'parkeermogelijkheden aanwezig, beschikbaarheid kan variëren per dagdeel',
+  }
+  let parkerenOmschrijving: string
+  if (toelichtingParkeren) {
+    parkerenOmschrijving = toelichtingParkeren
+  } else if (ligging && parkerenFallback[ligging]) {
+    parkerenOmschrijving = parkerenFallback[ligging]
+  } else {
+    parkerenOmschrijving = 'parkeermogelijkheden in de directe omgeving aanwezig'
+  }
 
-${voorzieningenTekst}
+  let template = `E.2 LOCATIE INFORMATIE\n\n`
 
-BEREIKBAARHEID
+  // Voorzieningen
+  template += `VOORZIENINGEN\n\n`
+  template += voorzieningen
+    || 'In de directe omgeving zijn diverse voorzieningen aanwezig, waaronder winkels, horeca en openbaar vervoer.'
 
-Bereikbaarheid auto: {{bereikbaarheid}}
-Bereikbaarheid openbaar vervoer: [omschrijving]
+  // Bereikbaarheid
+  template += `\n\nBEREIKBAARHEID\n\n`
+  if (bereikbaarheid) {
+    template += `Bereikbaarheid per auto: ${bereikbaarheid}`
+  } else {
+    template += `Bereikbaarheid per auto: bereikbaarheid conform ligging`
+  }
+  template += `\nBereikbaarheid openbaar vervoer: ${ovBereikbaarheid}`
 
-PARKEREN OPENBARE WEG
+  // Parkeren
+  template += `\n\nPARKEREN\n\n${parkerenOmschrijving}`
 
-Parkeren openbare weg: [omschrijving]
+  // Locatiescore (only if filled in)
+  if (locatiescore) {
+    template += `\n\nLOCATIESCORE\n\nLocatiescore: ${locatiescore}`
+  }
 
-LOCATIESCORE
-
-Locatiescore: ${locatiescore || '[score]'}
-WalkScore: [score]`
-
+  // Verwachte ontwikkelingen
   if (verwachteOntwikkelingen) {
     template += `\n\nVERWACHTE ONTWIKKELINGEN\n\n${verwachteOntwikkelingen}`
   }
 
-  template += `\n\nAlles overwegende is de locatie als goed aan te duiden.`
+  // Synthesized locatiebeoordeling
+  template += `\n\n${generateLocatieBeoordeling(dossier)}`
 
   return replacePlaceholders(template, dossier)
 }

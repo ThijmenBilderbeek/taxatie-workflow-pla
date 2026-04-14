@@ -33,6 +33,10 @@ const MAX_STYLE_EXAMPLES = 2
 /** Minimale cosine similarity drempel voor semantisch zoeken (0-1). */
 export const SEMANTIC_MATCH_THRESHOLD = 0.7
 
+/** Kolommen die worden geselecteerd uit de document_chunks tabel. */
+const DOCUMENT_CHUNK_COLUMNS =
+  'id, document_id, chapter, subchapter, chunk_type, raw_text, clean_text, writing_function, tones, specificity, reuse_score, reuse_as_style_example, template_candidate, template_text, variables_detected, object_address, object_type, market_segment, city, region, metadata, created_at, updated_at'
+
 // ---------------------------------------------------------------------------
 // Public interface
 // ---------------------------------------------------------------------------
@@ -344,5 +348,42 @@ export async function getKennisbankContextForSectieSemantic(
   } catch (err) {
     console.warn('[kennisbankRetriever] Fout bij semantisch ophalen context, val terug op exacte match:', err)
     return getKennisbankContextForSectie(sectieKey, objectType, marketSegment)
+  }
+}
+
+/**
+ * Haalt document_chunks op die zijn gekoppeld aan een specifiek dossier via metadata.dossier_id.
+ * Bedoeld voor gebruik bij Inzage-documenten waarbij chunks worden getagd met het dossier-ID
+ * en het document-type (inzage label).
+ *
+ * @param dossierId - Het ID van het dossier
+ * @param documentType - Optioneel filter op het inzage label (bijv. 'Huurovereenkomsten')
+ * @returns Array van DocumentChunk objecten gekoppeld aan het dossier
+ */
+export async function getInzageChunksForDossier(
+  dossierId: string,
+  documentType?: string
+): Promise<DocumentChunk[]> {
+  try {
+    let query = supabase
+      .from('document_chunks')
+      .select(DOCUMENT_CHUNK_COLUMNS)
+      .filter('metadata->>dossier_id', 'eq', dossierId)
+      .order('created_at', { ascending: true })
+
+    if (documentType) {
+      query = query.filter('metadata->>document_type', 'eq', documentType)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      console.warn('[kennisbankRetriever] getInzageChunksForDossier fout:', error)
+      return []
+    }
+
+    return (data ?? []).map((row: Record<string, unknown>) => rowNaarChunk(row, MAX_CHUNK_CHARS))
+  } catch (err) {
+    console.warn('[kennisbankRetriever] getInzageChunksForDossier onverwachte fout:', err)
+    return []
   }
 }

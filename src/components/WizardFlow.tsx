@@ -22,6 +22,8 @@ import type {
   Vergunningen, 
   Waardering, 
   Aannames,
+  InzageItem,
+  InzageStatus,
   HistorischRapport,
   SimilarityInstellingen
 } from '@/types'
@@ -34,6 +36,8 @@ import { formatBedrag, formatOppervlakte, formatDatum } from '@/lib/fluxFormatte
 import { SuggestieFeedbackDialog } from './SuggestieFeedbackDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { AdresKaart } from './AdresKaart'
+import { parsePdfToRapport } from '@/lib/pdfParser'
+import { extractDocumentKnowledge } from '@/lib/documentKnowledgeExtractor'
 
 export function WizardFlow({
   activeDossierId,
@@ -436,7 +440,7 @@ export function WizardFlow({
           {currentStep === 6 && <Stap6 data={stap6} onChange={setStap6} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 7 && <Stap7 data={stap7} onChange={setStap7} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 8 && <Stap8 data={stap8} onChange={setStap8} />}
-          {currentStep === 9 && <Stap9 data={stap9} onChange={setStap9} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
+          {currentStep === 9 && <Stap9 data={stap9} onChange={setStap9} dossierId={activeDossierId} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 10 && (
             <Stap10
               results={similarityResults}
@@ -1928,6 +1932,32 @@ function Stap5({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
               />
             ))}
           </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="monument">Monument</Label>
+            {renderVeld('monument', (
+              <Textarea
+                id="monument"
+                placeholder="Bijv. geen, rijksmonument, gemeentelijk monument..."
+                value={data.monument || ''}
+                onChange={(e) => onChange({ ...data, monument: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="voorkeursrecht">Voorkeursrecht</Label>
+            {renderVeld('voorkeursrecht', (
+              <Textarea
+                id="voorkeursrecht"
+                placeholder="Bijv. niet van toepassing, gemeentelijk voorkeursrecht..."
+                value={data.voorkeursrecht || ''}
+                onChange={(e) => onChange({ ...data, voorkeursrecht: e.target.value })}
+                rows={2}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -2360,7 +2390,123 @@ function Stap8({ data, onChange }: { data: Partial<Waardering>; onChange: (data:
   )
 }
 
-function Stap9({ data, onChange, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void } & SuggestieProps) {
+function generateInzageDocumentId(dossierId: string, label: string): string {
+  return `inzage-${dossierId}-${label.toLowerCase().replace(/\s+/g, '-')}-${crypto.randomUUID()}`
+}
+
+function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void; dossierId?: string } & SuggestieProps) {
+  const INZAGE_LABELS: string[] = [
+    'Huurlijst',
+    'Huurovereenkomsten',
+    'Eigendomsbewijs',
+    'Kadastrale gegevens',
+    'Omgevingsplan',
+    'Omgevingsvergunning',
+    'Energielabel',
+    'Bodemonderzoek',
+    'Asbestonderzoek',
+    'Plattegronden',
+    'Overige',
+  ]
+
+  function getInzageItems(): InzageItem[] {
+    if (data.inzageItems && data.inzageItems.length > 0) return data.inzageItems
+    return INZAGE_LABELS.map((label) => ({ label, status: 'N.v.t.' as InzageStatus }))
+  }
+
+  const inzageItems = getInzageItems()
+
+  const [uploadingLabel, setUploadingLabel] = useState<string | null>(null)
+  const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+
+  function updateInzageItem(label: string, patch: Partial<InzageItem>) {
+    const updated = inzageItems.map((item) =>
+      item.label === label ? { ...item, ...patch } : item
+    )
+    onChange({ ...data, inzageItems: updated })
+  }
+
+  async function handleInzageUpload(label: string, file: File) {
+    if (!dossierId) {
+      toast.error('Sla het dossier eerst op voordat u documenten kunt uploaden.')
+      return
+    }
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Alleen PDF-bestanden zijn toegestaan.')
+      return
+    }
+    setUploadingLabel(label)
+    try {
+      const parsed = await parsePdfToRapport(file)
+      const fullText = parsed.rapportTeksten?.volledig ?? ''
+      if (!fullText.trim()) {
+        toast.error('Kon geen tekst uit het PDF-bestand lezen.')
+        return
+      }
+      const documentId = generateInzageDocumentId(dossierId, label)
+      const knowledge = extractDocumentKnowledge(fullText, documentId, {
+        documentType: label,
+      })
+
+      const chunksMetTagging = knowledge.chunks.map((chunk) => ({
+        ...chunk,
+        metadata: {
+          ...chunk.metadata,
+          dossier_id: dossierId,
+          document_type: label,
+        },
+      }))
+
+      if (chunksMetTagging.length > 0) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          toast.error('U moet ingelogd zijn om documenten op te slaan.')
+          return
+        }
+        const rows = chunksMetTagging.map((c) => ({
+          user_id: user.id,
+          document_id: c.documentId,
+          chapter: c.chapter,
+          subchapter: c.subchapter,
+          chunk_type: c.chunkType,
+          raw_text: c.rawText,
+          clean_text: c.cleanText,
+          writing_function: c.writingFunction,
+          tones: c.tones,
+          specificity: c.specificity,
+          reuse_score: c.reuseScore,
+          reuse_as_style_example: c.reuseAsStyleExample,
+          template_candidate: c.templateCandidate,
+          template_text: c.templateText ?? null,
+          variables_detected: c.variablesDetected,
+          object_address: c.objectAddress ?? null,
+          object_type: c.objectType ?? null,
+          market_segment: c.marketSegment ?? null,
+          city: c.city ?? null,
+          region: c.region ?? null,
+          metadata: c.metadata,
+          updated_at: new Date().toISOString(),
+        }))
+        const { error } = await supabase.from('document_chunks').insert(rows)
+        if (error) {
+          console.error('[Inzage] document_chunks insert error:', error)
+        }
+      }
+
+      const item = inzageItems.find((i) => i.label === label)
+      const bestaandeAttachments = item?.attachments ?? []
+      updateInzageItem(label, {
+        attachments: [...bestaandeAttachments, { naam: file.name, documentId }],
+      })
+      toast.success(`${label}: document opgeslagen in kennisbank`)
+    } catch (err) {
+      console.error('[Inzage] upload error:', err)
+      toast.error(`Kon document voor ${label} niet verwerken`)
+    } finally {
+      setUploadingLabel(null)
+    }
+  }
+
   const renderVeld = (veldNaam: string, textarea: React.ReactNode) => {
     if (isLoadingSuggesties) {
       return (
@@ -2492,6 +2638,103 @@ function Stap9({ data, onChange, suggesties, dismissedSuggesties, isLoadingSugge
               />
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <p className="text-sm font-semibold mb-1">Inzage documenten</p>
+        <p className="text-xs text-muted-foreground mb-4">Geef per document aan of het is ingezien. Geüploade PDF's worden automatisch in de kennisbank opgeslagen.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b text-left text-xs text-muted-foreground">
+                <th className="py-2 pr-3 font-medium w-40">Document</th>
+                <th className="py-2 pr-3 font-medium w-28">Status</th>
+                <th className="py-2 pr-3 font-medium w-32">Datum</th>
+                <th className="py-2 pr-3 font-medium">Bron</th>
+                <th className="py-2 font-medium w-24">Upload</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inzageItems.map((item) => (
+                <tr key={item.label} className="border-b last:border-0">
+                  <td className="py-2 pr-3 align-top font-medium text-xs">{item.label}</td>
+                  <td className="py-2 pr-3 align-top">
+                    <Select
+                      value={item.status}
+                      onValueChange={(val) => updateInzageItem(item.label, { status: val as InzageStatus })}
+                    >
+                      <SelectTrigger className="h-8 text-xs w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Ja">Ja</SelectItem>
+                        <SelectItem value="Nee">Nee</SelectItem>
+                        <SelectItem value="N.v.t.">N.v.t.</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2 pr-3 align-top">
+                    <Input
+                      type="date"
+                      className="h-8 text-xs"
+                      value={item.datum ?? ''}
+                      onChange={(e) => updateInzageItem(item.label, { datum: e.target.value || undefined })}
+                    />
+                  </td>
+                  <td className="py-2 pr-3 align-top">
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="Bron / verstrekker"
+                      value={item.bron ?? ''}
+                      onChange={(e) => updateInzageItem(item.label, { bron: e.target.value || undefined })}
+                    />
+                  </td>
+                  <td className="py-2 align-top">
+                    <div className="flex flex-col gap-1">
+                      <input
+                        ref={(el) => {
+                          if (el) fileInputRefs.current.set(item.label, el)
+                          else fileInputRefs.current.delete(item.label)
+                        }}
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        className="sr-only"
+                        aria-label={`PDF uploaden voor ${item.label}`}
+                        disabled={uploadingLabel === item.label}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            e.target.value = ''
+                            handleInzageUpload(item.label, file)
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={uploadingLabel === item.label}
+                        onClick={() => fileInputRefs.current.get(item.label)?.click()}
+                      >
+                        {uploadingLabel === item.label ? (
+                          <span className="flex items-center gap-1"><Upload size={12} className="animate-pulse" /> Bezig...</span>
+                        ) : (
+                          <span className="flex items-center gap-1"><Upload size={12} /> PDF</span>
+                        )}
+                      </Button>
+                      {(item.attachments ?? []).map((att) => (
+                        <span key={att.naam} className="text-xs text-muted-foreground truncate max-w-[80px]" title={att.naam}>
+                          {att.naam}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

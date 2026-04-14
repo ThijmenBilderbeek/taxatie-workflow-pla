@@ -70,11 +70,18 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
   }
 
   if (dossier.stap5) {
+    result = result.replace(/{{eigendomssituatie}}/g, dossier.stap5.eigendomssituatie || '')
+    result = result.replace(/{{erfpacht}}/g, dossier.stap5.erfpacht || '')
+    result = result.replace(/{{zakelijke_rechten}}/g, dossier.stap5.zakelijkeRechten || '')
+    result = result.replace(/{{kwalitatieve_verplichtingen}}/g, dossier.stap5.kwalitatieveVerplichtingen || '')
+    result = result.replace(/{{bestemmingsplan}}/g, dossier.stap5.bestemmingsplan || '')
     result = result.replace(/{{te_taxeren_belang}}/g, dossier.stap5.teTaxerenBelang || '')
     result = result.replace(/{{aantekeningen_kadastraal_object}}/g, dossier.stap5.aantekeningenKadastraalObject || '')
     result = result.replace(/{{toelichting_eigendom_perceel}}/g, dossier.stap5.toelichtingEigendomPerceel || '')
     result = result.replace(/{{gebruik_conform_omgevingsplan}}/g, dossier.stap5.gebruikConformOmgevingsplan || '')
     result = result.replace(/{{bijzondere_publiekrechtelijke_bepalingen}}/g, dossier.stap5.bijzonderePubliekrechtelijkeBepalingen || '')
+    result = result.replace(/{{monument}}/g, dossier.stap5.monument || '')
+    result = result.replace(/{{voorkeursrecht}}/g, dossier.stap5.voorkeursrecht || '')
   }
 
   if (dossier.stap6) {
@@ -314,11 +321,31 @@ Voor dit object zijn geen eerdere taxaties bekend.`
 }
 
 export function generateB8_InzageDocumenten(dossier: Dossier): string {
-  return `B.8 OVERZICHT INZAGE DOCUMENTEN
+  const inzageItems = dossier.stap9?.inzageItems ?? []
+  const ingezienItems = inzageItems.filter((item) => item.status === 'Ja')
+
+  if (ingezienItems.length === 0) {
+    return `B.8 OVERZICHT INZAGE DOCUMENTEN
+
+In het kader van de taxatie zijn de volgende documenten geraadpleegd:
 
 - Kadastrale informatie
 - Energielabel (www.ep-online.nl)
 - Door opdrachtgever verstrekte informatie en documenten`
+  }
+
+  let lines = ingezienItems.map((item) => {
+    let regel = `- ${item.label}`
+    if (item.datum) regel += ` (${item.datum})`
+    if (item.bron) regel += ` — bron: ${item.bron}`
+    return regel
+  })
+
+  return `B.8 OVERZICHT INZAGE DOCUMENTEN
+
+In het kader van de taxatie zijn de volgende documenten ingezien:
+
+${lines.join('\n')}`
 }
 
 export function generateB9_Taxatiemethodiek(dossier: Dossier): string {
@@ -571,23 +598,30 @@ Eigendomssituatie: ${dossier.stap5.eigendomssituatie || 'Volledig eigendom'}`
     template += `\n\nToelichting eigendom: ${toelichtingEigendom}`
   }
 
+  const erfpacht = dossier.stap5.erfpacht || ''
   template += `
 
 ERFPACHT
 
-Erfpacht: ${dossier.stap5.erfpacht || 'Niet van toepassing'}
+${erfpacht || 'Van erfpacht is geen sprake. Het object is in eigendom.'}`
+
+  const zakelijkeRechten = dossier.stap5.zakelijkeRechten || ''
+  template += `
 
 ZAKELIJKE RECHTEN
 
-Zakelijke rechten: ${dossier.stap5.zakelijkeRechten || 'Voor zover bekend geen'}
+${zakelijkeRechten || 'Voor zover bekend zijn er geen zakelijke rechten gevestigd op het object die de vrije overdracht of exploitatie belemmeren.'}`
+
+  const kwalitatieveVerplichtingen = dossier.stap5.kwalitatieveVerplichtingen || ''
+  template += `
 
 KWALITATIEVE VERPLICHTINGEN
 
-Kwalitatieve verplichtingen: ${dossier.stap5.kwalitatieveVerplichtingen || 'Voor zover bekend geen'}
+${kwalitatieveVerplichtingen || 'Voor zover bekend zijn er geen kwalitatieve verplichtingen van toepassing.'}`
 
-VVE
+  template += `
 
-VVE: Niet van toepassing
+OVERIGE PRIVAATRECHTELIJKE ASPECTEN
 
 Voor zover bekend zijn er geen belemmeringen die de vrije overdracht of exploitatie van het object belemmeren.`
 
@@ -599,24 +633,25 @@ export function generateD2_Publiekrechtelijk(dossier: Dossier): string {
 
   const gebruikConform = dossier.stap5.gebruikConformOmgevingsplan || 'Het huidige gebruik is in overeenstemming met het omgevingsplan.'
   const bijzondereBep = dossier.stap5.bijzonderePubliekrechtelijkeBepalingen || 'Voor zover bekend zijn geen bijzondere publiekrechtelijke bepalingen van toepassing.'
+  const monument = dossier.stap5.monument || 'Niet van toepassing'
+  const voorkeursrecht = dossier.stap5.voorkeursrecht || 'Niet van toepassing'
 
   const template = `D.2 PUBLIEKRECHTELIJKE ASPECTEN
 
 OMGEVINGSPLAN
 
 Gemeente: {{gemeente}}
-Bestemmingsplan: ${dossier.stap5.bestemmingsplan || 'Conform bestemming'}
-Bestemming: [bestemming]
+Omgevingsplan: ${dossier.stap5.bestemmingsplan || 'Conform geldende bestemming'}
 
 ${gebruikConform}
 
 MONUMENT
 
-Monument: Niet van toepassing
+Monument: ${monument}
 
 VOORKEURSRECHT
 
-Voorkeursrecht: Niet van toepassing
+Voorkeursrecht: ${voorkeursrecht}
 
 BIJZONDERE PUBLIEKRECHTELIJKE BEPALINGEN
 

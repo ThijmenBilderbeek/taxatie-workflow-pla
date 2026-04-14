@@ -349,7 +349,11 @@ De marktwaarde van {{marktwaarde}} per waardepeildatum {{waardepeildatum}} wordt
   return replacePlaceholders(template, dossier)
 }
 
-/** Converteert een multiline string naar bulletpunten voor Flux plain text output */
+/**
+ * Converteert een multiline string naar bulletpunten voor Flux plain text output.
+ * @param text - Vrije tekst met één punt per regel (optioneel voorafgegaan door '-')
+ * @returns Array van strings, elk geformatteerd als "- <punt>"; lege regels worden gefilterd
+ */
 function toBulletList(text: string | undefined): string[] {
   if (!text || text.trim() === '') return []
   return text
@@ -357,6 +361,12 @@ function toBulletList(text: string | undefined): string[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => (line.startsWith('-') ? line : `- ${line}`))
+}
+
+/** Verlaagt een courantheidscore bij negatieve factoren */
+function verlaagScore(score: string): string {
+  if (score === 'goed') return 'redelijk tot goed'
+  return 'matig'
 }
 
 export function generateC1_SWOT(dossier: Dossier): string {
@@ -455,13 +465,13 @@ export function generateC2_Beoordeling(dossier: Dossier): string {
     ['matig', 'slecht'].includes(exterieurStaat) ||
     ['matig', 'slecht'].includes(interieurStaat)
   ) {
-    verhuurScore = verhuurScore === 'goed' ? 'redelijk tot goed' : 'matig'
-    verkoopScore = verkoopScore === 'goed' ? 'redelijk tot goed' : 'matig'
+    verhuurScore = verlaagScore(verhuurScore)
+    verkoopScore = verlaagScore(verkoopScore)
   }
 
   if (energielabel && ['E', 'F', 'G'].includes(energielabel)) {
-    if (verhuurScore === 'goed') verhuurScore = 'redelijk'
-    if (verkoopScore === 'goed') verkoopScore = 'redelijk'
+    verhuurScore = verlaagScore(verhuurScore)
+    verkoopScore = verlaagScore(verkoopScore)
   }
 
   if (bvo && bvo > 5000) {
@@ -518,8 +528,7 @@ export function generateC2_Beoordeling(dossier: Dossier): string {
   }
 
   // Eindconclusie
-  const eindOordeel = verkoopScore
-  output += `Alles overwegende is de courantheid als ${eindOordeel} aan te duiden.`
+  output += `Alles overwegende is de courantheid als ${verkoopScore} aan te duiden.`
 
   // SWOT-context voor aandachtspunten
   if (swot?.swotZwaktes || swot?.swotBedreigingen) {

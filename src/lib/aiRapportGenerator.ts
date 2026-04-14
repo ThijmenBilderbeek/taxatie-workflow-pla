@@ -47,7 +47,7 @@ const SECTIE_CONFIG: Record<string, SectieConfig> = {
   'h2-huurreferenties':              { titel: 'H.2 Huurreferenties',                 stappen: ['stap4', 'stap8'] },
   'h3-koopreferenties':              { titel: 'H.3 Koopreferenties',                 stappen: ['stap8'] },
   'h4-correcties':                   { titel: 'H.4 Correcties',                      stappen: ['stap8'] },
-  'i-duurzaamheid':                  { titel: 'I. Duurzaamheid',                     stappen: ['stap6', 'stap7', 'stap10'] },
+  'i-duurzaamheid':                  { titel: 'I. Duurzaamheid',                     stappen: ['stap6', 'stap7', 'stap9', 'stap10'] },
   'j-algemene-uitgangspunten':       { titel: 'J. Algemene Uitgangspunten',          stappen: ['stap9'] },
   'k-waardebegrippen':               { titel: 'K. Waardebegrippen en Definities',    stappen: ['stap8'] },
   'l-bijlagen':                      { titel: 'L. Bijlagen',                         stappen: ['stap1'] },

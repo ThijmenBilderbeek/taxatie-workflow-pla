@@ -80,6 +80,16 @@ const VELD_CONFIGS: Record<number, VeldConfig[]> = {
       getUitHistorisch: (r) => r.wizardData?.stap5?.bijzonderePubliekrechtelijkeBepalingen,
       getHuidigeWaarde: (d) => d.stap5?.bijzonderePubliekrechtelijkeBepalingen,
     },
+    {
+      veldNaam: 'monument',
+      getUitHistorisch: (r) => r.wizardData?.stap5?.monument,
+      getHuidigeWaarde: (d) => d.stap5?.monument,
+    },
+    {
+      veldNaam: 'voorkeursrecht',
+      getUitHistorisch: (r) => r.wizardData?.stap5?.voorkeursrecht,
+      getHuidigeWaarde: (d) => d.stap5?.voorkeursrecht,
+    },
   ],
   6: [
     {

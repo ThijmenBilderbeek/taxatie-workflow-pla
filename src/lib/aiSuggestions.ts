@@ -38,6 +38,8 @@ const VELD_GETTERS_HISTORISCH: Record<string, VeldGetter<HistorischRapport>> = {
   toelichtingEigendomPerceel: (r) => r.wizardData?.stap5?.toelichtingEigendomPerceel,
   gebruikConformOmgevingsplan: (r) => r.wizardData?.stap5?.gebruikConformOmgevingsplan,
   bijzonderePubliekrechtelijkeBepalingen: (r) => r.wizardData?.stap5?.bijzonderePubliekrechtelijkeBepalingen,
+  monument: (r) => r.wizardData?.stap5?.monument,
+  voorkeursrecht: (r) => r.wizardData?.stap5?.voorkeursrecht,
   fundering: (r) => r.wizardData?.stap6?.fundering,
   dakbedekking: (r) => r.wizardData?.stap6?.dakbedekking,
   installaties: (r) => r.wizardData?.stap6?.installaties,
@@ -64,6 +66,8 @@ const VELD_GETTERS_HUIDIG: Record<string, VeldGetter<Partial<Dossier>>> = {
   toelichtingEigendomPerceel: (d) => d.stap5?.toelichtingEigendomPerceel,
   gebruikConformOmgevingsplan: (d) => d.stap5?.gebruikConformOmgevingsplan,
   bijzonderePubliekrechtelijkeBepalingen: (d) => d.stap5?.bijzonderePubliekrechtelijkeBepalingen,
+  monument: (d) => d.stap5?.monument,
+  voorkeursrecht: (d) => d.stap5?.voorkeursrecht,
   fundering: (d) => d.stap6?.fundering,
   dakbedekking: (d) => d.stap6?.dakbedekking,
   installaties: (d) => d.stap6?.installaties,
@@ -124,14 +128,11 @@ export async function getAISuggestiesVoorStap(
   // Determine which fields to suggest for this step
   const veldNamenPerStap: Record<number, string[]> = {
     2: ['bereikbaarheid'],
-    // Only toelichtingEigendomPerceel gets AI assistance for stap5.
-    // The other juridical fields (eigendomssituatie, erfpacht, zakelijkeRechten,
-    // kwalitatieveVerplichtingen, bestemmingsplan, teTaxerenBelang,
-    // aantekeningenKadastraalObject, gebruikConformOmgevingsplan,
-    // bijzonderePubliekrechtelijkeBepalingen) are factual-legal values that must
-    // come from actual documents or knowledge, not AI generation. They receive
-    // historical-report suggestions only (via suggestions.ts).
-    5: ['eigendomssituatie', 'erfpacht', 'zakelijkeRechten', 'kwalitatieveVerplichtingen', 'bestemmingsplan', 'toelichtingEigendomPerceel'],
+    // Juridical fields: factual-legal values that must come from actual documents
+    // or historical reports. toelichtingEigendomPerceel and gebruikConformOmgevingsplan
+    // allow AI-assisted toelichting. monument and voorkeursrecht are included since
+    // they are frequently consistent across objects of similar type/location.
+    5: ['eigendomssituatie', 'erfpacht', 'zakelijkeRechten', 'kwalitatieveVerplichtingen', 'bestemmingsplan', 'toelichtingEigendomPerceel', 'gebruikConformOmgevingsplan', 'monument', 'voorkeursrecht'],
     6: ['fundering', 'dakbedekking', 'installaties', 'achterstalligOnderhoudBeschrijving'],
     7: ['toelichting'],
     9: ['aannames', 'voorbehouden', 'bijzondereOmstandigheden', 'swotSterktes', 'swotZwaktes', 'swotKansen', 'swotBedreigingen'],
@@ -218,6 +219,11 @@ export async function getAISuggestiesVoorStap(
     // Juridische context voor stap5-veldsuggesties
     eigendomssituatie: stap5?.eigendomssituatie,
     teTaxerenBelang: stap5?.teTaxerenBelang,
+    bestemmingsplan: stap5?.bestemmingsplan,
+    erfpacht: stap5?.erfpacht,
+    gebruikConformOmgevingsplan: stap5?.gebruikConformOmgevingsplan,
+    monument: stap5?.monument,
+    voorkeursrecht: stap5?.voorkeursrecht,
   }
 
   // Process each field

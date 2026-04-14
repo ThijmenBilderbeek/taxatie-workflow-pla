@@ -346,3 +346,40 @@ export async function getKennisbankContextForSectieSemantic(
     return getKennisbankContextForSectie(sectieKey, objectType, marketSegment)
   }
 }
+
+/**
+ * Haalt document_chunks op die zijn gekoppeld aan een specifiek dossier via metadata.dossier_id.
+ * Bedoeld voor gebruik bij Inzage-documenten waarbij chunks worden getagd met het dossier-ID
+ * en het document-type (inzage label).
+ *
+ * @param dossierId - Het ID van het dossier
+ * @param documentType - Optioneel filter op het inzage label (bijv. 'Huurovereenkomsten')
+ * @returns Array van DocumentChunk objecten gekoppeld aan het dossier
+ */
+export async function getInzageChunksForDossier(
+  dossierId: string,
+  documentType?: string
+): Promise<DocumentChunk[]> {
+  try {
+    let query = supabase
+      .from('document_chunks')
+      .select('*')
+      .filter('metadata->>dossier_id', 'eq', dossierId)
+      .order('created_at', { ascending: true })
+
+    if (documentType) {
+      query = query.filter('metadata->>document_type', 'eq', documentType)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      console.warn('[kennisbankRetriever] getInzageChunksForDossier fout:', error)
+      return []
+    }
+
+    return (data ?? []).map((row: Record<string, unknown>) => rowNaarChunk(row, MAX_CHUNK_CHARS))
+  } catch (err) {
+    console.warn('[kennisbankRetriever] getInzageChunksForDossier onverwachte fout:', err)
+    return []
+  }
+}

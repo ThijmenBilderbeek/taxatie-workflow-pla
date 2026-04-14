@@ -101,6 +101,10 @@ export interface JuridischeInfo {
   toelichtingEigendomPerceel?: string
   gebruikConformOmgevingsplan?: string
   bijzonderePubliekrechtelijkeBepalingen?: string
+  /** Monumentstatus van het object (bijv. rijksmonument, gemeentelijk monument, geen) */
+  monument?: string
+  /** Voorkeursrechtstatus op het perceel */
+  voorkeursrecht?: string
 }
 
 export interface TechnischeStaat {
@@ -164,6 +168,26 @@ export interface Aannames {
   swotZwaktes?: string
   swotKansen?: string
   swotBedreigingen?: string
+  /** Overzicht van ingeziene documenten per item */
+  inzageItems?: InzageItem[]
+}
+
+/** Status van een ingezien document */
+export type InzageStatus = 'Ja' | 'Nee' | 'N.v.t.'
+
+/** Metadata van een geüpload bijlage bij een inzage-item */
+export interface InzageBijlage {
+  naam: string
+  documentId?: string
+}
+
+/** Eén regel in het inzage-overzicht */
+export interface InzageItem {
+  label: string
+  status: InzageStatus
+  datum?: string
+  bron?: string
+  attachments?: InzageBijlage[]
 }
 
 export interface DuurzaamheidGegevens {

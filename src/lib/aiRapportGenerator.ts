@@ -155,10 +155,13 @@ interface BatchSectieInput {
 /**
  * Picks only the dossier stappen that are relevant for the given section,
  * reducing the payload size sent to the Edge Function.
+ * Optionally enriches the result with a structured `_enrichedContext` block
+ * containing full domain-specific data for the given section key.
  */
 function buildDossierData(
   dossier: Partial<Dossier>,
-  stappen: SectieConfig['stappen']
+  stappen: SectieConfig['stappen'],
+  sectieKey?: string
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const stap of stappen) {
@@ -166,6 +169,106 @@ function buildDossierData(
       result[stap] = dossier[stap]
     }
   }
+
+  // Add enriched structured context based on section domain
+  const enrichedContext: Record<string, unknown> = {}
+
+  // SWOT sections get full SWOT data
+  if (sectieKey?.startsWith('c1')) {
+    if (dossier.stap9) {
+      enrichedContext.swot = {
+        sterktes: dossier.stap9.swotSterktes,
+        zwaktes: dossier.stap9.swotZwaktes,
+        kansen: dossier.stap9.swotKansen,
+        bedreigingen: dossier.stap9.swotBedreigingen,
+      }
+    }
+  }
+
+  // Juridisch sections get full stap5 data
+  if (sectieKey?.startsWith('d1') || sectieKey?.startsWith('d2')) {
+    if (dossier.stap5) {
+      enrichedContext.juridisch = {
+        eigendomssituatie: dossier.stap5.eigendomssituatie,
+        erfpacht: dossier.stap5.erfpacht,
+        zakelijkeRechten: dossier.stap5.zakelijkeRechten,
+        kwalitatieveVerplichtingen: dossier.stap5.kwalitatieveVerplichtingen,
+        bestemmingsplan: dossier.stap5.bestemmingsplan,
+        gebruikConformOmgevingsplan: dossier.stap5.gebruikConformOmgevingsplan,
+        bijzonderePubliekrechtelijkeBepalingen: dossier.stap5.bijzonderePubliekrechtelijkeBepalingen,
+        monument: dossier.stap5.monument,
+        voorkeursrecht: dossier.stap5.voorkeursrecht,
+      }
+    }
+  }
+
+  // Locatie sections get full stap2 data
+  if (sectieKey?.startsWith('e1') || sectieKey?.startsWith('e2')) {
+    if (dossier.stap2) {
+      enrichedContext.locatie = {
+        bereikbaarheid: dossier.stap2.bereikbaarheid,
+        omgevingEnBelendingen: dossier.stap2.omgevingEnBelendingen,
+        voorzieningen: dossier.stap2.voorzieningen,
+        verwachteOntwikkelingen: dossier.stap2.verwachteOntwikkelingen,
+        locatiescore: dossier.stap2.locatiescore,
+        ligging: dossier.stap2.ligging,
+      }
+    }
+  }
+
+  // Technisch sections get full stap6 data
+  if (
+    sectieKey?.startsWith('f1') ||
+    sectieKey?.startsWith('f2') ||
+    sectieKey?.startsWith('f3') ||
+    sectieKey?.startsWith('f4')
+  ) {
+    if (dossier.stap6) {
+      enrichedContext.technisch = {
+        fundering: dossier.stap6.fundering,
+        dakbedekking: dossier.stap6.dakbedekking,
+        installaties: dossier.stap6.installaties,
+        constructie: dossier.stap6.constructie,
+        terrein: dossier.stap6.terrein,
+        gevels: dossier.stap6.gevels,
+        afwerking: dossier.stap6.afwerking,
+        beveiliging: dossier.stap6.beveiliging,
+        omschrijvingMilieuaspecten: dossier.stap6.omschrijvingMilieuaspecten,
+        exterieurStaat: dossier.stap6.exterieurStaat,
+        interieurStaat: dossier.stap6.interieurStaat,
+      }
+    }
+  }
+
+  // Aannames/uitgangspunten sections get full stap9 data
+  if (sectieKey?.startsWith('b5') || sectieKey?.startsWith('j') || sectieKey?.startsWith('b6')) {
+    if (dossier.stap9) {
+      enrichedContext.aannames = {
+        aannames: dossier.stap9.aannames,
+        voorbehouden: dossier.stap9.voorbehouden,
+        bijzondereOmstandigheden: dossier.stap9.bijzondereOmstandigheden,
+        algemeneUitgangspunten: dossier.stap9.algemeneUitgangspunten,
+        bijzondereUitgangspunten: dossier.stap9.bijzondereUitgangspunten,
+      }
+    }
+  }
+
+  // Waardering sections get full stap8 data
+  if (
+    sectieKey?.startsWith('h1') ||
+    sectieKey?.startsWith('h2') ||
+    sectieKey?.startsWith('h3') ||
+    sectieKey?.startsWith('h4')
+  ) {
+    if (dossier.stap8) {
+      enrichedContext.waardering = dossier.stap8
+    }
+  }
+
+  if (Object.keys(enrichedContext).length > 0) {
+    result._enrichedContext = enrichedContext
+  }
+
   return result
 }
 
@@ -292,7 +395,7 @@ export async function generateSectieMetAI(
   const config = SECTIE_CONFIG[sectieKey]
   const stappen = config?.stappen ?? []
 
-  const dossierData = buildDossierData(dossier, stappen)
+  const dossierData = buildDossierData(dossier, stappen, sectieKey)
 
   // Check in-memory cache before any expensive operations
   const cached = getSectieFromCache(sectieKey, dossierData)
@@ -514,7 +617,7 @@ export async function generateAlleSectiesMetAI(
 
     const config = SECTIE_CONFIG[sectieKey]
     const stappen = config?.stappen ?? []
-    const dossierData = buildDossierData(dossier, stappen)
+    const dossierData = buildDossierData(dossier, stappen, sectieKey)
 
     const cached = getSectieFromCache(sectieKey, dossierData)
     if (cached) {
@@ -554,7 +657,7 @@ export async function generateAlleSectiesMetAI(
     const sectieTitel = config?.titel ?? sectieKey
     const templateTekst = templateSecties[sectieKey] ?? ''
     const stappen = config?.stappen ?? []
-    const dossierData = buildDossierData(dossier, stappen)
+    const dossierData = buildDossierData(dossier, stappen, sectieKey)
 
     const cached = getSectieFromCache(sectieKey, dossierData)
     if (cached) {

@@ -162,6 +162,9 @@ export async function getKennisbankContextForSectie(
       .select('*')
       .eq('reuse_as_style_example', true)
 
+    if (semanticType) {
+      styleQuery = styleQuery.filter('metadata->>semantic_type', 'eq', semanticType)
+    }
     if (objectType) {
       styleQuery = styleQuery.eq('object_type', objectType)
     }
@@ -327,6 +330,7 @@ export async function getKennisbankContextForSectieSemantic(
       filter_object_type: objectType ?? null,
       filter_market_segment: marketSegment ?? null,
       filter_kantoor_id: kantoorId ?? null,
+      filter_semantic_type: sectieKeyNaarSemanticType(sectieKey),
     })
 
     if (rpcError) {

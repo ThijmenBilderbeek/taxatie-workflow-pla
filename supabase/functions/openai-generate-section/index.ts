@@ -211,7 +211,7 @@ function buildUserPrompt(
   let prompt = `Genereer de tekst voor sectie "${sectieTitel}" (key: ${sectieKey}) van een taxatierapport.\n`
 
   // Voeg dossierdata toe
-  const dossierSections = Object.entries(dossierData).filter(([k, v]) => k !== '_enrichedContext' && v && Object.keys(v).length > 0)
+  const dossierSections = Object.entries(dossierData).filter(([k, v]) => k !== '_enrichedContext' && v !== null && v !== undefined && typeof v === 'object' && Object.keys(v).length > 0)
   if (dossierSections.length > 0) {
     prompt += '\nDossiergegevens:\n'
     for (const [stap, data] of dossierSections) {
@@ -227,7 +227,7 @@ function buildUserPrompt(
 
   // Voeg verrijkte context toe (gestructureerde domeindata)
   const enrichedContext = dossierData._enrichedContext
-  if (enrichedContext && Object.keys(enrichedContext).length > 0) {
+  if (enrichedContext && typeof enrichedContext === 'object' && Object.keys(enrichedContext).length > 0) {
     prompt += '\n=== GESTRUCTUREERDE DOMEINDATA (GEBRUIK DEZE ALS PRIMAIRE BRON) ===\n'
     prompt += JSON.stringify(enrichedContext, null, 2)
     prompt += '\n'

@@ -536,7 +536,7 @@ export function generateC2_Beoordeling(dossier: Dossier): string {
   if (dossier.stap2?.omgevingEnBelendingen) contextRegels.push(`Omgeving: ${dossier.stap2.omgevingEnBelendingen}`)
   if (dossier.stap2?.voorzieningen) contextRegels.push(`Voorzieningen: ${dossier.stap2.voorzieningen}`)
   if (dossier.stap8?.marktwaarde) contextRegels.push(`Marktwaarde: ${formatBedrag(dossier.stap8.marktwaarde)}`)
-  if (dossier.stap8?.methode) contextRegels.push(`Waarderingsmethode: ${dossier.stap8.methode.replace(/_/g, '/')}`)
+  if (dossier.stap8?.methode) contextRegels.push(`Waarderingsmethode: ${String(dossier.stap8.methode).replace(/_/g, '/')}`)
 
   if (contextRegels.length > 0) {
     output += `BEOORDELINGSCONTEXT\n\n${contextRegels.join('\n')}\n\n`

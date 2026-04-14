@@ -33,6 +33,10 @@ const MAX_STYLE_EXAMPLES = 2
 /** Minimale cosine similarity drempel voor semantisch zoeken (0-1). */
 export const SEMANTIC_MATCH_THRESHOLD = 0.7
 
+/** Kolommen die worden geselecteerd uit de document_chunks tabel. */
+const DOCUMENT_CHUNK_COLUMNS =
+  'id, document_id, chapter, subchapter, chunk_type, raw_text, clean_text, writing_function, tones, specificity, reuse_score, reuse_as_style_example, template_candidate, template_text, variables_detected, object_address, object_type, market_segment, city, region, metadata, created_at, updated_at'
+
 // ---------------------------------------------------------------------------
 // Public interface
 // ---------------------------------------------------------------------------
@@ -363,7 +367,7 @@ export async function getInzageChunksForDossier(
   try {
     let query = supabase
       .from('document_chunks')
-      .select('id, document_id, chapter, subchapter, chunk_type, raw_text, clean_text, writing_function, tones, specificity, reuse_score, reuse_as_style_example, template_candidate, template_text, variables_detected, object_address, object_type, market_segment, city, region, metadata, created_at, updated_at')
+      .select(DOCUMENT_CHUNK_COLUMNS)
       .filter('metadata->>dossier_id', 'eq', dossierId)
       .order('created_at', { ascending: true })
 

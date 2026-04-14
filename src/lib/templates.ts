@@ -641,7 +641,7 @@ export function generateD2_Publiekrechtelijk(dossier: Dossier): string {
 OMGEVINGSPLAN
 
 Gemeente: {{gemeente}}
-Bestemmingsplan / omgevingsplan: ${dossier.stap5.bestemmingsplan || 'Conform geldende bestemming'}
+Omgevingsplan: ${dossier.stap5.bestemmingsplan || 'Conform geldende bestemming'}
 
 ${gebruikConform}
 

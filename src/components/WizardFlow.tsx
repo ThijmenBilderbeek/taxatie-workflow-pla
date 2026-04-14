@@ -2390,6 +2390,10 @@ function Stap8({ data, onChange }: { data: Partial<Waardering>; onChange: (data:
   )
 }
 
+function generateInzageDocumentId(dossierId: string, label: string): string {
+  return `inzage-${dossierId}-${label.toLowerCase().replace(/\s+/g, '-')}-${crypto.randomUUID()}`
+}
+
 function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isLoadingSuggesties, onSuggestieAccept, onSuggestieDismiss }: { data: Partial<Aannames>; onChange: (data: Partial<Aannames>) => void; dossierId?: string } & SuggestieProps) {
   const INZAGE_LABELS: string[] = [
     'Huurlijst',
@@ -2413,6 +2417,7 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
   const inzageItems = getInzageItems()
 
   const [uploadingLabel, setUploadingLabel] = useState<string | null>(null)
+  const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
 
   function updateInzageItem(label: string, patch: Partial<InzageItem>) {
     const updated = inzageItems.map((item) =>
@@ -2438,7 +2443,7 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
         toast.error('Kon geen tekst uit het PDF-bestand lezen.')
         return
       }
-      const documentId = `inzage-${dossierId}-${label.toLowerCase().replace(/\s+/g, '-')}-${crypto.randomUUID()}`
+      const documentId = generateInzageDocumentId(dossierId, label)
       const knowledge = extractDocumentKnowledge(fullText, documentId, {
         documentType: label,
       })
@@ -2688,10 +2693,14 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
                   <td className="py-2 align-top">
                     <div className="flex flex-col gap-1">
                       <input
-                        id={`inzage-upload-${item.label}`}
+                        ref={(el) => {
+                          if (el) fileInputRefs.current.set(item.label, el)
+                          else fileInputRefs.current.delete(item.label)
+                        }}
                         type="file"
                         accept=".pdf,application/pdf"
                         className="sr-only"
+                        aria-label={`PDF uploaden voor ${item.label}`}
                         disabled={uploadingLabel === item.label}
                         onChange={(e) => {
                           const file = e.target.files?.[0]
@@ -2707,7 +2716,7 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
                         size="sm"
                         className="h-8 text-xs"
                         disabled={uploadingLabel === item.label}
-                        onClick={() => document.getElementById(`inzage-upload-${item.label}`)?.click()}
+                        onClick={() => fileInputRefs.current.get(item.label)?.click()}
                       >
                         {uploadingLabel === item.label ? (
                           <span className="flex items-center gap-1"><Upload size={12} className="animate-pulse" /> Bezig...</span>

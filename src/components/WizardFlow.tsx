@@ -22,6 +22,7 @@ import type {
   Vergunningen, 
   Waardering, 
   Aannames,
+  DuurzaamheidGegevens,
   InzageItem,
   InzageStatus,
   HistorischRapport,
@@ -68,6 +69,7 @@ export function WizardFlow({
   const [stap7, setStap7] = useState<Partial<Vergunningen>>(activeDossier?.stap7 || { omgevingsvergunning: false })
   const [stap8, setStap8] = useState<Partial<Waardering>>(activeDossier?.stap8 || { vergelijkingsobjecten: [] })
   const [stap9, setStap9] = useState<Partial<Aannames>>(activeDossier?.stap9 || {})
+  const [stap10, setStap10] = useState<Partial<DuurzaamheidGegevens>>(activeDossier?.stap10 || {})
   const [selectedReferenties, setSelectedReferenties] = useState<string[]>(activeDossier?.geselecteerdeReferenties || [])
   const [dismissedSuggesties, setDismissedSuggesties] = useState<Set<string>>(new Set())
   const [suggestiesHuidigeStap, setSuggestiesHuidigeStap] = useState<VeldSuggestie[]>([])
@@ -90,6 +92,7 @@ export function WizardFlow({
       if (activeDossier.stap7) setStap7(activeDossier.stap7)
       if (activeDossier.stap8) setStap8(activeDossier.stap8)
       if (activeDossier.stap9) setStap9(activeDossier.stap9)
+      if (activeDossier.stap10) setStap10(activeDossier.stap10)
       if (activeDossier.geselecteerdeReferenties) setSelectedReferenties(activeDossier.geselecteerdeReferenties)
     }
   }, [activeDossier?.id])
@@ -108,6 +111,7 @@ export function WizardFlow({
       stap7: stap7 as Vergunningen,
       stap8: stap8 as Waardering,
       stap9: stap9 as Aannames,
+      stap10: stap10 as DuurzaamheidGegevens,
       geselecteerdeReferenties: selectedReferenties,
       huidigeStap: targetStep,
       updatedAt: new Date().toISOString(),
@@ -128,6 +132,7 @@ export function WizardFlow({
       stap7: stap7 as Vergunningen,
       stap8: stap8 as Waardering,
       stap9: stap9 as Aannames,
+      stap10: stap10 as DuurzaamheidGegevens,
       geselecteerdeReferenties: selectedReferenties,
       huidigeStap: currentStep,
       updatedAt: new Date().toISOString(),
@@ -235,7 +240,7 @@ export function WizardFlow({
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      if (currentStep < 10) {
+      if (currentStep < 11) {
         saveAndNavigateTo(currentStep + 1)
         toast.success('Stap opgeslagen')
       }
@@ -262,6 +267,7 @@ export function WizardFlow({
       stap7: stap7 as Vergunningen,
       stap8: stap8 as Waardering,
       stap9: stap9 as Aannames,
+      stap10: stap10 as DuurzaamheidGegevens,
       geselecteerdeReferenties: selectedReferenties,
     }
 
@@ -325,7 +331,7 @@ export function WizardFlow({
     return titels[key] || key
   }
 
-  const progress = (currentStep / 10) * 100
+  const progress = (currentStep / 11) * 100
 
   const similarityResults = activeDossier && stap2.coordinaten && stap3.bvo && stap1.typeObject
     ? (historischeRapporten || []).map(rapport => {
@@ -421,7 +427,7 @@ export function WizardFlow({
     <div className="space-y-6">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Stap {currentStep} van 10</h2>
+          <h2 className="text-2xl font-semibold">Stap {currentStep} van 11</h2>
           <span className="text-sm text-muted-foreground">{Math.round(progress)}% voltooid</span>
         </div>
         <Progress value={progress} className="h-2" />
@@ -441,8 +447,9 @@ export function WizardFlow({
           {currentStep === 7 && <Stap7 data={stap7} onChange={setStap7} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
           {currentStep === 8 && <Stap8 data={stap8} onChange={setStap8} />}
           {currentStep === 9 && <Stap9 data={stap9} onChange={setStap9} dossierId={activeDossierId} suggesties={suggestiesHuidigeStap} dismissedSuggesties={dismissedSuggesties} isLoadingSuggesties={isLoadingSuggesties} onSuggestieAccept={handleSuggestieAccept} onSuggestieDismiss={handleSuggestieDismiss} />}
-          {currentStep === 10 && (
-            <Stap10
+          {currentStep === 10 && <Stap10 data={stap10} onChange={setStap10} stap7Data={stap7} stap6Data={stap6} />}
+          {currentStep === 11 && (
+            <Stap11
               results={similarityResults}
               historischeRapporten={historischeRapporten || []}
               selectedReferenties={selectedReferenties}
@@ -460,7 +467,7 @@ export function WizardFlow({
               Vorige
             </Button>
 
-            {currentStep < 10 ? (
+            {currentStep < 11 ? (
               <Button onClick={handleNext}>
                 Volgende
                 <ArrowRight className="ml-2" />
@@ -500,6 +507,7 @@ function getStepTitle(step: number): string {
     'Vergunningen, energielabel en milieu',
     'Waarderingsgegevens',
     'Aannames en bijzonderheden',
+    'Duurzaamheid',
     'Vergelijkbare rapporten',
   ]
   return titles[step - 1] || ''
@@ -2742,6 +2750,289 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
 }
 
 function Stap10({
+  data,
+  onChange,
+  stap7Data,
+  stap6Data,
+}: {
+  data: Partial<DuurzaamheidGegevens>
+  onChange: (data: Partial<DuurzaamheidGegevens>) => void
+  stap7Data?: Partial<Vergunningen>
+  stap6Data?: Partial<TechnischeStaat>
+}) {
+  return (
+    <div className="space-y-6">
+      {/* A. Energie */}
+      <div className="space-y-4">
+        <h3 className="text-base font-semibold border-b pb-1">A. Energie</h3>
+
+        <div className="grid gap-2">
+          <Label className="text-muted-foreground text-sm">
+            Energielabel (ingevuld in stap 7: <span className="font-medium text-foreground">{stap7Data?.energielabel || 'Nog niet ingevuld'}</span>)
+          </Label>
+        </div>
+
+        {stap7Data?.epcBengWaarde && (
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground text-sm">
+              EPC/BENG-waarde (stap 7): <span className="font-medium text-foreground">{stap7Data.epcBengWaarde}</span>
+            </Label>
+          </div>
+        )}
+
+        <div className="grid gap-2">
+          <Label>Dakoppervlak geschikt voor zonnepanelen</Label>
+          <Select
+            value={data.dakoppervlakGeschiktVoorZonnepanelen || ''}
+            onValueChange={(v) => onChange({ ...data, dakoppervlakGeschiktVoorZonnepanelen: v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecteer beoordeling" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ja_groot">Ja, groot dakoppervlak beschikbaar</SelectItem>
+              <SelectItem value="ja_beperkt">Ja, beperkt dakoppervlak beschikbaar</SelectItem>
+              <SelectItem value="nee">Nee / niet geschikt</SelectItem>
+              <SelectItem value="onbekend">Onbekend</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="aantalOplaadpunten">Aantal EV-oplaadpunten</Label>
+          <Input
+            id="aantalOplaadpunten"
+            type="number"
+            min={0}
+            value={data.aantalOplaadpunten ?? ''}
+            onChange={(e) => onChange({ ...data, aantalOplaadpunten: e.target.value ? Number(e.target.value) : undefined })}
+            placeholder="0"
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label>Green lease</Label>
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={data.greenLease ?? false}
+              onCheckedChange={(v) => onChange({ ...data, greenLease: v })}
+            />
+            <span className="text-sm text-muted-foreground">{data.greenLease ? 'Van toepassing' : 'Niet van toepassing'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* B. Bouwkundig / technisch */}
+      <div className="space-y-4">
+        <h3 className="text-base font-semibold border-b pb-1">B. Isolatie en installaties</h3>
+
+        {stap6Data?.installaties && (
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground text-sm">
+              Installaties (stap 6): <span className="font-medium text-foreground">{stap6Data.installaties}</span>
+            </Label>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="isolatieDak">Isolatie dak</Label>
+            <Select
+              value={data.isolatieDak || ''}
+              onValueChange={(v) => onChange({ ...data, isolatieDak: v })}
+            >
+              <SelectTrigger id="isolatieDak">
+                <SelectValue placeholder="Beoordeling" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="goed">Goed</SelectItem>
+                <SelectItem value="matig">Matig</SelectItem>
+                <SelectItem value="slecht">Slecht</SelectItem>
+                <SelectItem value="onbekend">Onbekend</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="isolatieGevel">Isolatie gevel</Label>
+            <Select
+              value={data.isolatieGevel || ''}
+              onValueChange={(v) => onChange({ ...data, isolatieGevel: v })}
+            >
+              <SelectTrigger id="isolatieGevel">
+                <SelectValue placeholder="Beoordeling" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="goed">Goed</SelectItem>
+                <SelectItem value="matig">Matig</SelectItem>
+                <SelectItem value="slecht">Slecht</SelectItem>
+                <SelectItem value="onbekend">Onbekend</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="isolatieVloer">Isolatie vloer</Label>
+            <Select
+              value={data.isolatieVloer || ''}
+              onValueChange={(v) => onChange({ ...data, isolatieVloer: v })}
+            >
+              <SelectTrigger id="isolatieVloer">
+                <SelectValue placeholder="Beoordeling" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="goed">Goed</SelectItem>
+                <SelectItem value="matig">Matig</SelectItem>
+                <SelectItem value="slecht">Slecht</SelectItem>
+                <SelectItem value="onbekend">Onbekend</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="isolatieGlas">Isolatie glas</Label>
+            <Select
+              value={data.isolatieGlas || ''}
+              onValueChange={(v) => onChange({ ...data, isolatieGlas: v })}
+            >
+              <SelectTrigger id="isolatieGlas">
+                <SelectValue placeholder="Beoordeling" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="goed">Goed (HR++ of beter)</SelectItem>
+                <SelectItem value="matig">Matig (enkel/dubbel glas)</SelectItem>
+                <SelectItem value="slecht">Slecht (enkel glas)</SelectItem>
+                <SelectItem value="onbekend">Onbekend</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label>Overwegend LED-verlichting</Label>
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={data.overwegendLedVerlichting ?? false}
+              onCheckedChange={(v) => onChange({ ...data, overwegendLedVerlichting: v })}
+            />
+            <span className="text-sm text-muted-foreground">{data.overwegendLedVerlichting ? 'Ja' : 'Nee'}</span>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="flexibiliteit">Flexibiliteit / toekomstbestendigheid</Label>
+          <Select
+            value={data.flexibiliteit || ''}
+            onValueChange={(v) => onChange({ ...data, flexibiliteit: v })}
+          >
+            <SelectTrigger id="flexibiliteit">
+              <SelectValue placeholder="Beoordeling" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="hoog">Hoog – multifunctioneel inzetbaar</SelectItem>
+              <SelectItem value="gemiddeld">Gemiddeld – beperkt aanpasbaar</SelectItem>
+              <SelectItem value="laag">Laag – weinig flexibel</SelectItem>
+              <SelectItem value="onbekend">Onbekend</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="gebruikDuurzameMaterialen">Gebruik duurzame materialen</Label>
+          <Select
+            value={data.gebruikDuurzameMaterialen || ''}
+            onValueChange={(v) => onChange({ ...data, gebruikDuurzameMaterialen: v })}
+          >
+            <SelectTrigger id="gebruikDuurzameMaterialen">
+              <SelectValue placeholder="Beoordeling" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ja_aantoonbaar">Ja, aantoonbaar toegepast</SelectItem>
+              <SelectItem value="deels">Deels toegepast</SelectItem>
+              <SelectItem value="nee">Nee / niet van toepassing</SelectItem>
+              <SelectItem value="onbekend">Onbekend</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* C. Milieu / risico */}
+      <div className="space-y-4">
+        <h3 className="text-base font-semibold border-b pb-1">C. Milieu en risico</h3>
+
+        {stap7Data?.asbest && (
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground text-sm">
+              Asbest (stap 7): <span className="font-medium text-foreground">{stap7Data.asbest}</span>
+            </Label>
+          </div>
+        )}
+        {stap7Data?.bodemverontreiniging && (
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground text-sm">
+              Bodemverontreiniging (stap 7): <span className="font-medium text-foreground">{stap7Data.bodemverontreiniging}</span>
+            </Label>
+          </div>
+        )}
+        {stap6Data?.omschrijvingMilieuaspecten && (
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground text-sm">
+              Milieuaspecten (stap 6): <span className="font-medium text-foreground">{stap6Data.omschrijvingMilieuaspecten}</span>
+            </Label>
+          </div>
+        )}
+
+        <div className="grid gap-2">
+          <Label htmlFor="klimaatrisicos">Klimaatrisico's</Label>
+          <Textarea
+            id="klimaatrisicos"
+            value={data.klimaatrisicos || ''}
+            onChange={(e) => onChange({ ...data, klimaatrisicos: e.target.value })}
+            placeholder="Bijv. risico op wateroverlast, hittestress, droogte"
+            rows={2}
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="duurzaamheidscertificaten">Duurzaamheidscertificaten</Label>
+          <Input
+            id="duurzaamheidscertificaten"
+            value={data.duurzaamheidscertificaten || ''}
+            onChange={(e) => onChange({ ...data, duurzaamheidscertificaten: e.target.value })}
+            placeholder="Bijv. BREEAM, LEED, GPR"
+          />
+        </div>
+      </div>
+
+      {/* D. Verduurzamingspotentie */}
+      <div className="space-y-4">
+        <h3 className="text-base font-semibold border-b pb-1">D. Verduurzamingspotentie</h3>
+
+        <div className="grid gap-2">
+          <Label htmlFor="maatregelenVerduurzaming">Mogelijke verduurzamingsmaatregelen</Label>
+          <Textarea
+            id="maatregelenVerduurzaming"
+            value={data.maatregelenVerduurzaming || ''}
+            onChange={(e) => onChange({ ...data, maatregelenVerduurzaming: e.target.value })}
+            placeholder="Bijv. zonnepanelen, warmtepomp, gevelisolatie, HR-glas"
+            rows={3}
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="marktwaardeNaVerduurzaming">Indicatieve marktwaarde na verduurzaming (€)</Label>
+          <Input
+            id="marktwaardeNaVerduurzaming"
+            type="number"
+            min={0}
+            value={data.marktwaardeNaVerduurzaming ?? ''}
+            onChange={(e) => onChange({ ...data, marktwaardeNaVerduurzaming: e.target.value ? Number(e.target.value) : undefined })}
+            placeholder="Indicatief bedrag"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Stap11({
   results,
   historischeRapporten,
   selectedReferenties,

@@ -103,6 +103,21 @@ function replacePlaceholders(template: string, dossier: Dossier): string {
 
   if (dossier.stap7) {
     result = result.replace(/{{energielabel}}/g, dossier.stap7.energielabel || '')
+    result = result.replace(/{{epc_beng_waarde}}/g, dossier.stap7.epcBengWaarde || '')
+    result = result.replace(/{{asbest}}/g, dossier.stap7.asbest || '')
+    result = result.replace(/{{bodemverontreiniging}}/g, dossier.stap7.bodemverontreiniging || '')
+    result = result.replace(/{{toelichting_vergunningen}}/g, dossier.stap7.toelichting || '')
+  }
+
+  if (dossier.stap10) {
+    result = result.replace(/{{duurzaamheid_isolatie_dak}}/g, dossier.stap10.isolatieDak || '')
+    result = result.replace(/{{duurzaamheid_isolatie_gevel}}/g, dossier.stap10.isolatieGevel || '')
+    result = result.replace(/{{duurzaamheid_isolatie_vloer}}/g, dossier.stap10.isolatieVloer || '')
+    result = result.replace(/{{duurzaamheid_isolatie_glas}}/g, dossier.stap10.isolatieGlas || '')
+    result = result.replace(/{{duurzaamheid_flexibiliteit}}/g, dossier.stap10.flexibiliteit || '')
+    result = result.replace(/{{duurzaamheid_certificaten}}/g, dossier.stap10.duurzaamheidscertificaten || '')
+    result = result.replace(/{{duurzaamheid_klimaatrisicos}}/g, dossier.stap10.klimaatrisicos || '')
+    result = result.replace(/{{duurzaamheid_maatregelen}}/g, dossier.stap10.maatregelenVerduurzaming || '')
   }
 
   if (dossier.stap8) {
@@ -1247,14 +1262,29 @@ BIJZONDERE WAARDECOMPONENTEN
 export function generateI_Duurzaamheid(dossier: Dossier): string {
   if (!dossier.stap7) return ''
 
+  const s7 = dossier.stap7
   const s10 = dossier.stap10
-  const energielabel = dossier.stap7.energielabel || 'Onbekend'
-  const epcBeng = dossier.stap7.epcBengWaarde || ''
-  const installaties = dossier.stap6?.installaties || ''
+  const s6 = dossier.stap6
+  const s9 = dossier.stap9
+
+  const energielabel = s7.energielabel || 'Onbekend'
+  const epcBeng = s7.epcBengWaarde || ''
+  const asbest = s7.asbest || 'onbekend'
+  const bodem = s7.bodemverontreiniging || 'onbekend'
+  const toelichtingVergunningen = s7.toelichting || ''
+  const installaties = s6?.installaties || ''
+  const milieuaspecten = s6?.omschrijvingMilieuaspecten || ''
+
+  // Build isolatie summary
+  const isolatieRegels: string[] = []
+  if (s10?.isolatieDak) isolatieRegels.push(`Dak: ${s10.isolatieDak}`)
+  if (s10?.isolatieGevel) isolatieRegels.push(`Gevel: ${s10.isolatieGevel}`)
+  if (s10?.isolatieVloer) isolatieRegels.push(`Vloer: ${s10.isolatieVloer}`)
+  if (s10?.isolatieGlas) isolatieRegels.push(`Glas: ${s10.isolatieGlas}`)
 
   let tekst = `I. DUURZAAMHEID
 
-ENERGIELABEL
+ENERGETISCHE KWALITEIT
 
 Energielabel: ${energielabel}`
 
@@ -1262,95 +1292,105 @@ Energielabel: ${energielabel}`
     tekst += `\nEPC/BENG-waarde: ${epcBeng}`
   }
 
+  // Duurzaamheidscertificaten indien aanwezig
+  if (s10?.duurzaamheidscertificaten) {
+    tekst += `\nDuurzaamheidscertificering: ${s10.duurzaamheidscertificaten}`
+  }
+
   tekst += `
 
-DUURZAAMHEIDSASPECTEN`
+ISOLATIE EN INSTALLATIES`
+
+  if (isolatieRegels.length > 0) {
+    tekst += `\n\n${isolatieRegels.join('\n')}`
+  } else {
+    tekst += `\n\nIsolatie: Niet nader onderzocht; geen specifieke informatie beschikbaar.`
+  }
+
+  if (installaties) {
+    tekst += `\n\nInstallaties: ${installaties}`
+  }
+
+  if (s10?.overwegendLedVerlichting !== undefined) {
+    tekst += `\nOverwegend LED-verlichting: ${s10.overwegendLedVerlichting ? 'Ja' : 'Nee'}`
+  }
 
   if (s10?.flexibiliteit) {
-    tekst += `\n\nFlexibiliteit: ${s10.flexibiliteit}`
-  } else {
-    tekst += `\n\nFlexibiliteit: [beoordeling]`
+    tekst += `\nFlexibiliteit / toekomstbestendigheid: ${s10.flexibiliteit}`
   }
 
   if (s10?.gebruikDuurzameMaterialen) {
     tekst += `\nGebruik duurzame materialen: ${s10.gebruikDuurzameMaterialen}`
   }
 
-  tekst += `
-Demontabel/herbruikbaar: [beoordeling]
-
-ECOLOGISCHE VOORZIENINGEN
-
-Ecologische voorzieningen: [omschrijving]
-Licht/ventilatie: [omschrijving]`
-
-  if (s10?.overwegendLedVerlichting !== undefined) {
-    tekst += `\nOverwegend LED-verlichting: ${s10.overwegendLedVerlichting ? 'Ja' : 'Nee'}`
-  }
-
-  tekst += `
-
-WARMTEOPWEKKING
-
-Warmteopwekking: ${installaties || '[omschrijving]'}
-Verwarmingsafgifte: [omschrijving]
-
-LUCHTBEHANDELING
-
-Luchtbehandeling: [omschrijving]
-
-ISOLATIE`
-
-  if (s10?.isolatieDak || s10?.isolatieGevel || s10?.isolatieVloer || s10?.isolatieGlas) {
-    if (s10?.isolatieDak) tekst += `\nDak: ${s10.isolatieDak}`
-    if (s10?.isolatieGevel) tekst += `\nGevel: ${s10.isolatieGevel}`
-    if (s10?.isolatieVloer) tekst += `\nVloer: ${s10.isolatieVloer}`
-    if (s10?.isolatieGlas) tekst += `\nGlas: ${s10.isolatieGlas}`
-  } else {
-    tekst += `\nIsolatie: [omschrijving]`
-  }
-
-  tekst += `
-
-ZONNEPANELEN`
-
-  if (s10?.dakoppervlakGeschiktVoorZonnepanelen) {
-    tekst += `\nDakoppervlak geschikt voor zonnepanelen: ${s10.dakoppervlakGeschiktVoorZonnepanelen}`
-  } else {
-    tekst += `\n[Omschrijving zonnepanelen indien aanwezig]`
-  }
-
-  if (s10?.aantalOplaadpunten != null) {
-    tekst += `\n\nOPLAADPUNTEN\n\nAantal oplaadpunten (EV): ${s10.aantalOplaadpunten}`
-  }
-
-  if (s10?.duurzaamheidscertificaten) {
-    tekst += `\n\nDUURZAAMHEIDSCERTIFICATEN\n\n${s10.duurzaamheidscertificaten}`
-  }
-
-  if (s10?.klimaatrisicos) {
-    tekst += `\n\nKLIMAATRISICO'S\n\n${s10.klimaatrisicos}`
+  // Zonnepanelen / oplaadpunten
+  if (s10?.dakoppervlakGeschiktVoorZonnepanelen || s10?.aantalOplaadpunten != null) {
+    tekst += `\n\nDUURZAAMHEIDSVOORZIENINGEN`
+    if (s10?.dakoppervlakGeschiktVoorZonnepanelen) {
+      tekst += `\n\nDakoppervlak geschikt voor zonnepanelen: ${s10.dakoppervlakGeschiktVoorZonnepanelen}`
+    }
+    if (s10?.aantalOplaadpunten != null) {
+      tekst += `\nAantal oplaadpunten (EV): ${s10.aantalOplaadpunten}`
+    }
   }
 
   if (s10?.greenLease !== undefined) {
     tekst += `\n\nGREEN LEASE\n\nGreen lease: ${s10.greenLease ? 'Van toepassing' : 'Niet van toepassing'}`
   }
 
-  if (s10?.maatregelenVerduurzaming) {
-    tekst += `\n\nMAAT­REGELEN VERDUURZAMING\n\n${s10.maatregelenVerduurzaming}`
+  tekst += `
+
+MILIEU EN RISICO`
+
+  const asbestTekst = asbest === 'ja' ? 'Ja – aanwezig' : asbest === 'nee' ? 'Nee – niet aangetroffen' : 'Onbekend'
+  const bodemTekst = bodem === 'ja' ? 'Ja – aanwezig' : bodem === 'nee' ? 'Nee – niet aangetroffen' : 'Onbekend'
+  tekst += `\n\nAsbest: ${asbestTekst}`
+  tekst += `\nBodemverontreiniging: ${bodemTekst}`
+
+  if (milieuaspecten) {
+    tekst += `\nOverige milieuaspecten: ${milieuaspecten}`
   }
 
-  if (s10?.marktwaardeNaVerduurzaming) {
-    tekst += `\n\nMARKTWAARDE NA VERDUURZAMING\n\nIndicatieve marktwaarde na verduurzaming: ${formatBedrag(s10.marktwaardeNaVerduurzaming)}`
+  if (s10?.klimaatrisicos) {
+    tekst += `\nKlimaatrisico's: ${s10.klimaatrisicos}`
+  }
+
+  if (toelichtingVergunningen) {
+    tekst += `\n\nToelichting: ${toelichtingVergunningen}`
   }
 
   tekst += `
 
-TOEKOMSTBESTENDIGHEID
+VERDUURZAMINGSPOTENTIE`
 
-Het object voldoet aan de huidige wet- en regelgeving op het gebied van duurzaamheid.
+  if (s10?.maatregelenVerduurzaming) {
+    tekst += `\n\n${s10.maatregelenVerduurzaming}`
+  } else {
+    // Derive potential from label and isolation scores
+    const labelGoed = ['A', 'A+', 'A++', 'A+++', 'A++++'].includes(energielabel)
+    if (labelGoed) {
+      tekst += `\n\nHet object heeft een gunstig energielabel. Directe verduurzamingsmaatregelen zijn op basis van beschikbare informatie niet noodzakelijk.`
+    } else {
+      tekst += `\n\nOp basis van het energielabel en de bouwkundige staat bestaan mogelijkheden voor verdere verduurzaming. Concrete maatregelen zijn niet nader onderzocht.`
+    }
+  }
 
-Voor zover bekend zijn geen directe verduurzamingsmaatregelen gepland.
+  if (s10?.marktwaardeNaVerduurzaming) {
+    tekst += `\n\nIndicatieve marktwaarde na verduurzaming: ${formatBedrag(s10.marktwaardeNaVerduurzaming)}`
+  }
+
+  // SWOT as supporting context – only summarise if sustainability-relevant entries are present
+  if (s9?.swotKansen || s9?.swotBedreigingen) {
+    const kansen = s9.swotKansen?.trim()
+    const bedreigingen = s9.swotBedreigingen?.trim()
+    if (kansen || bedreigingen) {
+      tekst += `\n\nCONTEXT DUURZAAMHEID`
+      if (kansen) tekst += `\n\nKansen (SWOT): ${kansen}`
+      if (bedreigingen) tekst += `\nBedreigingen (SWOT): ${bedreigingen}`
+    }
+  }
+
+  tekst += `
 
 DUURZAAMHEIDSDISCLAIMER
 

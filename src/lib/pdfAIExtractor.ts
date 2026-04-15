@@ -800,63 +800,37 @@ export async function aiExtractMissingFieldsWithChunks(
       }
     }
 
-    // constructie → stap6.constructie
-    if (fields['constructie'] && !currentResult.wizardData?.stap6?.constructie) {
-      const v = toString(fields['constructie'])
-      if (v) {
-        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
-        merged.wizardData!.stap6!.constructie = v
-        recordAI('constructie', v)
+    // constructie, terrein, gevels, afwerking → stap6
+    const stap6Fields = [
+      ['constructie', 'constructie'],
+      ['terrein', 'terrein'],
+      ['gevels', 'gevels'],
+      ['afwerking', 'afwerking'],
+    ] as const
+    for (const [aiKey, stap6Key] of stap6Fields) {
+      if (fields[aiKey] && !currentResult.wizardData?.stap6?.[stap6Key]) {
+        const v = toString(fields[aiKey])
+        if (v) {
+          if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
+          merged.wizardData!.stap6![stap6Key] = v
+          recordAI(stap6Key, v)
+        }
       }
     }
 
-    // terrein → stap6.terrein
-    if (fields['terrein'] && !currentResult.wizardData?.stap6?.terrein) {
-      const v = toString(fields['terrein'])
-      if (v) {
-        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
-        merged.wizardData!.stap6!.terrein = v
-        recordAI('terrein', v)
-      }
-    }
-
-    // gevels → stap6.gevels
-    if (fields['gevels'] && !currentResult.wizardData?.stap6?.gevels) {
-      const v = toString(fields['gevels'])
-      if (v) {
-        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
-        merged.wizardData!.stap6!.gevels = v
-        recordAI('gevels', v)
-      }
-    }
-
-    // afwerking → stap6.afwerking
-    if (fields['afwerking'] && !currentResult.wizardData?.stap6?.afwerking) {
-      const v = toString(fields['afwerking'])
-      if (v) {
-        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
-        merged.wizardData!.stap6!.afwerking = v
-        recordAI('afwerking', v)
-      }
-    }
-
-    // omgeving_en_belendingen → stap2.omgevingEnBelendingen
-    if (fields['omgeving_en_belendingen'] && !currentResult.wizardData?.stap2?.omgevingEnBelendingen) {
-      const v = toString(fields['omgeving_en_belendingen'])
-      if (v) {
-        if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie
-        merged.wizardData!.stap2!.omgevingEnBelendingen = v
-        recordAI('omgevingEnBelendingen', v)
-      }
-    }
-
-    // voorzieningen → stap2.voorzieningen
-    if (fields['voorzieningen'] && !currentResult.wizardData?.stap2?.voorzieningen) {
-      const v = toString(fields['voorzieningen'])
-      if (v) {
-        if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie
-        merged.wizardData!.stap2!.voorzieningen = v
-        recordAI('voorzieningen', v)
+    // omgeving_en_belendingen, voorzieningen → stap2
+    const stap2TextFields = [
+      ['omgeving_en_belendingen', 'omgevingEnBelendingen'],
+      ['voorzieningen', 'voorzieningen'],
+    ] as const
+    for (const [aiKey, stap2Key] of stap2TextFields) {
+      if (fields[aiKey] && !currentResult.wizardData?.stap2?.[stap2Key]) {
+        const v = toString(fields[aiKey])
+        if (v) {
+          if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie
+          merged.wizardData!.stap2![stap2Key] = v
+          recordAI(stap2Key, v)
+        }
       }
     }
   }

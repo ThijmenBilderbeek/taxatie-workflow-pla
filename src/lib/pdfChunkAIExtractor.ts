@@ -341,7 +341,7 @@ const PRIORITY_FIELDS = new Set([
 ])
 
 /** Placeholder values that are treated as meaningless. */
-const MEANINGLESS_VALUES = new Set(['onbekend', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen', ''])
+const MEANINGLESS_VALUES = new Set(['onbekend', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen'])
 
 /**
  * Returns `true` when `value` is a meaningful, non-empty, non-placeholder value.
@@ -428,6 +428,8 @@ export function mergeFieldValue(
   }
 
   // Both meaningful scalars → compare priorities
+  // `existing` is confirmed meaningful by isMeaningfulValue above.
+  const existingValue = existing as AIFieldValue
   const existingPriority = existingMeta
     ? getFieldPriority(fieldName, existingMeta.extractionType, existingMeta.sectionTitle)
     : 0
@@ -436,7 +438,7 @@ export function mergeFieldValue(
   if (incomingPriority > existingPriority) {
     const conflict: ConflictLog = {
       fieldName,
-      existingValue: existing!,
+      existingValue,
       incomingValue: incoming,
       chosenValue: incoming,
       reason: `Incoming priority ${incomingPriority} > existing priority ${existingPriority}`,
@@ -447,17 +449,17 @@ export function mergeFieldValue(
 
   // Existing wins (equal or higher priority — stability preference)
   const conflict: ConflictLog | undefined =
-    String(existing) !== String(incoming)
+    String(existingValue) !== String(incoming)
       ? {
           fieldName,
-          existingValue: existing!,
+          existingValue,
           incomingValue: incoming,
-          chosenValue: existing!,
+          chosenValue: existingValue,
           reason: `Existing priority ${existingPriority} >= incoming priority ${incomingPriority}; existing preserved`,
-          sourceMeta: existingMeta!,
+          sourceMeta: existingMeta ?? incomingMeta,
         }
       : undefined
-  return { value: existing!, meta: existingMeta!, conflict }
+  return { value: existingValue, meta: existingMeta ?? incomingMeta, conflict }
 }
 
 /**

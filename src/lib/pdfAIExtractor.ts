@@ -49,6 +49,9 @@ const FIELD_TO_SECTIONS: Record<string, string[]> = {
   huurprijsPerJaar:       ['waardering', 'samenvatting'],
 }
 
+/** Minimum combined section length before falling back to the full text. */
+const MIN_SECTION_LENGTH_THRESHOLD = 500
+
 /**
  * Returns the most relevant sections from `rapportTeksten` for the given missing fields,
  * concatenated up to `MAX_TEXT_CHARS`. Falls back to the full text when no sections match.
@@ -57,22 +60,22 @@ export function getRelevantTextForFields(
   rapportTeksten: Record<string, string>,
   missingFields: string[]
 ): string {
-  const sectionKeys = new Set<string>()
+  const relevantSectionKeys = new Set<string>()
 
   for (const field of missingFields) {
     const keys = FIELD_TO_SECTIONS[field] ?? ['samenvatting']
     for (const key of keys) {
-      sectionKeys.add(key)
+      relevantSectionKeys.add(key)
     }
   }
 
   // Always include samenvatting as it contains the most concise overview
-  sectionKeys.add('samenvatting')
+  relevantSectionKeys.add('samenvatting')
 
   const parts: string[] = []
   let totalLength = 0
 
-  for (const key of sectionKeys) {
+  for (const key of relevantSectionKeys) {
     const section = rapportTeksten[key]
     if (!section) continue
     const remaining = MAX_TEXT_CHARS - totalLength
@@ -82,7 +85,7 @@ export function getRelevantTextForFields(
   }
 
   // If we have no sections or very little content, fall back to the full text (truncated)
-  if (totalLength < 500 && rapportTeksten['volledig']) {
+  if (totalLength < MIN_SECTION_LENGTH_THRESHOLD && rapportTeksten['volledig']) {
     const full = rapportTeksten['volledig']
     return full.length > MAX_TEXT_CHARS ? full.slice(0, MAX_TEXT_CHARS) + '…' : full
   }

@@ -236,8 +236,15 @@ export function extractSwotFromText(text: string): {
 }
 
 /**
- * Maps a detected chapter heading (and its text content) to a logical section key.
- * Returns undefined if the chapter cannot be mapped to a known section.
+ * Maps a detected chapter heading to a logical section key used in `rapportTeksten`.
+ *
+ * @param chapter   - Top-level chapter identifier (e.g. "A", "B", "1"), used as a
+ *                    fallback when no subchapter heading is available.
+ * @param subchapter - Sub-section identifier (e.g. "B.1") or empty string.
+ * @param headingText - The primary label used for matching: typically `subchapter`
+ *                      when present, otherwise `chapter`.
+ * @returns A section key such as "samenvatting", "technisch", etc., or undefined
+ *          when the heading cannot be mapped to a known section.
  */
 function mapChapterToSectionKey(chapter: string, subchapter: string, headingText: string): string | undefined {
   const lower = (headingText + ' ' + chapter + ' ' + subchapter).toLowerCase()
@@ -273,11 +280,11 @@ export function splitReportIntoSections(text: string): Record<string, string> {
 
   for (const section of detectedSections) {
     if (!section.text) continue
-    // Use the chapter heading itself to determine the section key
-    // The heading text is the line content; for letter chapters it's captured in the chapter label
-    // We also include the full line (subchapter contains more specific heading info)
-    const headingLabel = section.subchapter || section.chapter
-    const key = mapChapterToSectionKey(section.chapter, section.subchapter, headingLabel)
+    // Use the most specific available heading label for section mapping.
+    // Subchapter (e.g. "B.1") is preferred over the top-level chapter letter
+    // because it typically carries more descriptive heading text.
+    const chapterHeading = section.subchapter || section.chapter
+    const key = mapChapterToSectionKey(section.chapter, section.subchapter, chapterHeading)
     if (key) {
       if (!sections[key]) sections[key] = []
       sections[key].push(section.text)

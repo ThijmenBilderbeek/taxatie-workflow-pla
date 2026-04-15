@@ -702,6 +702,39 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     ? cleanupLongFieldText(stap6omschrijvingMilieuaspectenRaw, 300) || undefined
     : undefined
 
+  // Toelichting onderhoud
+  const stap6toelichtingOnderhoudRaw = extractSectionAfterKeyword(text, [
+    'toelichting onderhoud:',
+    'toelichting bouwkundig:',
+    'toelichting staat van onderhoud:',
+  ], 400)
+  const stap6toelichtingOnderhoud = stap6toelichtingOnderhoudRaw
+    ? cleanupLongFieldText(stap6toelichtingOnderhoudRaw, 400) || undefined
+    : undefined
+
+  // Toelichting parkeren
+  const stap6toelichtingParkerenRaw = extractSectionAfterKeyword(text, [
+    'toelichting parkeren:',
+    'parkeerfaciliteiten:',
+    'parkeermogelijkheden:',
+    'parkeerplaatsen:',
+    'parkeren:',
+  ], 300)
+  const stap6toelichtingParkeren = stap6toelichtingParkerenRaw
+    ? cleanupLongFieldText(stap6toelichtingParkerenRaw, 300) || undefined
+    : undefined
+
+  // Toelichting functionaliteit
+  const stap6toelichtingFunctionaliteitRaw = extractSectionAfterKeyword(text, [
+    'toelichting functionaliteit:',
+    'functionaliteit:',
+    'gebruiksmogelijkheden:',
+    'indeelbaarheid:',
+  ], 300)
+  const stap6toelichtingFunctionaliteit = stap6toelichtingFunctionaliteitRaw
+    ? cleanupLongFieldText(stap6toelichtingFunctionaliteitRaw, 300) || undefined
+    : undefined
+
   // --- Stap 5: Juridische Info ---
   // Eigendomssituatie: limit to 100 chars, stop at unrelated field markers
   // stopAtInlineLabel stops before "Te taxeren belang:" and similar inline follow-up labels
@@ -807,6 +840,21 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'bijzondere publiekrechtelijke bepalingen:',
     'publiekrechtelijke bepalingen:',
     'publiekrechtelijke beperkingen:',
+  ], 300)
+
+  // Aantekeningen kadastraal object
+  const stap5aantekeningenKadastraalObject = extractSectionAfterKeyword(text, [
+    'aantekeningen kadastraal object:',
+    'aantekeningen kadaster:',
+    'kadastraal object aantekeningen:',
+    'aantekeningen:',
+  ], 300)
+
+  // Toelichting eigendom perceel
+  const stap5toelichtingEigendomPerceel = extractSectionAfterKeyword(text, [
+    'toelichting eigendom perceel:',
+    'toelichting eigendomssituatie:',
+    'toelichting perceel:',
   ], 300)
 
   // --- Stap 7: Vergunningen ---
@@ -1028,6 +1076,42 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'bijzonderheden:',
   ], 200)
 
+  // Algemene uitgangspunten (separate from aannames to avoid overlap with the combined field)
+  const stap9algemeneUitgangspunten = extractSectionAfterKeyword(text, [
+    'algemene uitgangspunten:',
+    'uitgangspunten:',
+  ], 600)
+
+  // Bijzondere uitgangspunten
+  const stap9bijzondereUitgangspunten = extractSectionAfterKeyword(text, [
+    'bijzondere uitgangspunten:',
+    'specifieke uitgangspunten:',
+  ], 400)
+
+  // Ontvangen informatie
+  const stap9ontvangenInformatie = extractSectionAfterKeyword(text, [
+    'ontvangen informatie:',
+    'verstrekte informatie:',
+    'ingeziene documenten:',
+    'informatieverstrekking:',
+  ], 600)
+
+  // Wezenlijke veranderingen
+  const stap9wezenlijkeVeranderingen = extractSectionAfterKeyword(text, [
+    'wezenlijke veranderingen:',
+    'relevante veranderingen:',
+    'veranderingen na inspectie:',
+    'verklaring wezenlijke veranderingen:',
+  ], 300)
+
+  // Taxatie onnauwkeurigheid
+  const stap9taxatieOnnauwkeurigheid = extractSectionAfterKeyword(text, [
+    'taxatie onnauwkeurigheid:',
+    'onnauwkeurigheid:',
+    'onzekerheidsmarge:',
+    'marge van onnauwkeurigheid:',
+  ], 300)
+
   // --- Build wizardData ---
   // Field-length constants (Bug 24)
   const MAX_FIELD_LENGTH_SHORT = 120    // objectnaam, gemeente, provincie, huurder, contracttype
@@ -1088,6 +1172,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap5teTaxerenBelang) stap5Fields.teTaxerenBelang = truncateField(stap5teTaxerenBelang, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5gebruikConformOmgevingsplan) stap5Fields.gebruikConformOmgevingsplan = truncateField(stap5gebruikConformOmgevingsplan, MAX_FIELD_LENGTH_MEDIUM)
   if (stap5bijzonderePubliekrechtelijkeBepalingen) stap5Fields.bijzonderePubliekrechtelijkeBepalingen = truncateField(stap5bijzonderePubliekrechtelijkeBepalingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5aantekeningenKadastraalObject) stap5Fields.aantekeningenKadastraalObject = truncateField(stap5aantekeningenKadastraalObject, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap5toelichtingEigendomPerceel) stap5Fields.toelichtingEigendomPerceel = truncateField(stap5toelichtingEigendomPerceel, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap5Fields).length > 0) {
     wizardData.stap5 = stap5Fields as Dossier['stap5']
   }
@@ -1106,6 +1192,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (stap6afwerking) stap6Fields.afwerking = truncateField(stap6afwerking, MAX_FIELD_LENGTH_MEDIUM)
   if (stap6beveiliging) stap6Fields.beveiliging = truncateField(stap6beveiliging, MAX_FIELD_LENGTH_MEDIUM)
   if (stap6omschrijvingMilieuaspecten) stap6Fields.omschrijvingMilieuaspecten = truncateField(stap6omschrijvingMilieuaspecten, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6toelichtingOnderhoud) stap6Fields.toelichtingOnderhoud = truncateField(stap6toelichtingOnderhoud, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap6toelichtingParkeren) stap6Fields.toelichtingParkeren = truncateField(stap6toelichtingParkeren, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap6toelichtingFunctionaliteit) stap6Fields.toelichtingFunctionaliteit = truncateField(stap6toelichtingFunctionaliteit, MAX_FIELD_LENGTH_MEDIUM)
   if (Object.keys(stap6Fields).length > 0) {
     wizardData.stap6 = stap6Fields as Dossier['stap6']
   }
@@ -1146,6 +1235,11 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   if (swotData.swotZwaktes) stap9Fields.swotZwaktes = truncateField(swotData.swotZwaktes, MAX_FIELD_LENGTH_TEXTAREA)
   if (swotData.swotKansen) stap9Fields.swotKansen = truncateField(swotData.swotKansen, MAX_FIELD_LENGTH_TEXTAREA)
   if (swotData.swotBedreigingen) stap9Fields.swotBedreigingen = truncateField(swotData.swotBedreigingen, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9algemeneUitgangspunten) stap9Fields.algemeneUitgangspunten = truncateField(stap9algemeneUitgangspunten, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9bijzondereUitgangspunten) stap9Fields.bijzondereUitgangspunten = truncateField(stap9bijzondereUitgangspunten, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9ontvangenInformatie) stap9Fields.ontvangenInformatie = truncateField(stap9ontvangenInformatie, MAX_FIELD_LENGTH_TEXTAREA)
+  if (stap9wezenlijkeVeranderingen) stap9Fields.wezenlijkeVeranderingen = truncateField(stap9wezenlijkeVeranderingen, MAX_FIELD_LENGTH_MEDIUM)
+  if (stap9taxatieOnnauwkeurigheid) stap9Fields.taxatieOnnauwkeurigheid = truncateField(stap9taxatieOnnauwkeurigheid, MAX_FIELD_LENGTH_MEDIUM)
 
   if (Object.keys(stap9Fields).length > 0) {
     wizardData.stap9 = stap9Fields as Dossier['stap9']

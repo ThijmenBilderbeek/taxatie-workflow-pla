@@ -265,6 +265,10 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
           provincie: preview.wizardData?.stap2?.provincie,
           ligging: preview.wizardData?.stap2?.ligging,
           bereikbaarheid: preview.wizardData?.stap2?.bereikbaarheid,
+          omgevingEnBelendingen: preview.wizardData?.stap2?.omgevingEnBelendingen,
+          voorzieningen: preview.wizardData?.stap2?.voorzieningen,
+          verwachteOntwikkelingen: preview.wizardData?.stap2?.verwachteOntwikkelingen,
+          locatiescore: preview.wizardData?.stap2?.locatiescore,
           coordinaten: preview.coordinaten ?? { lat: 0, lng: 0 },
         } as AdresLocatie,
         stap3: {
@@ -768,6 +772,42 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, bereikbaarheid: e.target.value } as AdresLocatie } }))}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-omgeving">Omgeving en belendingen</Label>
+                    <Textarea
+                      id="prev-omgeving"
+                      rows={3}
+                      value={preview.wizardData?.stap2?.omgevingEnBelendingen ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, omgevingEnBelendingen: e.target.value } as AdresLocatie } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-voorzieningen">Voorzieningen</Label>
+                    <Textarea
+                      id="prev-voorzieningen"
+                      rows={3}
+                      value={preview.wizardData?.stap2?.voorzieningen ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, voorzieningen: e.target.value } as AdresLocatie } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-verwachte-ontwikkelingen">Verwachte ontwikkelingen</Label>
+                    <Textarea
+                      id="prev-verwachte-ontwikkelingen"
+                      rows={3}
+                      value={preview.wizardData?.stap2?.verwachteOntwikkelingen ?? ''}
+                      onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, verwachteOntwikkelingen: e.target.value } as AdresLocatie } }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-locatiescore">Locatiescore</Label>
+                    <Input
+                      id="prev-locatiescore"
+                      value={preview.wizardData?.stap2?.locatiescore ?? ''}
+                      placeholder="bijv. goed, redelijk, 7/10"
+                      onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, locatiescore: e.target.value } as AdresLocatie } }))}
+                    />
+                  </div>
                 </div>
 
                 {/* Stap 3: Oppervlaktes */}
@@ -941,6 +981,60 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, bestemmingsplan: e.target.value } as JuridischeInfo } }))}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-tetaxerenbelang">Te taxeren belang</Label>
+                      <Textarea
+                        id="prev-tetaxerenbelang"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.teTaxerenBelang ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, teTaxerenBelang: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-aantekeningenKadaster">Aantekeningen kadastraal object</Label>
+                      <Textarea
+                        id="prev-aantekeningenKadaster"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.aantekeningenKadastraalObject ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, aantekeningenKadastraalObject: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-toelichtingEigendomPerceel">Toelichting eigendom perceel</Label>
+                      <Textarea
+                        id="prev-toelichtingEigendomPerceel"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.toelichtingEigendomPerceel ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, toelichtingEigendomPerceel: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-gebruikConform">Gebruik conform omgevingsplan</Label>
+                      <Textarea
+                        id="prev-gebruikConform"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.gebruikConformOmgevingsplan ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, gebruikConformOmgevingsplan: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bijzonderePubliek">Bijzondere publiekrechtelijke bepalingen</Label>
+                      <Textarea
+                        id="prev-bijzonderePubliek"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.bijzonderePubliekrechtelijkeBepalingen ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, bijzonderePubliekrechtelijkeBepalingen: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-kwalitatieve">Kwalitatieve verplichtingen</Label>
+                      <Textarea
+                        id="prev-kwalitatieve"
+                        rows={2}
+                        value={preview.wizardData?.stap5?.kwalitatieveVerplichtingen ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap5: { ...p?.wizardData?.stap5, kwalitatieveVerplichtingen: e.target.value } as JuridischeInfo } }))}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1038,6 +1132,89 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       />
                     </div>
                   )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-constructie">Constructie</Label>
+                      <Textarea
+                        id="prev-constructie"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.constructie ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, constructie: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-terrein">Terrein</Label>
+                      <Textarea
+                        id="prev-terrein"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.terrein ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, terrein: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-gevels">Gevels</Label>
+                      <Textarea
+                        id="prev-gevels"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.gevels ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, gevels: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-afwerking">Afwerking</Label>
+                      <Textarea
+                        id="prev-afwerking"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.afwerking ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, afwerking: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-beveiliging">Beveiliging</Label>
+                      <Textarea
+                        id="prev-beveiliging"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.beveiliging ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, beveiliging: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-milieuaspecten">Omschrijving milieuaspecten</Label>
+                      <Textarea
+                        id="prev-milieuaspecten"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.omschrijvingMilieuaspecten ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, omschrijvingMilieuaspecten: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-toelichtingOnderhoud">Toelichting onderhoud</Label>
+                      <Textarea
+                        id="prev-toelichtingOnderhoud"
+                        rows={3}
+                        value={preview.wizardData?.stap6?.toelichtingOnderhoud ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, toelichtingOnderhoud: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-toelichtingParkeren">Toelichting parkeren</Label>
+                      <Textarea
+                        id="prev-toelichtingParkeren"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.toelichtingParkeren ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, toelichtingParkeren: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-toelichtingFunctionaliteit">Toelichting functionaliteit</Label>
+                      <Textarea
+                        id="prev-toelichtingFunctionaliteit"
+                        rows={2}
+                        value={preview.wizardData?.stap6?.toelichtingFunctionaliteit ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap6: { ...p?.wizardData?.stap6, toelichtingFunctionaliteit: e.target.value } as TechnischeStaat } }))}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Stap 7: Vergunningen */}
@@ -1217,6 +1394,99 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                         rows={3}
                         value={preview.wizardData?.stap9?.bijzondereOmstandigheden ?? ''}
                         onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, bijzondereOmstandigheden: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-algUitgangspunten">Algemene uitgangspunten</Label>
+                      <Textarea
+                        id="prev-algUitgangspunten"
+                        rows={3}
+                        value={preview.wizardData?.stap9?.algemeneUitgangspunten ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, algemeneUitgangspunten: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-bijzUitgangspunten">Bijzondere uitgangspunten</Label>
+                      <Textarea
+                        id="prev-bijzUitgangspunten"
+                        rows={3}
+                        value={preview.wizardData?.stap9?.bijzondereUitgangspunten ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, bijzondereUitgangspunten: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-ontvangenInfo">Ontvangen informatie</Label>
+                      <Textarea
+                        id="prev-ontvangenInfo"
+                        rows={3}
+                        value={preview.wizardData?.stap9?.ontvangenInformatie ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, ontvangenInformatie: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-wezenlijkeVeranderingen">Wezenlijke veranderingen</Label>
+                      <Textarea
+                        id="prev-wezenlijkeVeranderingen"
+                        rows={2}
+                        value={preview.wizardData?.stap9?.wezenlijkeVeranderingen ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, wezenlijkeVeranderingen: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-taxatieOnnauwkeurigheid">Taxatie onnauwkeurigheid</Label>
+                      <Textarea
+                        id="prev-taxatieOnnauwkeurigheid"
+                        rows={2}
+                        value={preview.wizardData?.stap9?.taxatieOnnauwkeurigheid ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, taxatieOnnauwkeurigheid: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SWOT */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-foreground">SWOT-analyse</h3>
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-swot-sterktes">Sterktes</Label>
+                      <Textarea
+                        id="prev-swot-sterktes"
+                        rows={4}
+                        placeholder="Één punt per regel"
+                        value={preview.wizardData?.stap9?.swotSterktes ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, swotSterktes: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-swot-zwaktes">Zwaktes</Label>
+                      <Textarea
+                        id="prev-swot-zwaktes"
+                        rows={4}
+                        placeholder="Één punt per regel"
+                        value={preview.wizardData?.stap9?.swotZwaktes ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, swotZwaktes: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-swot-kansen">Kansen</Label>
+                      <Textarea
+                        id="prev-swot-kansen"
+                        rows={4}
+                        placeholder="Één punt per regel"
+                        value={preview.wizardData?.stap9?.swotKansen ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, swotKansen: e.target.value } as Aannames } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="prev-swot-bedreigingen">Bedreigingen</Label>
+                      <Textarea
+                        id="prev-swot-bedreigingen"
+                        rows={4}
+                        placeholder="Één punt per regel"
+                        value={preview.wizardData?.stap9?.swotBedreigingen ?? ''}
+                        onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap9: { ...p?.wizardData?.stap9, swotBedreigingen: e.target.value } as Aannames } }))}
                       />
                     </div>
                   </div>

@@ -128,10 +128,12 @@ const CORS_HEADERS = {
 
 /** 
  * Maximum characters of PDF text to send to the AI (cost-conscious).
- * 12 000 chars ≈ 3 000 tokens, which is well within the gpt-4o-mini context
- * window while covering the typical first few pages that contain field data.
+ * 30 000 chars ≈ 7 500 tokens, which covers a significantly larger portion
+ * of the report while remaining well within the gpt-4o-mini context window.
+ * The client selects the most relevant sections before sending, so the
+ * actual content quality is higher than a blind first-N-chars truncation.
  */
-const MAX_TEXT_CHARS = 12000
+const MAX_TEXT_CHARS = 30000
 
 serve(async (req: Request) => {
   // Handle CORS preflight

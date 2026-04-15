@@ -110,6 +110,18 @@ Richtlijnen per veldtype:
 - huurprijsPerJaar: huurprijs per jaar in euro's als getal
 - eigendomssituatie: eigendomssituatie als tekst (bijv. "Eigendom", "Erfpacht")
 - ligging: een van [binnenstad, woonwijk, bedrijventerrein, buitengebied, gemengd]
+- aannames: aannames en uitgangspunten van de taxatie als tekst
+- voorbehouden: voorbehouden bij de taxatie als tekst
+- bijzondereOmstandigheden: bijzondere omstandigheden als tekst
+- algemeneUitgangspunten: algemene uitgangspunten als tekst
+- bijzondereUitgangspunten: bijzondere uitgangspunten als tekst
+- ontvangenInformatie: overzicht van ontvangen/verstrekte informatie als tekst
+- wezenlijkeVeranderingen: wezenlijke veranderingen na inspectiedatum als tekst
+- taxatieOnnauwkeurigheid: taxatie onnauwkeurigheid/onzekerheidsmarge als tekst
+- swotSterktes: sterktes (strengths) uit de SWOT-analyse, als opsomming
+- swotZwaktes: zwaktes (weaknesses) uit de SWOT-analyse, als opsomming
+- swotKansen: kansen (opportunities) uit de SWOT-analyse, als opsomming
+- swotBedreigingen: bedreigingen (threats) uit de SWOT-analyse, als opsomming
 
 Retourneer ALLEEN het JSON-object met de gevraagde velden, zonder uitleg.
 Laat een veld weg als de informatie niet in de tekst te vinden is.

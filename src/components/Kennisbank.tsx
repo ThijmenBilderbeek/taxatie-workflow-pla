@@ -799,6 +799,15 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                       onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, verwachteOntwikkelingen: e.target.value } as AdresLocatie } }))}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="prev-locatiescore">Locatiescore</Label>
+                    <Input
+                      id="prev-locatiescore"
+                      value={preview.wizardData?.stap2?.locatiescore ?? ''}
+                      placeholder="bijv. goed, redelijk, 7/10"
+                      onChange={(e) => setPreview((p) => ({ ...p, wizardData: { ...p?.wizardData, stap2: { ...p?.wizardData?.stap2, locatiescore: e.target.value } as AdresLocatie } }))}
+                    />
+                  </div>
                 </div>
 
                 {/* Stap 3: Oppervlaktes */}

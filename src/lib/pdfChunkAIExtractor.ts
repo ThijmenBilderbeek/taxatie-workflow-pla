@@ -23,6 +23,7 @@ import {
   extractTypeObject,
   extractAdres,
   extractPerceeloppervlak,
+  extractConstructie,
 } from './pdfFieldExtractors'
 
 // ---------------------------------------------------------------------------
@@ -94,6 +95,12 @@ export const AI_EXTRACTABLE_FIELDS = [
   'swot_zwaktes',
   'swot_kansen',
   'swot_bedreigingen',
+  'constructie',
+  'terrein',
+  'gevels',
+  'afwerking',
+  'omgeving_en_belendingen',
+  'voorzieningen',
 ] as const
 
 export type AIExtractableField = (typeof AI_EXTRACTABLE_FIELDS)[number]
@@ -144,6 +151,18 @@ export function isFieldFilledInResult(
       return !!result.wizardData?.stap9?.swotKansen
     case 'swot_bedreigingen':
       return !!result.wizardData?.stap9?.swotBedreigingen
+    case 'constructie':
+      return !!result.wizardData?.stap6?.constructie
+    case 'terrein':
+      return !!result.wizardData?.stap6?.terrein
+    case 'gevels':
+      return !!result.wizardData?.stap6?.gevels
+    case 'afwerking':
+      return !!result.wizardData?.stap6?.afwerking
+    case 'omgeving_en_belendingen':
+      return !!result.wizardData?.stap2?.omgevingEnBelendingen
+    case 'voorzieningen':
+      return !!result.wizardData?.stap2?.voorzieningen
     // Fields that have no direct HistorischRapport equivalent — always "missing"
     // from the result perspective; the AI accumulator tracks them separately.
     case 'marktwaarde_per_m2':
@@ -201,6 +220,9 @@ export function extractRuleBasedFieldsFromChunk(
 
   const perceeloppervlak = extractPerceeloppervlak(content)
   if (perceeloppervlak?.value) found['bebouwd_oppervlak'] = perceeloppervlak.value
+
+  const constructie = extractConstructie(content)
+  if (constructie?.value) found['constructie'] = constructie.value
 
   // Address — flatten to a combined string for easy comparison
   const adresResult = extractAdres(content)

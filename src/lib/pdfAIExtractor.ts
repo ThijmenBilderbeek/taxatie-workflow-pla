@@ -13,7 +13,7 @@
  */
 
 import { supabase } from './supabaseClient'
-import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering, Aannames } from '../types'
+import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering, Aannames, TechnischeStaat } from '../types'
 import type { ExtractionDebugRecord } from './pdfFieldExtractors'
 import type { TextChunk } from './pdfTextChunker'
 import {
@@ -76,6 +76,13 @@ const FIELD_TO_SECTIONS: Record<string, string[]> = {
   swotZwaktes:                ['swot'],
   swotKansen:                 ['swot'],
   swotBedreigingen:           ['swot'],
+  // Stap 6 / stap 2 tekstvelden
+  constructie:                ['technisch'],
+  terrein:                    ['technisch', 'object'],
+  gevels:                     ['technisch'],
+  afwerking:                  ['technisch'],
+  omgevingEnBelendingen:      ['locatie'],
+  voorzieningen:              ['locatie'],
 }
 
 /** Minimum combined section length before falling back to the full text. */
@@ -186,6 +193,12 @@ function getMissingFields(result: Partial<HistorischRapport>): string[] {
   if (!result.wizardData?.stap9?.swotZwaktes) missing.push('swotZwaktes')
   if (!result.wizardData?.stap9?.swotKansen) missing.push('swotKansen')
   if (!result.wizardData?.stap9?.swotBedreigingen) missing.push('swotBedreigingen')
+  if (!result.wizardData?.stap6?.constructie) missing.push('constructie')
+  if (!result.wizardData?.stap6?.terrein) missing.push('terrein')
+  if (!result.wizardData?.stap6?.gevels) missing.push('gevels')
+  if (!result.wizardData?.stap6?.afwerking) missing.push('afwerking')
+  if (!result.wizardData?.stap2?.omgevingEnBelendingen) missing.push('omgevingEnBelendingen')
+  if (!result.wizardData?.stap2?.voorzieningen) missing.push('voorzieningen')
 
   return missing
 }
@@ -529,8 +542,9 @@ export async function aiExtractMissingFieldsWithChunks(
   let aiCallsDone = 0
   let aiCallsSkipped = 0
   let consecutiveEmptyAIResponses = 0
+  let consecutiveErrors = 0
   let earlyStopApplied = false
-  const EARLY_STOP_THRESHOLD = 3
+  const EARLY_STOP_THRESHOLD = 5
 
   // Ensure nested objects exist so merging below is safe.
   if (!merged.adres) merged.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
@@ -608,7 +622,7 @@ export async function aiExtractMissingFieldsWithChunks(
 
     if (error || !data) {
       console.warn(`[pdfAIExtractor] ${chunkLabel} Edge function error:`, error?.message ?? 'No data returned')
-      consecutiveEmptyAIResponses++
+      consecutiveErrors++
       continue
     }
 
@@ -785,6 +799,40 @@ export async function aiExtractMissingFieldsWithChunks(
         }
       }
     }
+
+    // constructie, terrein, gevels, afwerking → stap6
+    const stap6Fields = [
+      ['constructie', 'constructie'],
+      ['terrein', 'terrein'],
+      ['gevels', 'gevels'],
+      ['afwerking', 'afwerking'],
+    ] as const
+    for (const [aiKey, stap6Key] of stap6Fields) {
+      if (fields[aiKey] && !currentResult.wizardData?.stap6?.[stap6Key]) {
+        const v = toString(fields[aiKey])
+        if (v) {
+          if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
+          merged.wizardData!.stap6![stap6Key] = v
+          recordAI(stap6Key, v)
+        }
+      }
+    }
+
+    // omgeving_en_belendingen, voorzieningen → stap2
+    const stap2TextFields = [
+      ['omgeving_en_belendingen', 'omgevingEnBelendingen'],
+      ['voorzieningen', 'voorzieningen'],
+    ] as const
+    for (const [aiKey, stap2Key] of stap2TextFields) {
+      if (fields[aiKey] && !currentResult.wizardData?.stap2?.[stap2Key]) {
+        const v = toString(fields[aiKey])
+        if (v) {
+          if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie
+          merged.wizardData!.stap2![stap2Key] = v
+          recordAI(stap2Key, v)
+        }
+      }
+    }
   }
 
   applyAIFields(mergedChunkFields)
@@ -798,6 +846,7 @@ export async function aiExtractMissingFieldsWithChunks(
     `chunks processed: ${textChunks.length}, ` +
     `AI calls: ${aiCallsDone} done / ${aiCallsSkipped} skipped, ` +
     `rule-based filled: ${ruleBasedFilledCount}, AI filled: ${aiFilledCount}` +
+    (consecutiveErrors > 0 ? `, edge function errors: ${consecutiveErrors}` : '') +
     (earlyStopApplied ? ' [early stop applied]' : ''),
   )
 

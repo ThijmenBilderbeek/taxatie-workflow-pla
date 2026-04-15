@@ -106,7 +106,14 @@ Instructies:
 - Als informatie ontbreekt, schrijf "Informatie niet beschikbaar" of laat de passage weg
 - Houd de tekst professioneel en beknopt
 - Genereer alleen de tekst voor de gevraagde sectie, geen extra uitleg of markdown
-- Volg de instructies in het GEBRUIKERSPROFIEL en de FEEDBACK SAMENVATTING altijd op`
+- Volg de instructies in het GEBRUIKERSPROFIEL en de FEEDBACK SAMENVATTING altijd op
+
+Dataprioritering:
+1. Gebruik ALTIJD eerst de gestructureerde dossierdata (stap1-stap10 en _enrichedContext)
+2. Als gestructureerde SWOT-data aanwezig is, gebruik deze direct en verzin GEEN generieke SWOT-inhoud
+3. Gebruik kennisbank-chunks als aanvullende context en stijlreferentie
+4. Genereer GEEN generieke vastgoedfrasen — gebruik uitsluitend de verstrekte data
+5. Als _enrichedContext beschikbaar is, heeft dit voorrang als gedetailleerde bron voor de sectie`
 
 interface DossierData {
   stap1?: Record<string, unknown>
@@ -119,6 +126,7 @@ interface DossierData {
   stap8?: Record<string, unknown>
   stap9?: Record<string, unknown>
   stap10?: Record<string, unknown>
+  _enrichedContext?: Record<string, unknown>
 }
 
 interface Referentie {
@@ -203,7 +211,7 @@ function buildUserPrompt(
   let prompt = `Genereer de tekst voor sectie "${sectieTitel}" (key: ${sectieKey}) van een taxatierapport.\n`
 
   // Voeg dossierdata toe
-  const dossierSections = Object.entries(dossierData).filter(([, v]) => v && Object.keys(v).length > 0)
+  const dossierSections = Object.entries(dossierData).filter(([k, v]) => k !== '_enrichedContext' && v !== null && v !== undefined && typeof v === 'object' && Object.keys(v).length > 0)
   if (dossierSections.length > 0) {
     prompt += '\nDossiergegevens:\n'
     for (const [stap, data] of dossierSections) {
@@ -215,6 +223,14 @@ function buildUserPrompt(
         }
       }
     }
+  }
+
+  // Voeg verrijkte context toe (gestructureerde domeindata)
+  const enrichedContext = dossierData._enrichedContext
+  if (enrichedContext && typeof enrichedContext === 'object' && Object.keys(enrichedContext).length > 0) {
+    prompt += '\n=== GESTRUCTUREERDE DOMEINDATA (GEBRUIK DEZE ALS PRIMAIRE BRON) ===\n'
+    prompt += JSON.stringify(enrichedContext, null, 2)
+    prompt += '\n'
   }
 
   // Voeg kennisbank schrijfstijl toe (prioriteit boven schrijfstijl uit referenties)

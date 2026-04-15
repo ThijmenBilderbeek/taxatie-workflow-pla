@@ -305,16 +305,37 @@ De taxateur verklaart dat de bezichtiging geen bouwtechnische keuring is. Voor z
 }
 
 export function generateB5_Uitgangspunten(dossier: Dossier): string {
-  const template = `B.5 UITGANGSPUNTEN EN AFWIJKINGEN
+  const aannames = dossier.stap9?.aannames || ''
+  const voorbehouden = dossier.stap9?.voorbehouden || ''
+  const bijzondereOmstandigheden = dossier.stap9?.bijzondereOmstandigheden || ''
+  const algemeneUitgangspunten = dossier.stap9?.algemeneUitgangspunten || ''
+  const bijzondereUitgangspunten = dossier.stap9?.bijzondereUitgangspunten || ''
 
-Tenzij hieronder uitdrukkelijk anders vermeld, gaat de taxateur uit van de volgende aannames:
+  let template = `B.5 UITGANGSPUNTEN EN AFWIJKINGEN\n\nTenzij hieronder uitdrukkelijk anders vermeld, gaat de taxateur uit van de volgende aannames:\n\n`
 
-- Er is geen sprake van bodemverontreiniging
-- Het eigendom is vrij van hypotheken en andere zakelijke rechten
-- Het gebruik is in overeenstemming met het omgevingsplan
-- Er is geen sprake van asbest of andere gevaarlijke stoffen`
+  if (algemeneUitgangspunten) {
+    template += `ALGEMENE UITGANGSPUNTEN\n\n${algemeneUitgangspunten}\n\n`
+  } else {
+    template += `- Er is geen sprake van bodemverontreiniging\n- Het eigendom is vrij van hypotheken en andere zakelijke rechten\n- Het gebruik is in overeenstemming met het omgevingsplan\n- Er is geen sprake van asbest of andere gevaarlijke stoffen\n\n`
+  }
 
-  return replacePlaceholders(template, dossier)
+  if (aannames) {
+    template += `AANNAMES\n\n${aannames}\n\n`
+  }
+
+  if (voorbehouden) {
+    template += `VOORBEHOUDEN\n\n${voorbehouden}\n\n`
+  }
+
+  if (bijzondereOmstandigheden) {
+    template += `BIJZONDERE OMSTANDIGHEDEN\n\n${bijzondereOmstandigheden}\n\n`
+  }
+
+  if (bijzondereUitgangspunten) {
+    template += `BIJZONDERE UITGANGSPUNTEN\n\n${bijzondereUitgangspunten}\n\n`
+  }
+
+  return replacePlaceholders(template.trimEnd(), dossier)
 }
 
 export function generateB6_ToelichtingWaardering(dossier: Dossier): string {
@@ -421,26 +442,7 @@ export function generateC1_SWOT(dossier: Dossier): string {
     sterktes.length > 0 || zwaktes.length > 0 || kansen.length > 0 || bedreigingen.length > 0
 
   if (!heeftSWOTData) {
-    // Fallback naar generieke tekst als SWOT nog niet ingevuld is
-    return `C.1 SWOT-ANALYSE
-
-STERKTES
-- Goede locatie met voldoende bereikbaarheid
-- Solide bouwkundige staat
-- Representatieve uitstraling
-
-ZWAKTES
-- Specifieke invulling beperkt alternatieve aanwendbaarheid
-- Afhankelijkheid van lokale marktomstandigheden
-- Energielabel kan verbetering gebruiken
-
-KANSEN
-- Verduurzaming kan waarde verhogen
-- Marktverbetering kan waardegroei opleveren
-
-BEDREIGINGEN
-- Economische neergang kan vraag verminderen
-- Wijzigingen in wet- en regelgeving`
+    return `C.1 SWOT-ANALYSE\n\n[SWOT-analyse wordt gegenereerd op basis van dossiergegevens]`
   }
 
   let output = `C.1 SWOT-ANALYSE\n\n`
@@ -531,6 +533,10 @@ export function generateC2_Beoordeling(dossier: Dossier): string {
   if (bvo) contextRegels.push(`BVO: ${formatOppervlakte(bvo)}`)
   if (bouwjaar) contextRegels.push(`Bouwjaar: ${bouwjaar}`)
   if (energielabel && energielabel !== 'geen') contextRegels.push(`Energielabel: ${energielabel}`)
+  if (dossier.stap2?.omgevingEnBelendingen) contextRegels.push(`Omgeving: ${dossier.stap2.omgevingEnBelendingen}`)
+  if (dossier.stap2?.voorzieningen) contextRegels.push(`Voorzieningen: ${dossier.stap2.voorzieningen}`)
+  if (dossier.stap8?.marktwaarde) contextRegels.push(`Marktwaarde: ${formatBedrag(dossier.stap8.marktwaarde)}`)
+  if (dossier.stap8?.methode) contextRegels.push(`Waarderingsmethode: ${String(dossier.stap8.methode).replace(/_/g, '/')}`)
 
   if (contextRegels.length > 0) {
     output += `BEOORDELINGSCONTEXT\n\n${contextRegels.join('\n')}\n\n`
@@ -1037,6 +1043,13 @@ Het object is in ${renovatiejaar} gerenoveerd.`
 
 De renovatie heeft bijgedragen aan de bouwkundige kwaliteit en functionele bruikbaarheid van het object.`
 
+  if (dossier.stap6?.exterieurStaat) {
+    tekst += `\n\nDe huidige bouwkundige staat van het exterieur wordt beoordeeld als ${dossier.stap6.exterieurStaat}.`
+  }
+  if (dossier.stap6?.interieurStaat) {
+    tekst += ` De bouwkundige staat van het interieur wordt beoordeeld als ${dossier.stap6.interieurStaat}.`
+  }
+
   return tekst
 }
 
@@ -1400,18 +1413,34 @@ De taxateur gaat ervan uit dat de verstrekte informatie over duurzaamheid en ene
 }
 
 export function generateJ_AlgemeneUitgangspunten(dossier: Dossier): string {
-  return `J. ALGEMENE UITGANGSPUNTEN
+  const aannames = dossier.stap9?.aannames || ''
+  const voorbehouden = dossier.stap9?.voorbehouden || ''
+  const algemeneUitgangspunten = dossier.stap9?.algemeneUitgangspunten || ''
 
-Bij het opstellen van deze taxatie zijn de volgende algemene uitgangspunten gehanteerd:
+  let tekst = `J. ALGEMENE UITGANGSPUNTEN\n\nBij het opstellen van deze taxatie zijn de volgende algemene uitgangspunten gehanteerd:\n\n`
 
-- De taxatie is opgesteld conform de Richtlijnen Vastgoedtaxaties (RVT), International Valuation Standards (IVS) en European Valuation Standards (EVS/RICS)
-- Er is uitgegaan van vrij van huur en gebruik, tenzij anders vermeld
-- Het gebruik is conform de bestemming
-- Er zijn geen verborgen gebreken verondersteld
-- Alle benodigde vergunningen zijn aanwezig en rechtsgeldig
-- De verstrekte informatie is correct en volledig
-- Er is geen sprake van bodemverontreiniging of asbest
-- Het object is vrij van hypotheken en andere zakelijke rechten`
+  if (algemeneUitgangspunten) {
+    tekst += `${algemeneUitgangspunten}\n\n`
+  } else {
+    tekst += `- De taxatie is opgesteld conform de Richtlijnen Vastgoedtaxaties (RVT), International Valuation Standards (IVS) en European Valuation Standards (EVS/RICS)\n`
+    tekst += `- Er is uitgegaan van vrij van huur en gebruik, tenzij anders vermeld\n`
+    tekst += `- Het gebruik is conform de bestemming\n`
+    tekst += `- Er zijn geen verborgen gebreken verondersteld\n`
+    tekst += `- Alle benodigde vergunningen zijn aanwezig en rechtsgeldig\n`
+    tekst += `- De verstrekte informatie is correct en volledig\n`
+    tekst += `- Er is geen sprake van bodemverontreiniging of asbest\n`
+    tekst += `- Het object is vrij van hypotheken en andere zakelijke rechten\n`
+  }
+
+  if (aannames) {
+    tekst += `\nAANNAMES\n\n${aannames}\n`
+  }
+
+  if (voorbehouden) {
+    tekst += `\nVOORBEHOUDEN\n\n${voorbehouden}\n`
+  }
+
+  return tekst.trimEnd()
 }
 
 export function generateK_WaardebegrippenDefinities(dossier: Dossier): string {

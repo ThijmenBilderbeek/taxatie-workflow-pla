@@ -16,11 +16,14 @@ import { supabase } from './supabaseClient'
 import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering, Aannames, TechnischeStaat } from '../types'
 import type { ExtractionDebugRecord } from './pdfFieldExtractors'
 import type { TextChunk } from './pdfTextChunker'
+import { FULL_DOCUMENT_SECTION_TITLE } from './pdfTextChunker'
 import {
   extractRuleBasedFieldsFromChunk,
   getMissingFieldsForChunk,
   parseAndValidateAIOutput,
   mergeExtractionResults,
+  isReferenceOrAppendixChunk,
+  REFERENCE_SENSITIVE_FIELDS,
   AI_EXTRACTABLE_FIELDS,
   type AIFieldValue,
   type ChunkExtractionResult,
@@ -546,6 +549,10 @@ export async function aiExtractMissingFieldsWithChunks(
   let earlyStopApplied = false
   const EARLY_STOP_THRESHOLD = 5
 
+  // When all chunks are FULL_DOCUMENT (no named sections were detected), disable
+  // early-stop so every chunk in the document gets a chance to be processed.
+  const isFullDocumentMode = textChunks.length > 0 && textChunks.every((c) => c.sectionTitle === FULL_DOCUMENT_SECTION_TITLE)
+
   // Ensure nested objects exist so merging below is safe.
   if (!merged.adres) merged.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
   if (!merged.wizardData) merged.wizardData = {}
@@ -593,7 +600,8 @@ export async function aiExtractMissingFieldsWithChunks(
     }
 
     // Early-stop: skip remaining chunks if AI has found nothing new for N consecutive chunks.
-    if (consecutiveEmptyAIResponses >= EARLY_STOP_THRESHOLD) {
+    // Disabled for FULL_DOCUMENT mode — all chunks must be processed when no named sections exist.
+    if (!isFullDocumentMode && consecutiveEmptyAIResponses >= EARLY_STOP_THRESHOLD) {
       console.log(`[pdfAIExtractor] Early stop: ${EARLY_STOP_THRESHOLD} consecutive chunks with no new AI fields — stopping`)
       earlyStopApplied = true
       // Current chunk + all remaining chunks are skipped (AI call not made for any of them)
@@ -601,7 +609,21 @@ export async function aiExtractMissingFieldsWithChunks(
       break
     }
 
-    console.log(`[pdfAIExtractor] ${chunkLabel} Sending ${missingFields.length} missing field(s) to AI: ${missingFields.join(', ')}`)
+    // For reference/appendix chunks, exclude fields that must not be sourced from comparables.
+    const isRefChunk = isReferenceOrAppendixChunk(chunk)
+    const effectiveMissingFields = isRefChunk
+      ? missingFields.filter((f) => !REFERENCE_SENSITIVE_FIELDS.includes(f))
+      : missingFields
+    if (isRefChunk && effectiveMissingFields.length < missingFields.length) {
+      console.log(`[pdfAIExtractor] ${chunkLabel} Reference/appendix chunk — excluding ${missingFields.length - effectiveMissingFields.length} sensitive field(s) from AI request`)
+    }
+    if (effectiveMissingFields.length === 0) {
+      console.log(`[pdfAIExtractor] ${chunkLabel} No requestable fields after reference filter — skipping AI call`)
+      aiCallsSkipped++
+      continue
+    }
+
+    console.log(`[pdfAIExtractor] ${chunkLabel} Sending ${effectiveMissingFields.length} missing field(s) to AI: ${effectiveMissingFields.join(', ')}`)
 
     // Step 3: call AI for missing fields only.
     const chunkContent = chunk.content.length > MAX_CHUNK_CHARS
@@ -611,7 +633,7 @@ export async function aiExtractMissingFieldsWithChunks(
     const { data, error } = await supabase.functions.invoke('openai-pdf-extract', {
       body: {
         text: chunkContent,
-        missingFields,
+        missingFields: effectiveMissingFields,
         chunkContext: {
           sectionTitle: chunk.sectionTitle,
           chunkIndex: chunk.chunkIndex,
@@ -628,7 +650,7 @@ export async function aiExtractMissingFieldsWithChunks(
 
     // Step 4: validate AI response — filter to only fields that were requested.
     const rawJson = typeof data === 'string' ? data : JSON.stringify(data)
-    const aiFields = parseAndValidateAIOutput(rawJson, AI_EXTRACTABLE_FIELDS, missingFields)
+    const aiFields = parseAndValidateAIOutput(rawJson, AI_EXTRACTABLE_FIELDS, effectiveMissingFields)
     const aiKeys = Object.keys(aiFields)
     aiCallsDone++
     console.log(

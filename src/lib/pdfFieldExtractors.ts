@@ -924,11 +924,24 @@ export function extractOmgevingstype(text: string): ExtractionResult<string> | u
 // ---------------------------------------------------------------------------
 
 export function extractConstructie(text: string): ExtractionResult<string> | undefined {
-  const exact = tryExactLabel(text, ['constructie', 'bouwconstructie', 'draagconstructie', 'skelet'])
-  if (exact) {
-    const value = compactWhitespace(exact.raw.split('\n')[0].trim()).slice(0, 120)
+  const lower = text.toLowerCase()
+  const labels = ['constructie:', 'bouwconstructie:', 'draagconstructie:', 'skelet:']
+  for (const needle of labels) {
+    const idx = lower.indexOf(needle)
+    if (idx === -1) continue
+    const after = text.slice(idx + needle.length).replace(/^[\s]+/, '')
+    if (!after) continue
+    // Take up to 300 chars, stop at next label on a new line (e.g. "Dakconstructie: ...")
+    let raw = after.slice(0, 300)
+    const nextLabelOnNewLine = raw.search(/\n[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{0,40}:\s/)
+    if (nextLabelOnNewLine >= 0) raw = raw.slice(0, nextLabelOnNewLine)
+    // Also stop at any inline technical label (no preceding newline)
+    const inlineTechStop = raw.search(/\b(?:dak|gevels|kozijnen|installaties|terrein|afwerking|fundering|interieur|exterieur)\s*:/i)
+    if (inlineTechStop > 0) raw = raw.slice(0, inlineTechStop)
+    const value = compactWhitespace(raw.trim()).slice(0, 300)
     if (value && value.length > 2) {
-      return { value, confidence: 'high', sourceLabel: exact.label, sourceSnippet: exact.snippet, sourceSection: 'Stap 6', parserRule: 'constructie-label' }
+      const snippet = text.slice(Math.max(0, idx - 10), idx + needle.length + 40).replace(/\s+/g, ' ')
+      return { value, confidence: 'high', sourceLabel: needle, sourceSnippet: snippet, sourceSection: 'Stap 6', parserRule: 'constructie-label' }
     }
   }
   return undefined

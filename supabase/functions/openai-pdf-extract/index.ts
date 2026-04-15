@@ -165,6 +165,16 @@ serve(async (req: Request) => {
       })
     }
 
+    // Reject oversized text fields early to avoid OpenAI token limit errors.
+    // The client should have already truncated text to MAX_TEXT_CHARS, but we
+    // enforce it here as a safety net.
+    if (text.length > MAX_TEXT_CHARS * 2) {
+      return new Response(JSON.stringify({ error: 'text exceeds maximum allowed length' }), {
+        status: 413,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      })
+    }
+
     if (!missingFields || !Array.isArray(missingFields) || missingFields.length === 0) {
       return new Response(JSON.stringify({ error: 'missingFields is required and must be a non-empty array' }), {
         status: 400,

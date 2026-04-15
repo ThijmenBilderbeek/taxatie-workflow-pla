@@ -242,7 +242,10 @@ export async function aiExtractMissingFields(
   })
 
   if (error || !data) {
-    throw new Error(error?.message ?? 'No data from AI extractor')
+    // Return gracefully so the calling code can continue with the regex-only result.
+    // A 400/5xx from the edge function should never block the parse flow.
+    console.warn('[aiExtractMissingFields] Edge function error:', error?.message ?? 'No data returned')
+    return { result: currentResult, aiDebug: {}, warnings }
   }
 
   const fields = data as EdgeFunctionResponse

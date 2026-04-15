@@ -9,10 +9,27 @@ describe('splitReportIntoSections', () => {
     expect(result.volledig).toBe(text)
   })
 
-  it('backward compat — volledig always equals full input', () => {
+  it('backward compat — volledig equals full input when text is short', () => {
     const text = `A. Samenvatting\nDit is de samenvatting.\n\nB. Waardering\nDe marktwaarde is €1.000.000.`
     const result = splitReportIntoSections(text)
+    // Short text is never truncated even when sections are detected
     expect(result.volledig).toBe(text)
+  })
+
+  it('truncates volledig to 50 000 chars when sections are detected and text is large', () => {
+    // Build a text large enough to trigger truncation (> 50 000 chars)
+    const sectionContent = 'x'.repeat(30000)
+    const text = `A. Samenvatting\n${sectionContent}\n\nB. Waardering\n${sectionContent}`
+    expect(text.length).toBeGreaterThan(50000)
+
+    const result = splitReportIntoSections(text)
+
+    // Named sections are detected so truncation should apply
+    expect(result).toHaveProperty('samenvatting')
+    expect(result).toHaveProperty('waardering')
+    // volledig must be capped at 50 000 chars + '…'
+    expect(result.volledig.length).toBeLessThanOrEqual(50001)
+    expect(result.volledig.endsWith('…')).toBe(true)
   })
 
   it('detects letter-based chapters and maps to correct section keys', () => {

@@ -13,7 +13,7 @@
  */
 
 import { supabase } from './supabaseClient'
-import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering, Aannames } from '../types'
+import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering, Aannames, TechnischeStaat } from '../types'
 import type { ExtractionDebugRecord } from './pdfFieldExtractors'
 import type { TextChunk } from './pdfTextChunker'
 import {
@@ -76,6 +76,13 @@ const FIELD_TO_SECTIONS: Record<string, string[]> = {
   swotZwaktes:                ['swot'],
   swotKansen:                 ['swot'],
   swotBedreigingen:           ['swot'],
+  // Stap 6 / stap 2 tekstvelden
+  constructie:                ['technisch'],
+  terrein:                    ['technisch', 'object'],
+  gevels:                     ['technisch'],
+  afwerking:                  ['technisch'],
+  omgevingEnBelendingen:      ['locatie'],
+  voorzieningen:              ['locatie'],
 }
 
 /** Minimum combined section length before falling back to the full text. */
@@ -186,6 +193,12 @@ function getMissingFields(result: Partial<HistorischRapport>): string[] {
   if (!result.wizardData?.stap9?.swotZwaktes) missing.push('swotZwaktes')
   if (!result.wizardData?.stap9?.swotKansen) missing.push('swotKansen')
   if (!result.wizardData?.stap9?.swotBedreigingen) missing.push('swotBedreigingen')
+  if (!result.wizardData?.stap6?.constructie) missing.push('constructie')
+  if (!result.wizardData?.stap6?.terrein) missing.push('terrein')
+  if (!result.wizardData?.stap6?.gevels) missing.push('gevels')
+  if (!result.wizardData?.stap6?.afwerking) missing.push('afwerking')
+  if (!result.wizardData?.stap2?.omgevingEnBelendingen) missing.push('omgevingEnBelendingen')
+  if (!result.wizardData?.stap2?.voorzieningen) missing.push('voorzieningen')
 
   return missing
 }
@@ -529,8 +542,9 @@ export async function aiExtractMissingFieldsWithChunks(
   let aiCallsDone = 0
   let aiCallsSkipped = 0
   let consecutiveEmptyAIResponses = 0
+  let consecutiveErrors = 0
   let earlyStopApplied = false
-  const EARLY_STOP_THRESHOLD = 3
+  const EARLY_STOP_THRESHOLD = 5
 
   // Ensure nested objects exist so merging below is safe.
   if (!merged.adres) merged.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
@@ -608,7 +622,7 @@ export async function aiExtractMissingFieldsWithChunks(
 
     if (error || !data) {
       console.warn(`[pdfAIExtractor] ${chunkLabel} Edge function error:`, error?.message ?? 'No data returned')
-      consecutiveEmptyAIResponses++
+      consecutiveErrors++
       continue
     }
 
@@ -785,6 +799,66 @@ export async function aiExtractMissingFieldsWithChunks(
         }
       }
     }
+
+    // constructie → stap6.constructie
+    if (fields['constructie'] && !currentResult.wizardData?.stap6?.constructie) {
+      const v = toString(fields['constructie'])
+      if (v) {
+        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
+        merged.wizardData!.stap6!.constructie = v
+        recordAI('constructie', v)
+      }
+    }
+
+    // terrein → stap6.terrein
+    if (fields['terrein'] && !currentResult.wizardData?.stap6?.terrein) {
+      const v = toString(fields['terrein'])
+      if (v) {
+        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
+        merged.wizardData!.stap6!.terrein = v
+        recordAI('terrein', v)
+      }
+    }
+
+    // gevels → stap6.gevels
+    if (fields['gevels'] && !currentResult.wizardData?.stap6?.gevels) {
+      const v = toString(fields['gevels'])
+      if (v) {
+        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
+        merged.wizardData!.stap6!.gevels = v
+        recordAI('gevels', v)
+      }
+    }
+
+    // afwerking → stap6.afwerking
+    if (fields['afwerking'] && !currentResult.wizardData?.stap6?.afwerking) {
+      const v = toString(fields['afwerking'])
+      if (v) {
+        if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
+        merged.wizardData!.stap6!.afwerking = v
+        recordAI('afwerking', v)
+      }
+    }
+
+    // omgeving_en_belendingen → stap2.omgevingEnBelendingen
+    if (fields['omgeving_en_belendingen'] && !currentResult.wizardData?.stap2?.omgevingEnBelendingen) {
+      const v = toString(fields['omgeving_en_belendingen'])
+      if (v) {
+        if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie
+        merged.wizardData!.stap2!.omgevingEnBelendingen = v
+        recordAI('omgevingEnBelendingen', v)
+      }
+    }
+
+    // voorzieningen → stap2.voorzieningen
+    if (fields['voorzieningen'] && !currentResult.wizardData?.stap2?.voorzieningen) {
+      const v = toString(fields['voorzieningen'])
+      if (v) {
+        if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie
+        merged.wizardData!.stap2!.voorzieningen = v
+        recordAI('voorzieningen', v)
+      }
+    }
   }
 
   applyAIFields(mergedChunkFields)
@@ -798,6 +872,7 @@ export async function aiExtractMissingFieldsWithChunks(
     `chunks processed: ${textChunks.length}, ` +
     `AI calls: ${aiCallsDone} done / ${aiCallsSkipped} skipped, ` +
     `rule-based filled: ${ruleBasedFilledCount}, AI filled: ${aiFilledCount}` +
+    (consecutiveErrors > 0 ? `, edge function errors: ${consecutiveErrors}` : '') +
     (earlyStopApplied ? ' [early stop applied]' : ''),
   )
 

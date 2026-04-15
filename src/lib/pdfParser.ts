@@ -715,7 +715,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'constructie:',
     'bouwconstructie:',
     'draagconstructie:',
-  ], 300, { singleLine: true })
+  ], 300, { stopAtInlineLabel: true })
   const stap6constructie = stap6constructieRaw ? summarizeTechnicalField(stap6constructieRaw, 300) || undefined : undefined
 
   const stap6installatiesRaw = extractSectionAfterKeyword(text, [
@@ -1601,6 +1601,7 @@ export async function parsePdfToRapport(
         if (aiWd.stap3) wd.stap3 = { ...aiWd.stap3, ...wd.stap3 }
         if (aiWd.stap4) wd.stap4 = { ...aiWd.stap4, ...wd.stap4 }
         if (aiWd.stap5) wd.stap5 = { ...aiWd.stap5, ...wd.stap5 }
+        if (aiWd.stap6) wd.stap6 = { ...aiWd.stap6, ...wd.stap6 }
         if (aiWd.stap7) wd.stap7 = { ...aiWd.stap7, ...wd.stap7 }
         if (aiWd.stap8) wd.stap8 = { ...aiWd.stap8, ...wd.stap8 }
         if (aiWd.stap9) wd.stap9 = { ...aiWd.stap9, ...wd.stap9 }

@@ -19,6 +19,7 @@ import { Separator } from './ui/separator'
 import { toast } from 'sonner'
 import { parsePdfToRapport } from '../lib/pdfParser'
 import type { ExtractionDebugRecord } from '../lib/pdfFieldExtractors'
+import { hasAIFilledFields } from '../lib/pdfAIExtractor'
 
 interface KennisbankProps {
   historischeRapporten: HistorischRapport[]
@@ -35,9 +36,11 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   // PDF upload dialog state
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState<string>('PDF wordt verwerkt...')
   const [preview, setPreview] = useState<Partial<HistorischRapport> | null>(null)
   const [extractionDebug, setExtractionDebug] = useState<ExtractionDebugRecord>({})
   const [fieldSuggestions, setFieldSuggestions] = useState<Record<string, string>>({})
+  const [hasAIFields, setHasAIFields] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
 
@@ -91,10 +94,14 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
 
   const processFile = async (file: File) => {
     setIsLoading(true)
+    setLoadingMessage('PDF wordt verwerkt...')
     try {
+      // parsePdfToRapport now calls AI fallback internally; show appropriate loading message
+      setLoadingMessage('AI analyseert ontbrekende velden...')
       const parsed = await parsePdfToRapport(file)
       const debug = (parsed.extractionDebug ?? {}) as ExtractionDebugRecord
       setExtractionDebug(debug)
+      setHasAIFields(hasAIFilledFields(debug))
 
       // For low-confidence fields: clear the value and store as placeholder suggestion
       const suggestions: Record<string, string> = {}
@@ -340,6 +347,8 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     setExtractionDebug({})
     setFieldSuggestions({})
     setIsLoading(false)
+    setLoadingMessage('PDF wordt verwerkt...')
+    setHasAIFields(false)
     setIsDragging(false)
     setPendingChunks([])
     setPendingProfile(null)
@@ -432,6 +441,16 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   const confidenceDot = (fieldKey: string) => {
     const entry = extractionDebug[fieldKey]
     if (!entry) return null
+    if (entry.sourceType === 'ai') {
+      return (
+        <span
+          className="inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold bg-blue-500 text-white ml-1 shrink-0 leading-none"
+          title="Ingevuld door AI — controleer"
+        >
+          AI
+        </span>
+      )
+    }
     if (entry.confidence === 'high') {
       return (
         <span
@@ -457,7 +476,9 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
   }
 
   const inputClass = (fieldKey: string) => {
-    const conf = extractionDebug[fieldKey]?.confidence
+    const entry = extractionDebug[fieldKey]
+    if (entry?.sourceType === 'ai') return 'border-dashed border-blue-300'
+    const conf = entry?.confidence
     if (conf === 'medium') return 'border-dashed'
     if (conf === 'low') return 'border-dashed border-red-300 text-muted-foreground'
     return ''
@@ -551,7 +572,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
 
             {isLoading && (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <span>PDF wordt verwerkt...</span>
+                <span>{loadingMessage}</span>
               </div>
             )}
 
@@ -575,6 +596,19 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
                           {' / '}<span className="font-medium">{pendingProfile.detailLevel}</span>
                         </span>
                       )}
+                    </p>
+                  </div>
+                )}
+
+                {/* AI field extraction notice */}
+                {hasAIFields && (
+                  <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm space-y-1">
+                    <p className="font-medium text-blue-800">
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold bg-blue-500 text-white mr-1">AI</span>
+                      Velden aangevuld door AI
+                    </p>
+                    <p className="text-blue-700">
+                      Sommige velden zijn aangevuld door AI (blauw omkaderd). Controleer deze velden zorgvuldig voor het opslaan.
                     </p>
                   </div>
                 )}

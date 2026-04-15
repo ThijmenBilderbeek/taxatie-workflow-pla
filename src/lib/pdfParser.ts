@@ -428,19 +428,19 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   // --- Stap 3: Oppervlaktes ---
   // BVO: extended label synonyms including "Totaal BVO m² of stuks"
   const bvoMatch = text.match(
-    /(?:Totaal\s+BVO(?:\s+m[²2]\s+of\s+stuks)?|BVO|bruto\s+vloeroppervlak|gebruiksoppervlak(?:te)?)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
+    /(?:Totaal\s+BVO(?:\s+m[²2]\s+of\s+stuks)?|BVO|bruto\s+vloeroppervlak|gebruiksoppervlak(?:te)?|bruto\s+oppervlak(?:te)?|bruto\s+vloeroppervlakte|totale?\s+oppervlak(?:te)?|totaal\s+m[²2]|bruto\s+m[²2])[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
   )
   const stap3bvo = bvoMatch ? normalizeArea(bvoMatch[1]) : undefined
 
   // VVO: extended label synonyms, handle "VVO 870" (space only, no colon)
   const vvoMatch = text.match(
-    /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|totaal\s+VVO|VVO|verhuurbaar\s+vloeroppervlak)[\s:]+([0-9]{1,6}[.,]?[0-9]*)\s*(?:m[²2])?/i
+    /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|totaal\s+VVO|VVO|NVO|verhuurbaar\s+vloeroppervlak|verhuurbare\s+oppervlak(?:te)?|netto\s+vloeroppervlak(?:te)?|netto\s+oppervlak(?:te)?)[\s:]+([0-9]{1,6}[.,]?[0-9]*)\s*(?:m[²2])?/i
   )
   const stap3vvo = vvoMatch ? normalizeArea(vvoMatch[1]) : undefined
 
   // Perceeloppervlak: extended label synonyms including "Kadastrale grootte"
   const perceelMatch = text.match(
-    /(?:Perceeloppervlak(?:te)?|Kaveloppervlak|Kadastrale\s+grootte|Kadastrale\s+oppervlak(?:te)?)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
+    /(?:Perceeloppervlak(?:te)?|Kaveloppervlak|Kadastrale\s+grootte|Kadastrale\s+oppervlak(?:te)?|terreinoppervlak(?:te)?|grondoppervlak(?:te)?|kavelmaat)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
   )
   const stap3perceeloppervlak = perceelMatch ? normalizeArea(perceelMatch[1]) : undefined
 
@@ -451,7 +451,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     stap3aantalBouwlagen = bouwlagenExtracted.value
   }
 
-  const bouwjaarMatch = text.match(/(?:bouwjaar|gebouwd\s+in|jaar\s+van\s+oplevering)[:\s]+([0-9]{4})/i)
+  const bouwjaarMatch = text.match(/(?:bouwjaar|gebouwd\s+in|jaar\s+van\s+oplevering|jaar\s+van\s+bouw|oorspronkelijk\s+bouwjaar|bouwperiode|opgeleverd\s+in)[:\s]+([0-9]{4})/i)
   const stap3bouwjaar = bouwjaarMatch ? parseInt(bouwjaarMatch[1], 10) : undefined
 
   // Renovatiejaar: skip reference sections and negative context
@@ -480,13 +480,13 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   // --- Stap 4: Huurgegevens ---
   // (?<!\w) prevents "markthuurprijs" from matching the huurprijs pattern
   const huurprijsMatch = text.match(
-    /(?<!\w)(?:huurprijs|jaarhuur|huur\s+per\s+jaar)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
+    /(?<!\w)(?:huurprijs|jaarhuur|huur\s+per\s+jaar|jaarhuursom|contracthuur|huuropbrengst)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
   )
   const stap4huurprijsPerJaar = huurprijsMatch ? normalizeEuro(huurprijsMatch[1]) : undefined
 
   // Markthuur: extended label synonyms including "Markt/herz. huur"
   const markthuurMatch = text.match(
-    /(?:Markt\/herz\.\s*huur|markthuur(?:waarde|prijs)?|marktconforme\s+huur)[:\s|]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
+    /(?:Markt\/herz\.\s*huur|markthuur(?:waarde|prijs)?|marktconforme\s+huur|bruto\s+huur)[:\s|]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
   )
   const stap4markthuurPerJaar = markthuurMatch ? normalizeEuro(markthuurMatch[1]) : undefined
 
@@ -875,7 +875,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   } else {
     const energielabelRaw = extractSectionAfterKeyword(
       text,
-      ['energielabel:', 'energieklasse:', 'energielabel'],
+      ['energielabel:', 'energieklasse:', 'energie-index:', 'epc:', 'energieprestatie:', 'energielabel'],
       20,
       { singleLine: true }
     )
@@ -1270,7 +1270,7 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   // --- BVO ---
   // Extended label synonyms, normalizeArea handles Dutch dot-thousands format
   const bvoMatch = text.match(
-    /(?:Totaal\s+BVO(?:\s+m[²2]\s+of\s+stuks)?|BVO|bruto\s+vloeroppervlak|gebruiksoppervlak(?:te)?)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
+    /(?:Totaal\s+BVO(?:\s+m[²2]\s+of\s+stuks)?|BVO|bruto\s+vloeroppervlak|gebruiksoppervlak(?:te)?|bruto\s+oppervlak(?:te)?|bruto\s+vloeroppervlakte|totale?\s+oppervlak(?:te)?|totaal\s+m[²2]|bruto\s+m[²2])[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/i
   )
   if (bvoMatch) {
     const val = normalizeArea(bvoMatch[1])
@@ -1279,7 +1279,7 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
 
   // --- Marktwaarde ---
   // Prefer exact (non-rounded) value over rounded when both labeled matches exist
-  const marktwaardeRe = /(?:marktwaarde\s+kosten\s+koper|marktwaarde\s+k[.\s]?k[.]?|marktwaarde)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/gi
+  const marktwaardeRe = /(?:marktwaarde\s+kosten\s+koper|marktwaarde\s+k[.\s]?k[.]?|marktwaarde|getaxeerde\s+waarde|geschatte\s+waarde|taxatiewaarde|waarde\s+k\.?k\.?|waarde\s+kosten\s+koper)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/gi
   let marktwaardeExact: number | undefined
   let marktwaardeRounded: number | undefined
   let mwMatch: RegExpExecArray | null
@@ -1328,7 +1328,7 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   // Priority 1: explicit peildatum label with date (numeric or Dutch month name format)
   const peildatumMatch = text.match(
     new RegExp(
-      `(?:waardepeildatum|waarde\\s+op|peildatum|getaxeerd\\s+per|getaxeerd\\s+op)[:\\s]+(\\d{1,2}[\\s\\-](?:${DUTCH_MONTH_PAT})[\\s\\-]\\d{4}|\\d{1,2}-\\d{1,2}-\\d{4})`,
+      `(?:waardepeildatum|waarde\\s+op|peildatum|getaxeerd\\s+per|getaxeerd\\s+op|datum\\s+taxatie|taxatiedatum|datum\\s+waardering|opnamedatum|datum\\s+van\\s+taxatie)[:\\s]+(\\d{1,2}[\\s\\-](?:${DUTCH_MONTH_PAT})[\\s\\-]\\d{4}|\\d{1,2}-\\d{1,2}-\\d{4})`,
       'i'
     )
   )
@@ -1357,9 +1357,16 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   const PHYSICAL_OBJECT_TYPES: { keyword: string; value: ObjectType }[] = [
     { keyword: 'bedrijfscomplex', value: 'bedrijfscomplex' },
     { keyword: 'bedrijfshal', value: 'bedrijfshal' },
+    { keyword: 'bedrijfsruimte', value: 'bedrijfshal' },
+    { keyword: 'distributiecentrum', value: 'bedrijfshal' },
+    { keyword: 'logistiek', value: 'bedrijfshal' },
+    { keyword: 'magazijn', value: 'bedrijfshal' },
     { keyword: 'kantoorgebouw', value: 'kantoor' },
     { keyword: 'kantoor', value: 'kantoor' },
     { keyword: 'winkel', value: 'winkel' },
+    { keyword: 'horeca', value: 'overig' },
+    { keyword: 'hotel', value: 'overig' },
+    { keyword: 'zorgvastgoed', value: 'overig' },
     { keyword: 'appartement', value: 'appartement' },
     { keyword: 'woning', value: 'woning' },
   ]
@@ -1462,6 +1469,44 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
 
   // --- extractionDebug: confidence info for each field ---
   result.extractionDebug = extractAllFieldsWithConfidence(text)
+
+  // --- AI fallback: fill missing fields using OpenAI ---
+  // This is optional and gracefully falls back to the regex-only result if it fails.
+  try {
+    const { aiExtractMissingFields } = await import('./pdfAIExtractor')
+    const { result: aiResult, aiDebug } = await aiExtractMissingFields(text, result)
+    // Merge AI debug entries into extractionDebug (regex entries take precedence)
+    if (Object.keys(aiDebug).length > 0) {
+      result.extractionDebug = { ...aiDebug, ...result.extractionDebug }
+      // Apply AI field values to result (only fields not already set by regex)
+      Object.assign(result, {
+        adres: aiResult.adres,
+        typeObject: result.typeObject ?? aiResult.typeObject,
+        gebruiksdoel: result.gebruiksdoel ?? aiResult.gebruiksdoel,
+        bvo: result.bvo ?? aiResult.bvo,
+        marktwaarde: result.marktwaarde ?? aiResult.marktwaarde,
+        bar: result.bar ?? aiResult.bar,
+        nar: result.nar ?? aiResult.nar,
+        waardepeildatum: result.waardepeildatum ?? aiResult.waardepeildatum,
+      })
+      // Merge wizardData stap by stap (AI values only fill empty slots)
+      if (aiResult.wizardData) {
+        if (!result.wizardData) result.wizardData = {}
+        const wd = result.wizardData
+        const aiWd = aiResult.wizardData
+        if (aiWd.stap1) wd.stap1 = { ...aiWd.stap1, ...wd.stap1 }
+        if (aiWd.stap2) wd.stap2 = { ...aiWd.stap2, ...wd.stap2 }
+        if (aiWd.stap3) wd.stap3 = { ...aiWd.stap3, ...wd.stap3 }
+        if (aiWd.stap4) wd.stap4 = { ...aiWd.stap4, ...wd.stap4 }
+        if (aiWd.stap5) wd.stap5 = { ...aiWd.stap5, ...wd.stap5 }
+        if (aiWd.stap7) wd.stap7 = { ...aiWd.stap7, ...wd.stap7 }
+        if (aiWd.stap8) wd.stap8 = { ...aiWd.stap8, ...wd.stap8 }
+      }
+    }
+  } catch (aiErr) {
+    // AI fallback failed — continue with regex-only result
+    console.warn('[parsePdfToRapport] AI fallback failed:', aiErr instanceof Error ? aiErr.message : aiErr)
+  }
 
   return result
 }

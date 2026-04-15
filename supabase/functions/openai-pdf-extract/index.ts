@@ -110,6 +110,29 @@ Richtlijnen per veldtype:
 - huurprijsPerJaar: huurprijs per jaar in euro's als getal
 - eigendomssituatie: eigendomssituatie als tekst (bijv. "Eigendom", "Erfpacht")
 - ligging: een van [binnenstad, woonwijk, bedrijventerrein, buitengebied, gemengd]
+- bereikbaarheid: beschrijving van de bereikbaarheid (openbaar vervoer, snelweg, etc.)
+- omgevingEnBelendingen: beschrijving van de omgeving en belendende percelen
+- voorzieningen: voorzieningen in de omgeving
+- verwachteOntwikkelingen: toekomstige/verwachte ontwikkelingen in het gebied
+- locatiescore: kwalitatieve beoordeling van de locatie (bijv. "goed", "redelijk", "7/10")
+- aantalBouwlagen: aantal bouwlagen als getal
+- huurder: naam van de huurder
+- bestemmingsplan: naam/beschrijving van het vigerende bestemmingsplan
+- erfpacht: beschrijving van erfpachtsituatie
+- zakelijkeRechten: beschrijving van zakelijke rechten (erfdienstbaarheden, opstalrecht, etc.)
+- teTaxerenBelang: beschrijving van het te taxeren belang (bijv. "Volle eigendom")
+- constructie: type constructie (bijv. "staalconstructie", "betonnen skelet")
+- fundering: type fundering (bijv. "betonpalen", "staal op staal")
+- dakbedekking: type dakbedekking (bijv. "bitumen", "plat dak")
+- asbest: een van ["ja", "nee", "onbekend"]
+- bodemverontreiniging: een van ["ja", "nee", "onbekend"]
+- waarderingsmethode: een van ["vergelijkingsmethode", "BAR_NAR", "DCF", "kostenmethode", "combinatie"]
+- aannames: samenvatting van de aannames bij de taxatie
+- voorbehouden: samenvatting van de voorbehouden bij de taxatie
+- swotSterktes: sterke punten van het object (één punt per regel)
+- swotZwaktes: zwakke punten van het object (één punt per regel)
+- swotKansen: kansen voor het object (één punt per regel)
+- swotBedreigingen: bedreigingen voor het object (één punt per regel)
 
 Retourneer ALLEEN het JSON-object met de gevraagde velden, zonder uitleg.
 Laat een veld weg als de informatie niet in de tekst te vinden is.
@@ -128,10 +151,10 @@ const CORS_HEADERS = {
 
 /** 
  * Maximum characters of PDF text to send to the AI (cost-conscious).
- * 12 000 chars ≈ 3 000 tokens, which is well within the gpt-4o-mini context
- * window while covering the typical first few pages that contain field data.
+ * 20 000 chars ≈ 5 000 tokens, covering a larger portion of the document
+ * so that fields appearing later in the report are not missed.
  */
-const MAX_TEXT_CHARS = 12000
+const MAX_TEXT_CHARS = 20000
 
 serve(async (req: Request) => {
   // Handle CORS preflight

@@ -8,11 +8,11 @@
  */
 
 import { supabase } from './supabaseClient'
-import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering } from '../types'
+import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, TechnischeStaat, Vergunningen, Waardering, WaarderingsMethode, Aannames } from '../types'
 import type { ExtractionDebugRecord } from './pdfFieldExtractors'
 
 /** Maximum PDF text length to send to the AI (cost-conscious). */
-const MAX_TEXT_CHARS = 12000
+const MAX_TEXT_CHARS = 20000
 
 /** Per-field AI result returned by the edge function. */
 interface AIFieldResult {
@@ -49,12 +49,35 @@ function getMissingFields(result: Partial<HistorischRapport>): string[] {
   if (!result.wizardData?.stap1?.objectnaam) missing.push('objectnaam')
   if (!result.wizardData?.stap2?.gemeente) missing.push('gemeente')
   if (!result.wizardData?.stap2?.provincie) missing.push('provincie')
+  if (!result.wizardData?.stap2?.bereikbaarheid) missing.push('bereikbaarheid')
+  if (!result.wizardData?.stap2?.omgevingEnBelendingen) missing.push('omgevingEnBelendingen')
+  if (!result.wizardData?.stap2?.voorzieningen) missing.push('voorzieningen')
+  if (!result.wizardData?.stap2?.verwachteOntwikkelingen) missing.push('verwachteOntwikkelingen')
+  if (!result.wizardData?.stap2?.locatiescore) missing.push('locatiescore')
   if (!result.wizardData?.stap7?.energielabel) missing.push('energielabel')
   if (!result.wizardData?.stap8?.kapitalisatiefactor) missing.push('kapitalisatiefactor')
   if (!result.wizardData?.stap4?.markthuurPerJaar) missing.push('markthuurPerJaar')
   if (!result.wizardData?.stap4?.huurprijsPerJaar) missing.push('huurprijsPerJaar')
+  if (!result.wizardData?.stap4?.huurder) missing.push('huurder')
   if (!result.wizardData?.stap5?.eigendomssituatie) missing.push('eigendomssituatie')
+  if (!result.wizardData?.stap5?.bestemmingsplan) missing.push('bestemmingsplan')
+  if (!result.wizardData?.stap5?.erfpacht) missing.push('erfpacht')
+  if (!result.wizardData?.stap5?.zakelijkeRechten) missing.push('zakelijkeRechten')
+  if (!result.wizardData?.stap5?.teTaxerenBelang) missing.push('teTaxerenBelang')
   if (!result.wizardData?.stap2?.ligging) missing.push('ligging')
+  if (!result.wizardData?.stap3?.aantalBouwlagen) missing.push('aantalBouwlagen')
+  if (!result.wizardData?.stap6?.constructie) missing.push('constructie')
+  if (!result.wizardData?.stap6?.fundering) missing.push('fundering')
+  if (!result.wizardData?.stap6?.dakbedekking) missing.push('dakbedekking')
+  if (!result.wizardData?.stap7?.asbest) missing.push('asbest')
+  if (!result.wizardData?.stap7?.bodemverontreiniging) missing.push('bodemverontreiniging')
+  if (!result.wizardData?.stap8?.methode) missing.push('waarderingsmethode')
+  if (!result.wizardData?.stap9?.aannames) missing.push('aannames')
+  if (!result.wizardData?.stap9?.voorbehouden) missing.push('voorbehouden')
+  if (!result.wizardData?.stap9?.swotSterktes) missing.push('swotSterktes')
+  if (!result.wizardData?.stap9?.swotZwaktes) missing.push('swotZwaktes')
+  if (!result.wizardData?.stap9?.swotKansen) missing.push('swotKansen')
+  if (!result.wizardData?.stap9?.swotBedreigingen) missing.push('swotBedreigingen')
 
   return missing
 }
@@ -67,6 +90,10 @@ const VALID_GEBRUIKSDOELEN = new Set<string>(['eigenaar_gebruiker', 'verhuurd_be
 const VALID_LIGGING = new Set<string>(['binnenstad', 'woonwijk', 'bedrijventerrein', 'buitengebied', 'gemengd'])
 /** Valid Energielabel values. */
 const VALID_ENERGIELABELS = new Set<string>(['A++++', 'A+++', 'A++', 'A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'geen'])
+/** Valid Asbest / Bodemverontreiniging values. */
+const VALID_JA_NEE_ONBEKEND = new Set<string>(['ja', 'nee', 'onbekend'])
+/** Valid WaarderingsMethode values. */
+const VALID_WAARDERINGSMETHODE = new Set<string>(['vergelijkingsmethode', 'BAR_NAR', 'DCF', 'kostenmethode', 'combinatie'])
 
 function toNumber(v: unknown): number | undefined {
   if (typeof v === 'number' && isFinite(v)) return v
@@ -236,6 +263,26 @@ export async function aiExtractMissingFields(
       recordAI('ligging', v, fields.ligging.confidence)
     }
   }
+  if (fields.bereikbaarheid?.value && !currentResult.wizardData?.stap2?.bereikbaarheid) {
+    const v = toString(fields.bereikbaarheid.value)
+    if (v) { stap2.bereikbaarheid = v; recordAI('bereikbaarheid', v, fields.bereikbaarheid.confidence) }
+  }
+  if (fields.omgevingEnBelendingen?.value && !currentResult.wizardData?.stap2?.omgevingEnBelendingen) {
+    const v = toString(fields.omgevingEnBelendingen.value)
+    if (v) { stap2.omgevingEnBelendingen = v; recordAI('omgevingEnBelendingen', v, fields.omgevingEnBelendingen.confidence) }
+  }
+  if (fields.voorzieningen?.value && !currentResult.wizardData?.stap2?.voorzieningen) {
+    const v = toString(fields.voorzieningen.value)
+    if (v) { stap2.voorzieningen = v; recordAI('voorzieningen', v, fields.voorzieningen.confidence) }
+  }
+  if (fields.verwachteOntwikkelingen?.value && !currentResult.wizardData?.stap2?.verwachteOntwikkelingen) {
+    const v = toString(fields.verwachteOntwikkelingen.value)
+    if (v) { stap2.verwachteOntwikkelingen = v; recordAI('verwachteOntwikkelingen', v, fields.verwachteOntwikkelingen.confidence) }
+  }
+  if (fields.locatiescore?.value && !currentResult.wizardData?.stap2?.locatiescore) {
+    const v = toString(fields.locatiescore.value)
+    if (v) { stap2.locatiescore = v; recordAI('locatiescore', v, fields.locatiescore.confidence) }
+  }
 
   // WizardData stap3
   if (!merged.wizardData!.stap3) merged.wizardData!.stap3 = {} as Oppervlaktes
@@ -256,6 +303,10 @@ export async function aiExtractMissingFields(
       recordAI('bouwjaar', v, fields.bouwjaar.confidence)
     }
   }
+  if (fields.aantalBouwlagen?.value && !currentResult.wizardData?.stap3?.aantalBouwlagen) {
+    const v = toNumber(fields.aantalBouwlagen.value)
+    if (v !== undefined && v > 0) { stap3.aantalBouwlagen = v; recordAI('aantalBouwlagen', v, fields.aantalBouwlagen.confidence) }
+  }
 
   // WizardData stap4
   if (!merged.wizardData!.stap4) merged.wizardData!.stap4 = {} as Huurgegevens
@@ -269,15 +320,51 @@ export async function aiExtractMissingFields(
     const v = toNumber(fields.huurprijsPerJaar.value)
     if (v !== undefined && v > 0) { stap4.huurprijsPerJaar = v; recordAI('huurprijsPerJaar', v, fields.huurprijsPerJaar.confidence) }
   }
+  if (fields.huurder?.value && !currentResult.wizardData?.stap4?.huurder) {
+    const v = toString(fields.huurder.value)
+    if (v) { stap4.huurder = v; recordAI('huurder', v, fields.huurder.confidence) }
+  }
 
   // WizardData stap5
+  if (!merged.wizardData!.stap5) merged.wizardData!.stap5 = {} as JuridischeInfo
+  const stap5 = merged.wizardData!.stap5!
+
   if (fields.eigendomssituatie?.value && !currentResult.wizardData?.stap5?.eigendomssituatie) {
-    if (!merged.wizardData!.stap5) merged.wizardData!.stap5 = {} as JuridischeInfo
     const v = toString(fields.eigendomssituatie.value)
-    if (v) {
-      merged.wizardData!.stap5!.eigendomssituatie = v
-      recordAI('eigendomssituatie', v, fields.eigendomssituatie.confidence)
-    }
+    if (v) { stap5.eigendomssituatie = v; recordAI('eigendomssituatie', v, fields.eigendomssituatie.confidence) }
+  }
+  if (fields.bestemmingsplan?.value && !currentResult.wizardData?.stap5?.bestemmingsplan) {
+    const v = toString(fields.bestemmingsplan.value)
+    if (v) { stap5.bestemmingsplan = v; recordAI('bestemmingsplan', v, fields.bestemmingsplan.confidence) }
+  }
+  if (fields.erfpacht?.value && !currentResult.wizardData?.stap5?.erfpacht) {
+    const v = toString(fields.erfpacht.value)
+    if (v) { stap5.erfpacht = v; recordAI('erfpacht', v, fields.erfpacht.confidence) }
+  }
+  if (fields.zakelijkeRechten?.value && !currentResult.wizardData?.stap5?.zakelijkeRechten) {
+    const v = toString(fields.zakelijkeRechten.value)
+    if (v) { stap5.zakelijkeRechten = v; recordAI('zakelijkeRechten', v, fields.zakelijkeRechten.confidence) }
+  }
+  if (fields.teTaxerenBelang?.value && !currentResult.wizardData?.stap5?.teTaxerenBelang) {
+    const v = toString(fields.teTaxerenBelang.value)
+    if (v) { stap5.teTaxerenBelang = v; recordAI('teTaxerenBelang', v, fields.teTaxerenBelang.confidence) }
+  }
+
+  // WizardData stap6
+  if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
+  const stap6 = merged.wizardData!.stap6!
+
+  if (fields.constructie?.value && !currentResult.wizardData?.stap6?.constructie) {
+    const v = toString(fields.constructie.value)
+    if (v) { stap6.constructie = v; recordAI('constructie', v, fields.constructie.confidence) }
+  }
+  if (fields.fundering?.value && !currentResult.wizardData?.stap6?.fundering) {
+    const v = toString(fields.fundering.value)
+    if (v) { stap6.fundering = v; recordAI('fundering', v, fields.fundering.confidence) }
+  }
+  if (fields.dakbedekking?.value && !currentResult.wizardData?.stap6?.dakbedekking) {
+    const v = toString(fields.dakbedekking.value)
+    if (v) { stap6.dakbedekking = v; recordAI('dakbedekking', v, fields.dakbedekking.confidence) }
   }
 
   // WizardData stap7
@@ -289,6 +376,22 @@ export async function aiExtractMissingFields(
       recordAI('energielabel', v, fields.energielabel.confidence)
     }
   }
+  if (fields.asbest?.value && !currentResult.wizardData?.stap7?.asbest) {
+    if (!merged.wizardData!.stap7) merged.wizardData!.stap7 = {} as Vergunningen
+    const v = toString(fields.asbest.value)
+    if (v && VALID_JA_NEE_ONBEKEND.has(v)) {
+      merged.wizardData!.stap7!.asbest = v as 'ja' | 'nee' | 'onbekend'
+      recordAI('asbest', v, fields.asbest.confidence)
+    }
+  }
+  if (fields.bodemverontreiniging?.value && !currentResult.wizardData?.stap7?.bodemverontreiniging) {
+    if (!merged.wizardData!.stap7) merged.wizardData!.stap7 = {} as Vergunningen
+    const v = toString(fields.bodemverontreiniging.value)
+    if (v && VALID_JA_NEE_ONBEKEND.has(v)) {
+      merged.wizardData!.stap7!.bodemverontreiniging = v as 'ja' | 'nee' | 'onbekend'
+      recordAI('bodemverontreiniging', v, fields.bodemverontreiniging.confidence)
+    }
+  }
 
   // WizardData stap8
   if (!merged.wizardData!.stap8) merged.wizardData!.stap8 = {} as Waardering
@@ -297,6 +400,42 @@ export async function aiExtractMissingFields(
   if (fields.kapitalisatiefactor?.value && !currentResult.wizardData?.stap8?.kapitalisatiefactor) {
     const v = toNumber(fields.kapitalisatiefactor.value)
     if (v !== undefined && v > 0) { stap8.kapitalisatiefactor = v; recordAI('kapitalisatiefactor', v, fields.kapitalisatiefactor.confidence) }
+  }
+  if (fields.waarderingsmethode?.value && !currentResult.wizardData?.stap8?.methode) {
+    const v = toString(fields.waarderingsmethode.value)
+    if (v && VALID_WAARDERINGSMETHODE.has(v)) {
+      stap8.methode = v as WaarderingsMethode
+      recordAI('waarderingsmethode', v, fields.waarderingsmethode.confidence)
+    }
+  }
+
+  // WizardData stap9
+  if (!merged.wizardData!.stap9) merged.wizardData!.stap9 = {} as Aannames
+  const stap9 = merged.wizardData!.stap9!
+
+  if (fields.aannames?.value && !currentResult.wizardData?.stap9?.aannames) {
+    const v = toString(fields.aannames.value)
+    if (v) { stap9.aannames = v; recordAI('aannames', v, fields.aannames.confidence) }
+  }
+  if (fields.voorbehouden?.value && !currentResult.wizardData?.stap9?.voorbehouden) {
+    const v = toString(fields.voorbehouden.value)
+    if (v) { stap9.voorbehouden = v; recordAI('voorbehouden', v, fields.voorbehouden.confidence) }
+  }
+  if (fields.swotSterktes?.value && !currentResult.wizardData?.stap9?.swotSterktes) {
+    const v = toString(fields.swotSterktes.value)
+    if (v) { stap9.swotSterktes = v; recordAI('swotSterktes', v, fields.swotSterktes.confidence) }
+  }
+  if (fields.swotZwaktes?.value && !currentResult.wizardData?.stap9?.swotZwaktes) {
+    const v = toString(fields.swotZwaktes.value)
+    if (v) { stap9.swotZwaktes = v; recordAI('swotZwaktes', v, fields.swotZwaktes.confidence) }
+  }
+  if (fields.swotKansen?.value && !currentResult.wizardData?.stap9?.swotKansen) {
+    const v = toString(fields.swotKansen.value)
+    if (v) { stap9.swotKansen = v; recordAI('swotKansen', v, fields.swotKansen.confidence) }
+  }
+  if (fields.swotBedreigingen?.value && !currentResult.wizardData?.stap9?.swotBedreigingen) {
+    const v = toString(fields.swotBedreigingen.value)
+    if (v) { stap9.swotBedreigingen = v; recordAI('swotBedreigingen', v, fields.swotBedreigingen.confidence) }
   }
 
   // Sync BVO between top-level and stap3 if AI filled either

@@ -246,6 +246,8 @@ export function getMissingFieldsForChunk(
  *
  * Rules:
  * - Only keys from `allowedFields` are accepted; others are silently dropped.
+ * - When `requestedFields` is provided, only keys present in that list are
+ *   accepted (prevents AI from returning fields that were not requested).
  * - Empty strings, null, "onbekend", "-", "n.v.t." are skipped.
  * - Arrays are supported for SWOT fields (each item is trimmed and empty
  *   items are discarded).
@@ -256,6 +258,7 @@ export function getMissingFieldsForChunk(
 export function parseAndValidateAIOutput(
   raw: string,
   allowedFields: readonly AIExtractableField[],
+  requestedFields?: string[],
 ): Record<string, AIFieldValue> {
   let parsed: unknown
   try {
@@ -272,10 +275,12 @@ export function parseAndValidateAIOutput(
 
   const result: Record<string, AIFieldValue> = {}
   const allowedSet = new Set<string>(allowedFields)
+  const requestedSet = requestedFields ? new Set<string>(requestedFields) : null
   const SKIP_VALUES = new Set(['onbekend', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen'])
 
   for (const [key, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
     if (!allowedSet.has(key)) continue
+    if (requestedSet && !requestedSet.has(key)) continue
 
     const value = unwrapLegacyValue(rawValue)
 

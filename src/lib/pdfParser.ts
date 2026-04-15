@@ -1568,19 +1568,20 @@ export async function parsePdfToRapport(
   // --- extractionDebug: confidence info for each field ---
   result.extractionDebug = extractAllFieldsWithConfidence(text)
 
-  // --- AI fallback: fill missing fields using OpenAI ---
+  // --- AI fallback: fill missing fields per chunk using OpenAI ---
   // This is optional and gracefully falls back to the regex-only result if it fails.
+  // Uses the chunk-based approach: rule-based extraction runs first per chunk,
+  // then AI is called only for fields that remain empty.
   try {
-    const { aiExtractMissingFields } = await import('./pdfAIExtractor')
-    const { result: aiResult, aiDebug, warnings: aiWarnings } = await aiExtractMissingFields(text, result)
-    // Propagate any AI warnings (e.g. text truncation) to the caller
+    const { aiExtractMissingFieldsWithChunks } = await import('./pdfAIExtractor')
+    const { result: aiResult, aiDebug, warnings: aiWarnings } = await aiExtractMissingFieldsWithChunks(textChunks, result)
+    // Propagate any AI warnings to the caller
     parseWarnings.push(...aiWarnings)
     // Merge AI debug entries into extractionDebug (regex entries take precedence)
     if (Object.keys(aiDebug).length > 0) {
       result.extractionDebug = { ...aiDebug, ...result.extractionDebug }
       // Apply AI field values to result (only fields not already set by regex)
       Object.assign(result, {
-        adres: aiResult.adres,
         typeObject: result.typeObject ?? aiResult.typeObject,
         gebruiksdoel: result.gebruiksdoel ?? aiResult.gebruiksdoel,
         bvo: result.bvo ?? aiResult.bvo,

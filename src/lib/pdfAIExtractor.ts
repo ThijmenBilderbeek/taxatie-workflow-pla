@@ -5,11 +5,24 @@
  * regex-based parser leaves fields empty.  The AI call is optional — if it
  * fails for any reason the calling code falls back gracefully to the regex-only
  * result.
+ *
+ * The preferred entry point is `aiExtractMissingFieldsWithChunks()`, which
+ * processes the document chunk by chunk and only asks AI for the fields that
+ * are still empty after rule-based extraction.  The legacy `aiExtractMissingFields()`
+ * function is kept for backward compatibility.
  */
 
 import { supabase } from './supabaseClient'
 import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering, Aannames } from '../types'
 import type { ExtractionDebugRecord } from './pdfFieldExtractors'
+import type { TextChunk } from './pdfTextChunker'
+import {
+  extractRuleBasedFieldsFromChunk,
+  getMissingFieldsForChunk,
+  parseAndValidateAIOutput,
+  AI_EXTRACTABLE_FIELDS,
+  type AIFieldValue,
+} from './pdfChunkAIExtractor'
 
 /** Maximum PDF text length to send to the AI (cost-conscious). */
 const MAX_TEXT_CHARS = 30000
@@ -472,4 +485,249 @@ export async function aiExtractMissingFields(
  */
 export function hasAIFilledFields(debug: ExtractionDebugRecord): boolean {
   return Object.values(debug).some((entry) => entry.sourceType === 'ai')
+}
+
+// ---------------------------------------------------------------------------
+// Chunk-based AI extraction (preferred path)
+// ---------------------------------------------------------------------------
+
+/** Maximum chunk content length to send to AI (cost-conscious). */
+const MAX_CHUNK_CHARS = 12000
+
+/**
+ * Applies rule-based + AI extraction per chunk, only requesting AI for
+ * fields that are still missing after rule-based extraction.
+ *
+ * Behaviour:
+ * - Rule-based results from `currentResult` always take precedence.
+ * - AI is called per chunk only when there are still missing fields.
+ * - Once a field is found (by rule-based or AI), it is not requested again
+ *   in subsequent chunks.
+ * - AI output is validated and only accepted for keys in AI_EXTRACTABLE_FIELDS.
+ * - Invalid AI output is logged and skipped, never crashes the flow.
+ *
+ * Returns the merged HistorischRapport result together with AI debug entries
+ * and any warnings.
+ */
+export async function aiExtractMissingFieldsWithChunks(
+  textChunks: TextChunk[],
+  currentResult: Partial<HistorischRapport>,
+): Promise<{ result: Partial<HistorischRapport>; aiDebug: ExtractionDebugRecord; warnings: string[] }> {
+  const warnings: string[] = []
+  const merged: Partial<HistorischRapport> = { ...currentResult }
+  const aiDebug: ExtractionDebugRecord = {}
+
+  // Accumulates AI-found values across chunks so we don't ask twice.
+  const aiAccumulator: Record<string, AIFieldValue> = {}
+
+  // Ensure nested objects exist so merging below is safe.
+  if (!merged.adres) merged.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
+  if (!merged.wizardData) merged.wizardData = {}
+
+  // Helper to record an AI-filled debug entry.
+  const recordAI = (key: string, value: unknown, confidence: 'high' | 'medium' | 'low' = 'medium') => {
+    aiDebug[key] = {
+      value,
+      confidence,
+      sourceLabel: '(ai-chunk)',
+      sourceSnippet: String(value).slice(0, 80),
+      sourceSection: undefined,
+      parserRule: 'openai-pdf-extract-chunk',
+      sourceType: 'ai',
+    }
+  }
+
+  for (const chunk of textChunks) {
+    const chunkLabel = `[chunk ${chunk.chunkIndex + 1}/${chunk.totalChunks} "${chunk.sectionTitle}"]`
+
+    // Step 1: rule-based extraction on this chunk.
+    const ruleBasedFound = extractRuleBasedFieldsFromChunk(chunk)
+    const ruleBasedKeys = Object.keys(ruleBasedFound)
+    if (ruleBasedKeys.length > 0) {
+      console.log(`[pdfAIExtractor] ${chunkLabel} Rule-based found: ${ruleBasedKeys.join(', ')}`)
+    }
+
+    // Step 2: determine which fields are still missing.
+    const missingFields = getMissingFieldsForChunk(merged, aiAccumulator)
+    if (missingFields.length === 0) {
+      console.log(`[pdfAIExtractor] ${chunkLabel} No missing fields — skipping AI call`)
+      continue
+    }
+
+    console.log(`[pdfAIExtractor] ${chunkLabel} Sending ${missingFields.length} missing field(s) to AI: ${missingFields.join(', ')}`)
+
+    // Step 3: call AI for missing fields only.
+    const chunkContent = chunk.content.length > MAX_CHUNK_CHARS
+      ? chunk.content.slice(0, MAX_CHUNK_CHARS) + '…'
+      : chunk.content
+
+    const { data, error } = await supabase.functions.invoke('openai-pdf-extract', {
+      body: {
+        text: chunkContent,
+        missingFields,
+        chunkContext: {
+          sectionTitle: chunk.sectionTitle,
+          chunkIndex: chunk.chunkIndex,
+          totalChunks: chunk.totalChunks,
+        },
+      },
+    })
+
+    if (error || !data) {
+      console.warn(`[pdfAIExtractor] ${chunkLabel} Edge function error:`, error?.message ?? 'No data returned')
+      continue
+    }
+
+    // Step 4: validate AI response.
+    const rawJson = typeof data === 'string' ? data : JSON.stringify(data)
+    const aiFields = parseAndValidateAIOutput(rawJson, AI_EXTRACTABLE_FIELDS)
+    const aiKeys = Object.keys(aiFields)
+    console.log(
+      `[pdfAIExtractor] ${chunkLabel} AI returned ${aiKeys.length} valid field(s)${aiKeys.length > 0 ? ': ' + aiKeys.join(', ') : ''}`,
+    )
+
+    // Step 5: merge into accumulator (don't overwrite already-found fields).
+    for (const [key, value] of Object.entries(aiFields)) {
+      if (key in aiAccumulator) continue
+      aiAccumulator[key] = value
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Apply accumulated AI fields to the merged result
+  // (only fill slots that are still empty from rule-based extraction)
+  // ---------------------------------------------------------------------------
+
+  const applyAIFields = (fields: Record<string, AIFieldValue>) => {
+    // Adres
+    if (fields['adres'] && !currentResult.adres?.straat) {
+      const v = typeof fields['adres'] === 'string' ? fields['adres'] : undefined
+      if (v) {
+        // AI returns the full address as a string — store it as objectnaam-style;
+        // proper address parsing stays with the regex path.
+        recordAI('adres', v)
+      }
+    }
+
+    // object_type
+    if (fields['object_type'] && !currentResult.typeObject) {
+      const v = typeof fields['object_type'] === 'string' ? fields['object_type'].trim() : undefined
+      if (v && VALID_OBJECT_TYPES.has(v)) {
+        merged.typeObject = v as ObjectType
+        recordAI('typeObject', v)
+      }
+    }
+
+    // bouwjaar
+    if (fields['bouwjaar'] && !currentResult.wizardData?.stap3?.bouwjaar) {
+      const v = toNumber(fields['bouwjaar'])
+      if (v !== undefined && v > 1800 && v <= new Date().getFullYear()) {
+        if (!merged.wizardData!.stap3) merged.wizardData!.stap3 = {} as Oppervlaktes
+        merged.wizardData!.stap3!.bouwjaar = v
+        recordAI('bouwjaar', v)
+      }
+    }
+
+    // marktwaarde / marktwaarde_kk_afgerond
+    const marktwaardeRaw = fields['marktwaarde'] ?? fields['marktwaarde_kk_afgerond']
+    if (marktwaardeRaw && !currentResult.marktwaarde) {
+      const v = toNumber(marktwaardeRaw)
+      if (v !== undefined && v > 0) {
+        merged.marktwaarde = v
+        recordAI('marktwaarde', v)
+      }
+    }
+
+    // markthuur
+    if (fields['markthuur'] && !currentResult.wizardData?.stap4?.markthuurPerJaar) {
+      const v = toNumber(fields['markthuur'])
+      if (v !== undefined && v > 0) {
+        if (!merged.wizardData!.stap4) merged.wizardData!.stap4 = {} as Huurgegevens
+        merged.wizardData!.stap4!.markthuurPerJaar = v
+        recordAI('markthuurPerJaar', v)
+      }
+    }
+
+    // netto_huurwaarde
+    if (fields['netto_huurwaarde'] && !currentResult.wizardData?.stap4?.huurprijsPerJaar) {
+      const v = toNumber(fields['netto_huurwaarde'])
+      if (v !== undefined && v > 0) {
+        if (!merged.wizardData!.stap4) merged.wizardData!.stap4 = {} as Huurgegevens
+        merged.wizardData!.stap4!.huurprijsPerJaar = v
+        recordAI('huurprijsPerJaar', v)
+      }
+    }
+
+    // vloeroppervlak_bvo
+    if (fields['vloeroppervlak_bvo'] && !currentResult.bvo) {
+      const v = toNumber(fields['vloeroppervlak_bvo'])
+      if (v !== undefined && v > 0) {
+        merged.bvo = v
+        if (!merged.wizardData!.stap3) merged.wizardData!.stap3 = {} as Oppervlaktes
+        merged.wizardData!.stap3!.bvo = v
+        recordAI('bvo', v)
+      }
+    }
+
+    // vloeroppervlak_vvo
+    if (fields['vloeroppervlak_vvo'] && !currentResult.wizardData?.stap3?.vvo) {
+      const v = toNumber(fields['vloeroppervlak_vvo'])
+      if (v !== undefined && v > 0) {
+        if (!merged.wizardData!.stap3) merged.wizardData!.stap3 = {} as Oppervlaktes
+        merged.wizardData!.stap3!.vvo = v
+        recordAI('vvo', v)
+      }
+    }
+
+    // bebouwd_oppervlak → perceeloppervlak
+    if (fields['bebouwd_oppervlak'] && !currentResult.wizardData?.stap3?.perceeloppervlak) {
+      const v = toNumber(fields['bebouwd_oppervlak'])
+      if (v !== undefined && v > 0) {
+        if (!merged.wizardData!.stap3) merged.wizardData!.stap3 = {} as Oppervlaktes
+        merged.wizardData!.stap3!.perceeloppervlak = v
+        recordAI('perceeloppervlak', v)
+      }
+    }
+
+    // energielabel
+    if (fields['energielabel'] && !currentResult.wizardData?.stap7?.energielabel) {
+      const v = typeof fields['energielabel'] === 'string' ? fields['energielabel'].trim() : undefined
+      if (v && VALID_ENERGIELABELS.has(v)) {
+        if (!merged.wizardData!.stap7) merged.wizardData!.stap7 = {} as Vergunningen
+        merged.wizardData!.stap7!.energielabel = v as Energielabel
+        recordAI('energielabel', v)
+      }
+    }
+
+    // SWOT fields
+    const swotMapping = [
+      ['swot_sterktes', 'swotSterktes'],
+      ['swot_zwaktes', 'swotZwaktes'],
+      ['swot_kansen', 'swotKansen'],
+      ['swot_bedreigingen', 'swotBedreigingen'],
+    ] as const
+
+    for (const [aiKey, resultKey] of swotMapping) {
+      if (fields[aiKey] && !currentResult.wizardData?.stap9?.[resultKey]) {
+        const raw = fields[aiKey]
+        const v = Array.isArray(raw)
+          ? raw.join('\n')
+          : typeof raw === 'string'
+            ? raw
+            : undefined
+        if (v) {
+          if (!merged.wizardData!.stap9) merged.wizardData!.stap9 = {} as Aannames
+          ;(merged.wizardData!.stap9 as Partial<Aannames>)[resultKey] = v
+          recordAI(resultKey, v)
+        }
+      }
+    }
+  }
+
+  applyAIFields(aiAccumulator)
+
+  const aiFilledCount = Object.keys(aiDebug).length
+  console.log(`[pdfAIExtractor] Chunk-based AI extraction complete — ${aiFilledCount} field(s) filled by AI`)
+
+  return { result: merged, aiDebug, warnings }
 }

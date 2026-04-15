@@ -1,7 +1,12 @@
 // Supabase Edge Function: openai-pdf-extract
-// Accepts raw PDF text and a list of missing field names.
+// Accepts a chunk of PDF text and a list of missing field names.
 // Returns AI-extracted field values for those missing fields using GPT-4o-mini.
 // The OPENAI_API_KEY is stored as a Supabase secret — never exposed to the browser.
+//
+// Request body:
+//   text          – chunk content (required)
+//   missingFields – array of field names to fill (required)
+//   chunkContext  – optional metadata: { sectionTitle, chunkIndex, totalChunks }
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 // @deno-types="https://esm.sh/openai@4/types"
@@ -78,60 +83,50 @@ async function logUsage(
   }
 }
 
-const SYSTEM_PROMPT = `Je bent een expert in Nederlandse taxatierapporten (vastgoedwaardering).
-Analyseer de gegeven PDF-tekst van een taxatierapport en extraheer de gevraagde velden.
+/**
+ * Focused system prompt.
+ *
+ * - Only the requested missing fields may be returned.
+ * - AI must use only information that is literally present in the provided chunk.
+ * - No inference, no assumptions, no free text — only JSON.
+ * - Omit fields that cannot be found in the chunk.
+ */
+const SYSTEM_PROMPT = `Je bent een data-extractie-assistent voor Nederlandse taxatierapporten.
 
-Retourneer een JSON-object met de velden en hun waarden. Gebruik de volgende veldnamen exact zoals opgegeven.
-Voeg per veld ook een "confidence" waarde toe: "high" als je zeker bent, "medium" als je redelijk zeker bent.
+TAAK: Extraheer uitsluitend de velden die expliciet aanwezig zijn in de gegeven tekst.
 
-Richtlijnen per veldtype:
-- straat: naam van de straat (bijv. "Hoofdstraat"), zonder huisnummer
-- huisnummer: huisnummer inclusief toevoeging (bijv. "13", "13-A", "13a", "13bis")
-- postcode: Nederlandse postcode in formaat "1234 AB"
-- plaats: naam van de stad/gemeente (bijv. "Amsterdam", "Den Haag", "'s-Hertogenbosch")
-- typeObject: een van [kantoor, bedrijfscomplex, bedrijfshal, winkel, woning, appartement, overig]
-- gebruiksdoel: een van [eigenaar_gebruiker, verhuurd_belegging, leegstand, overig]
-- bvo: bruto vloeroppervlakte in m² als getal (bijv. 1250)
-- vvo: verhuurbaar vloeroppervlakte in m² als getal
-- perceeloppervlak: perceeloppervlakte in m² als getal
-- marktwaarde: marktwaarde in euro's als getal (bijv. 1250000)
-- bar: bruto aanvangsrendement als getal in procenten (bijv. 7.5)
-- nar: netto aanvangsrendement als getal in procenten (bijv. 6.75)
-- waardepeildatum: datum in ISO-formaat "YYYY-MM-DD"
-- inspectiedatum: datum in ISO-formaat "YYYY-MM-DD"
-- bouwjaar: bouwjaar als getal (bijv. 1985)
-- naamTaxateur: volledige naam van de taxateur
-- objectnaam: naam of omschrijving van het object
-- gemeente: naam van de gemeente
-- provincie: naam van de provincie
-- energielabel: energielabel letter (A++++, A+++, A++, A+, A, B, C, D, E, F, G, of "geen")
-- kapitalisatiefactor: kapitalisatiefactor als getal (bijv. 12.5)
-- markthuurPerJaar: markthuur per jaar in euro's als getal
-- huurprijsPerJaar: huurprijs per jaar in euro's als getal
-- eigendomssituatie: eigendomssituatie als tekst (bijv. "Eigendom", "Erfpacht")
-- ligging: een van [binnenstad, woonwijk, bedrijventerrein, buitengebied, gemengd]
-- aannames: aannames en uitgangspunten van de taxatie als tekst
-- voorbehouden: voorbehouden bij de taxatie als tekst
-- bijzondereOmstandigheden: bijzondere omstandigheden als tekst
-- algemeneUitgangspunten: algemene uitgangspunten als tekst
-- bijzondereUitgangspunten: bijzondere uitgangspunten als tekst
-- ontvangenInformatie: overzicht van ontvangen/verstrekte informatie als tekst
-- wezenlijkeVeranderingen: wezenlijke veranderingen na inspectiedatum als tekst
-- taxatieOnnauwkeurigheid: taxatie onnauwkeurigheid/onzekerheidsmarge als tekst
-- swotSterktes: sterktes (strengths) uit de SWOT-analyse, als opsomming
-- swotZwaktes: zwaktes (weaknesses) uit de SWOT-analyse, als opsomming
-- swotKansen: kansen (opportunities) uit de SWOT-analyse, als opsomming
-- swotBedreigingen: bedreigingen (threats) uit de SWOT-analyse, als opsomming
+REGELS:
+1. Retourneer ALLEEN een JSON-object met de gevraagde velden.
+2. Gebruik ALLEEN informatie die letterlijk in de tekst staat — geen aannames of afleidingen.
+3. Laat een veld WEG als het niet expliciet in de tekst staat.
+4. Lege strings, null of "onbekend" zijn niet toegestaan — laat het veld gewoon weg.
+5. Geen uitleg, geen commentaar, alleen JSON.
 
-Retourneer ALLEEN het JSON-object met de gevraagde velden, zonder uitleg.
-Laat een veld weg als de informatie niet in de tekst te vinden is.
-
-Voorbeeldformaat:
-{
-  "straat": { "value": "Hoofdstraat", "confidence": "high" },
-  "huisnummer": { "value": "13", "confidence": "high" },
-  "marktwaarde": { "value": 1250000, "confidence": "medium" }
-}`
+VELDFORMATEN (alleen retourneren als letterlijk aanwezig):
+- adres: volledig adres als string
+- object_type: een van [kantoor, bedrijfscomplex, bedrijfshal, winkel, woning, appartement, overig]
+- bouwjaar: getal (bijv. 1985)
+- marktwaarde: getal in euro's (bijv. 1250000)
+- marktwaarde_kk_afgerond: getal in euro's, afgerond kosten koper
+- markthuur: markthuur per jaar in euro's als getal
+- netto_huurwaarde: netto huurwaarde per jaar in euro's als getal
+- marktwaarde_per_m2: marktwaarde per m² als getal
+- vloeroppervlak_bvo: BVO in m² als getal
+- vloeroppervlak_vvo: VVO in m² als getal
+- bebouwd_oppervlak: bebouwd/perceel oppervlak in m² als getal
+- dakoppervlak: dakoppervlak in m² als getal
+- glasoppervlak: glasoppervlak in m² als getal
+- locatie_score: locatiescore als getal of korte string
+- object_score: objectscore als getal of korte string
+- courantheid_verhuur: courantheid verhuur als string (bijv. "Goed")
+- courantheid_verkoop: courantheid verkoop als string
+- verhuurtijd_maanden: verwachte verhuurtijd in maanden als getal
+- verkooptijd_maanden: verwachte verkooptijd in maanden als getal
+- energielabel: energielabel (A++++, A+++, A++, A+, A, B, C, D, E, F, G of geen)
+- swot_sterktes: array van strings met sterktes
+- swot_zwaktes: array van strings met zwaktes
+- swot_kansen: array van strings met kansen
+- swot_bedreigingen: array van strings met bedreigingen`
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -139,13 +134,15 @@ const CORS_HEADERS = {
 }
 
 /** 
- * Maximum characters of PDF text to send to the AI (cost-conscious).
- * 30 000 chars ≈ 7 500 tokens, which covers a significantly larger portion
- * of the report while remaining well within the gpt-4o-mini context window.
- * The client selects the most relevant sections before sending, so the
- * actual content quality is higher than a blind first-N-chars truncation.
+ * Maximum characters of PDF chunk text to send to the AI (cost-conscious).
  */
-const MAX_TEXT_CHARS = 30000
+const MAX_TEXT_CHARS = 12000
+
+interface ChunkContext {
+  sectionTitle?: string
+  chunkIndex?: number
+  totalChunks?: number
+}
 
 serve(async (req: Request) => {
   // Handle CORS preflight
@@ -154,9 +151,10 @@ serve(async (req: Request) => {
   }
 
   try {
-    const body = await req.json() as { text?: string; missingFields?: string[] }
+    const body = await req.json() as { text?: string; missingFields?: string[]; chunkContext?: ChunkContext }
     const text = body?.text
     const missingFields = body?.missingFields
+    const chunkContext = body?.chunkContext
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: 'text is required' }), {
@@ -166,9 +164,7 @@ serve(async (req: Request) => {
     }
 
     // Reject oversized text fields early to avoid OpenAI token limit errors.
-    // The client should have already truncated text to MAX_TEXT_CHARS, but we
-    // enforce it here as a safety net.
-    if (text.length > MAX_TEXT_CHARS * 2) {
+    if (text.length > MAX_TEXT_CHARS * 3) {
       return new Response(JSON.stringify({ error: 'text exceeds maximum allowed length' }), {
         status: 413,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -185,7 +181,18 @@ serve(async (req: Request) => {
     // Truncate text to stay within token limits
     const truncatedText = text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) + '…' : text
 
-    const userPrompt = `Extraheer de volgende velden uit de taxatierapport-tekst: ${missingFields.join(', ')}\n\nTekst:\n${truncatedText}`
+    // Build context header for the prompt
+    let contextHeader = ''
+    if (chunkContext) {
+      const parts: string[] = []
+      if (chunkContext.sectionTitle) parts.push(`Sectie: ${chunkContext.sectionTitle}`)
+      if (chunkContext.chunkIndex !== undefined && chunkContext.totalChunks !== undefined) {
+        parts.push(`Deel ${chunkContext.chunkIndex + 1} van ${chunkContext.totalChunks}`)
+      }
+      if (parts.length > 0) contextHeader = parts.join(' | ') + '\n\n'
+    }
+
+    const userPrompt = `${contextHeader}Ontbrekende velden om te extraheren: ${missingFields.join(', ')}\n\nTekst:\n${truncatedText}`
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -194,7 +201,7 @@ serve(async (req: Request) => {
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.1,
+      temperature: 0,
     })
 
     const raw = response.choices[0]?.message?.content

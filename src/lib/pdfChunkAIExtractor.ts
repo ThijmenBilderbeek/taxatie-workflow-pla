@@ -12,6 +12,7 @@
  */
 
 import type { TextChunk } from './pdfTextChunker'
+import { FULL_DOCUMENT_SECTION_TITLE } from './pdfTextChunker'
 import type { HistorischRapport } from '../types'
 import {
   extractBouwjaar,
@@ -109,6 +110,45 @@ export type AIExtractableField = (typeof AI_EXTRACTABLE_FIELDS)[number]
 export type AIFieldValue = string | number | string[]
 
 // ---------------------------------------------------------------------------
+// Reference / appendix chunk detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Fields that must not be extracted from reference or appendix sections,
+ * to prevent comparable-object data from polluting main-object fields.
+ */
+export const REFERENCE_SENSITIVE_FIELDS: AIExtractableField[] = [
+  'object_type',
+  'bouwjaar',
+  'marktwaarde',
+  'constructie',
+  'terrein',
+  'gevels',
+  'afwerking',
+  'omgeving_en_belendingen',
+  'voorzieningen',
+]
+
+/** Signals in chunk sectionTitle or content that indicate a reference/appendix section. */
+const REFERENCE_CHUNK_SIGNALS = [
+  'referentie type',
+  'huurreferenties',
+  'koopreferenties',
+  'bijlagen',
+  'individuele referenties',
+  'toelichting op deze referentie',
+]
+
+/**
+ * Returns true when the chunk belongs to a reference or appendix section.
+ * Checks both the sectionTitle and the content for reference signals.
+ */
+export function isReferenceOrAppendixChunk(chunk: TextChunk): boolean {
+  const lower = (chunk.sectionTitle + ' ' + chunk.content).toLowerCase()
+  return REFERENCE_CHUNK_SIGNALS.some((s) => lower.includes(s))
+}
+
+// ---------------------------------------------------------------------------
 // Mapping: AI field → already-filled check
 // ---------------------------------------------------------------------------
 
@@ -185,6 +225,30 @@ export function isFieldFilledInResult(
 // ---------------------------------------------------------------------------
 
 /**
+ * Searches for a labeled field in text using label-with-colon matching,
+ * capturing up to `maxChars` of multi-line content after the label.
+ * Labels must include the colon suffix (e.g. `'terrein:'`).
+ * Stops at the next "Label: " pattern on a new line to avoid capturing unrelated content.
+ */
+function extractSimpleLabel(text: string, labels: string[], maxChars = 300): string | undefined {
+  const lower = text.toLowerCase()
+  for (const label of labels) {
+    const needle = label.toLowerCase()
+    const idx = lower.indexOf(needle)
+    if (idx === -1) continue
+    const after = text.slice(idx + needle.length).replace(/^[\s]+/, '')
+    if (!after) continue
+    let raw = after.slice(0, maxChars)
+    // Stop at the next "Word(s): " pattern on a new line (next field label)
+    const nextLabel = raw.search(/\n[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{0,40}:\s/)
+    if (nextLabel > 0) raw = raw.slice(0, nextLabel)
+    const value = raw.trim().replace(/\s+/g, ' ').slice(0, maxChars)
+    if (value && value.length > 2) return value
+  }
+  return undefined
+}
+
+/**
  * Applies the existing rule-based extractors to the content of a single
  * TextChunk and returns a flat record of field-name → value pairs.
  *
@@ -196,12 +260,19 @@ export function extractRuleBasedFieldsFromChunk(
 ): Record<string, string | number> {
   const content = chunk.content
   const found: Record<string, string | number> = {}
+  const isRefChunk = isReferenceOrAppendixChunk(chunk)
 
-  const bouwjaar = extractBouwjaar(content)
-  if (bouwjaar?.value) found['bouwjaar'] = bouwjaar.value
+  // bouwjaar — skip in reference/appendix chunks
+  if (!isRefChunk) {
+    const bouwjaar = extractBouwjaar(content)
+    if (bouwjaar?.value) found['bouwjaar'] = bouwjaar.value
+  }
 
-  const marktwaarde = extractMarktwaarde(content)
-  if (marktwaarde?.value) found['marktwaarde'] = marktwaarde.value
+  // marktwaarde — skip in reference/appendix chunks
+  if (!isRefChunk) {
+    const marktwaarde = extractMarktwaarde(content)
+    if (marktwaarde?.value) found['marktwaarde'] = marktwaarde.value
+  }
 
   const bvo = extractBvo(content)
   if (bvo?.value) found['vloeroppervlak_bvo'] = bvo.value
@@ -215,14 +286,20 @@ export function extractRuleBasedFieldsFromChunk(
   const markthuur = extractMarkthuur(content)
   if (markthuur?.value) found['markthuur'] = markthuur.value
 
-  const typeObject = extractTypeObject(content)
-  if (typeObject?.value) found['object_type'] = typeObject.value
+  // object_type — skip in reference/appendix chunks
+  if (!isRefChunk) {
+    const typeObject = extractTypeObject(content)
+    if (typeObject?.value) found['object_type'] = typeObject.value
+  }
 
   const perceeloppervlak = extractPerceeloppervlak(content)
   if (perceeloppervlak?.value) found['bebouwd_oppervlak'] = perceeloppervlak.value
 
-  const constructie = extractConstructie(content)
-  if (constructie?.value) found['constructie'] = constructie.value
+  // constructie — skip in reference/appendix chunks
+  if (!isRefChunk) {
+    const constructie = extractConstructie(content)
+    if (constructie?.value) found['constructie'] = constructie.value
+  }
 
   // Address — flatten to a combined string for easy comparison
   const adresResult = extractAdres(content)
@@ -234,6 +311,24 @@ export function extractRuleBasedFieldsFromChunk(
       adresResult.value.plaats,
     ].filter(Boolean)
     found['adres'] = parts.join(', ')
+  }
+
+  // terrein, gevels, afwerking, omgeving_en_belendingen, voorzieningen — skip in reference/appendix chunks
+  if (!isRefChunk) {
+    const terrein = extractSimpleLabel(content, ['terrein:', 'terreinbeschrijving:', 'buitenterrein:'])
+    if (terrein) found['terrein'] = terrein
+
+    const gevels = extractSimpleLabel(content, ['gevels:', 'gevel:', 'gevelbekleding:'])
+    if (gevels) found['gevels'] = gevels
+
+    const afwerking = extractSimpleLabel(content, ['afwerking:', 'binnenafwerking:', 'afwerkingsniveau:'])
+    if (afwerking) found['afwerking'] = afwerking
+
+    const omgevingEnBelendingen = extractSimpleLabel(content, ['omgeving en belendingen:', 'belendingen:', 'belendende percelen:'])
+    if (omgevingEnBelendingen) found['omgeving_en_belendingen'] = omgevingEnBelendingen
+
+    const voorzieningen = extractSimpleLabel(content, ['voorzieningen:', 'voorzieningen in de omgeving:'])
+    if (voorzieningen) found['voorzieningen'] = voorzieningen
   }
 
   return found
@@ -406,7 +501,7 @@ export function getFieldPriority(
     return PRIORITY_FIELDS.has(fieldName) ? 120 : 100
   }
   // AI
-  const isFullDoc = !sectionTitle || sectionTitle.toUpperCase() === 'FULL_DOCUMENT'
+  const isFullDoc = !sectionTitle || sectionTitle.toUpperCase() === FULL_DOCUMENT_SECTION_TITLE
   return isFullDoc ? 10 : 50
 }
 

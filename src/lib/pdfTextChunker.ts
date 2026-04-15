@@ -5,6 +5,9 @@ export interface TextChunk {
   content: string
 }
 
+/** Section title used when no named sections are detected and the full document is chunked. */
+export const FULL_DOCUMENT_SECTION_TITLE = 'FULL_DOCUMENT'
+
 /**
  * Splits a text string into chunks that do not exceed `maxChars`.
  *
@@ -130,7 +133,7 @@ export function chunkSections(sections: Record<string, string>): TextChunk[] {
     for (let i = 0; i < rawChunks.length; i++) {
       console.log(`[pdfTextChunker] FULL_DOCUMENT chunk ${i + 1}/${totalChunks}: ${rawChunks[i].length} chars`)
       result.push({
-        sectionTitle: 'FULL_DOCUMENT',
+        sectionTitle: FULL_DOCUMENT_SECTION_TITLE,
         chunkIndex: i,
         totalChunks,
         content: rawChunks[i],

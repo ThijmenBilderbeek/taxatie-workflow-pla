@@ -192,7 +192,7 @@ describe('aiExtractMissingFields — stap9 merge logic', () => {
     const mockInvoke = vi.mocked(supabase.functions.invoke)
     mockInvoke.mockResolvedValueOnce({
       data: null,
-      error: { message: 'Bad Request', status: 400 },
+      error: { message: 'Bad Request' },
     })
 
     const currentResult = {

@@ -19,6 +19,7 @@ import {
   summarizeAannames,
 } from './pdfNormalizers'
 import { extractAllFieldsWithConfidence, extractAantalBouwlagen, extractBar, extractNar, extractMarktwaarde } from './pdfFieldExtractors'
+import { detectChapters } from './chapterDetector'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -235,6 +236,64 @@ export function extractSwotFromText(text: string): {
 }
 
 /**
+ * Maps a detected chapter heading (and its text content) to a logical section key.
+ * Returns undefined if the chapter cannot be mapped to a known section.
+ */
+function mapChapterToSectionKey(chapter: string, subchapter: string, headingText: string): string | undefined {
+  const lower = (headingText + ' ' + chapter + ' ' + subchapter).toLowerCase()
+
+  if (/samenvatting|inhoudsopgave|resume|inleiding|conclusie|summary/.test(lower)) return 'samenvatting'
+  if (/object(?:omschrijving|beschrijving|gegevens)|type\s+object|vastgoed(?:type)?|object\s+type/.test(lower)) return 'object'
+  if (/locatie|ligging|omgeving|bereikbaarheid|infrastructuur|buurt|ontsluiting/.test(lower)) return 'locatie'
+  if (/juridisch|eigendom|erfpacht|bestemmingsplan|planolog|kadaster|recht(?:en)?/.test(lower)) return 'juridisch'
+  if (/technisch|bouwkundig|onderhoud|fundering|dak|installatie|constructie|gebouwstaat/.test(lower)) return 'technisch'
+  if (/waarde(?:ring|peildatum)?|taxatie(?:methode)?|marktwaarde|bar|nar|dcf|rendement/.test(lower)) return 'waardering'
+  if (/swot/.test(lower)) return 'swot'
+  if (/markt(?:analyse|onderzoek|ontwikkeling|context)|vraag\s+en\s+aanbod|transacties|conjunctuur/.test(lower)) return 'marktanalyse'
+  if (/referentie|vergelijking(?:sobject)?|koopreferentie|huurreferentie|comparable/.test(lower)) return 'referenties'
+  if (/aannam|voorbehoud|uitgangspunt|bijzondere\s+omstandigh|disclaimer/.test(lower)) return 'aannames'
+  if (/duurzaamheid|energie(?:label|prestatie)?|milieu|epc|verduurzaming|co2|gas(?:verbruik)?/.test(lower)) return 'duurzaamheid'
+
+  return undefined
+}
+
+/**
+ * Splits raw PDF text into logical named sections for a Dutch taxatie rapport.
+ *
+ * Sections are detected using chapter headings (letter/numeric/ALL-CAPS) and
+ * mapped to predefined keys. The full text is always stored under `volledig`
+ * for backward compatibility.
+ *
+ * Section keys: samenvatting, object, locatie, juridisch, technisch, waardering,
+ *               swot, marktanalyse, referenties, aannames, duurzaamheid, volledig
+ */
+export function splitReportIntoSections(text: string): Record<string, string> {
+  const sections: Record<string, string[]> = {}
+  const detectedSections = detectChapters(text)
+
+  for (const section of detectedSections) {
+    if (!section.text) continue
+    // Use the chapter heading itself to determine the section key
+    // The heading text is the line content; for letter chapters it's captured in the chapter label
+    // We also include the full line (subchapter contains more specific heading info)
+    const headingLabel = section.subchapter || section.chapter
+    const key = mapChapterToSectionKey(section.chapter, section.subchapter, headingLabel)
+    if (key) {
+      if (!sections[key]) sections[key] = []
+      sections[key].push(section.text)
+    }
+  }
+
+  // Build the result, joining multiple detected sections under the same key
+  const result: Record<string, string> = { volledig: text }
+  for (const [key, parts] of Object.entries(sections)) {
+    result[key] = parts.join('\n\n')
+  }
+
+  return result
+}
+
+/**
  * Extracts wizard-relevant fields from raw PDF text.
  * Returns a partial Dossier with the sections found.
  * This is best-effort: missing sections simply return undefined.
@@ -398,11 +457,11 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   const stap2bereikbaarheidRaw = extractSectionAfterKeyword(
     text,
     ['toelichting bereikbaarheid:', 'bereikbaarheid:', 'bereikbaarheid', 'ontsluiting:', 'infrastructuur:'],
-    300,
+    1000,
     { stopAtInlineLabel: true }
   )
   const stap2bereikbaarheid = stap2bereikbaarheidRaw
-    ? cleanupLongFieldText(compactWhitespace(stap2bereikbaarheidRaw), 250)
+    ? cleanupLongFieldText(compactWhitespace(stap2bereikbaarheidRaw), 900)
     : undefined
 
   // Omgeving en belendingen
@@ -410,20 +469,20 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'omgeving en belendingen:',
     'belendingen:',
     'belendende percelen:',
-  ], 300)
+  ], 1000)
 
   // Voorzieningen
   const stap2voorzieningen = extractSectionAfterKeyword(text, [
     'voorzieningen:',
     'voorzieningen in de omgeving:',
-  ], 300)
+  ], 1000)
 
   // Verwachte ontwikkelingen
   const stap2verwachteOntwikkelingen = extractSectionAfterKeyword(text, [
     'verwachte ontwikkelingen:',
     'toekomstige ontwikkelingen:',
     'geplande ontwikkelingen:',
-  ], 300)
+  ], 1000)
 
   // --- Stap 3: Oppervlaktes ---
   // BVO: extended label synonyms including "Totaal BVO m² of stuks"
@@ -605,14 +664,14 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'funderingstype:',
     'funderingssituatie:',
     'fundering',
-  ], 150, { stopAtInlineLabel: true })
+  ], 300, { stopAtInlineLabel: true })
   // Truncate fundering at first occurrence of a technical sub-label
   const stap6fundering = stap6funderingRaw
     ? (() => {
         let v = stap6funderingRaw
         const techStop = v.search(/\b(?:constructie|dak|gevels|kozijnen|installaties|interieur|exterieur)\s*:/i)
         if (techStop !== -1) v = v.slice(0, techStop)
-        return summarizeTechnicalField(v, 200) || undefined
+        return summarizeTechnicalField(v, 500) || undefined
       })()
     : undefined
 
@@ -626,7 +685,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'bitumen',
     'dakpannen',
     'sedumdak',
-  ], 150, { stopAtInlineLabel: true })
+  ], 300, { stopAtInlineLabel: true })
   // Strip label remnant from start (e.g. "ie: plat dak..." when "dakconstruct" was matched)
   const stap6dakbedekking = stap6dakbedekkingRaw ? cleanLabelRemnant(stap6dakbedekkingRaw) || undefined : undefined
 
@@ -635,8 +694,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'constructie:',
     'bouwconstructie:',
     'draagconstructie:',
-  ], 120, { singleLine: true })
-  const stap6constructie = stap6constructieRaw ? summarizeTechnicalField(stap6constructieRaw, 150) || undefined : undefined
+  ], 300, { singleLine: true })
+  const stap6constructie = stap6constructieRaw ? summarizeTechnicalField(stap6constructieRaw, 300) || undefined : undefined
 
   const stap6installatiesRaw = extractSectionAfterKeyword(text, [
     'installaties:',
@@ -650,46 +709,46 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'radiatoren',
     'warmtepomp',
     'zonnepanelen',
-  ], 300)
-  const stap6installaties = stap6installatiesRaw ? summarizeTechnicalField(stap6installatiesRaw, 300) || undefined : undefined
+  ], 1000)
+  const stap6installaties = stap6installatiesRaw ? summarizeTechnicalField(stap6installatiesRaw, 1000) || undefined : undefined
 
   const stap6achterstallig = extractSectionAfterKeyword(text, [
     'achterstallig onderhoud:',
     'achterstalligonderhoud:',
     'onderhoudstoestand:',
-  ], 100)
+  ], 300)
 
   // Terrein
   const stap6terreinRaw = extractSectionAfterKeyword(text, [
     'terrein:',
     'terreinbeschrijving:',
     'buitenterrein:',
-  ], 200)
-  const stap6terrein = stap6terreinRaw ? summarizeTechnicalField(stap6terreinRaw, 200) || undefined : undefined
+  ], 1000)
+  const stap6terrein = stap6terreinRaw ? summarizeTechnicalField(stap6terreinRaw, 1000) || undefined : undefined
 
   // Gevels
   const stap6gevelsRaw = extractSectionAfterKeyword(text, [
     'gevels:',
     'gevel:',
     'gevelbekleding:',
-  ], 200)
-  const stap6gevels = stap6gevelsRaw ? summarizeTechnicalField(stap6gevelsRaw, 200) || undefined : undefined
+  ], 1000)
+  const stap6gevels = stap6gevelsRaw ? summarizeTechnicalField(stap6gevelsRaw, 1000) || undefined : undefined
 
   // Afwerking
   const stap6afwerkingRaw = extractSectionAfterKeyword(text, [
     'afwerking:',
     'binnenafwerking:',
     'afwerkingsniveau:',
-  ], 200)
-  const stap6afwerking = stap6afwerkingRaw ? summarizeTechnicalField(stap6afwerkingRaw, 200) || undefined : undefined
+  ], 1000)
+  const stap6afwerking = stap6afwerkingRaw ? summarizeTechnicalField(stap6afwerkingRaw, 1000) || undefined : undefined
 
   // Beveiliging
   const stap6beveiligingRaw = extractSectionAfterKeyword(text, [
     'beveiliging:',
     'beveiligingsinstallatie:',
     'beveiligingssysteem:',
-  ], 200)
-  const stap6beveiliging = stap6beveiligingRaw ? summarizeTechnicalField(stap6beveiligingRaw, 200) || undefined : undefined
+  ], 1000)
+  const stap6beveiliging = stap6beveiligingRaw ? summarizeTechnicalField(stap6beveiligingRaw, 1000) || undefined : undefined
 
   // Omschrijving milieuaspecten
   const stap6omschrijvingMilieuaspectenRaw = extractSectionAfterKeyword(text, [
@@ -697,9 +756,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'milieu:',
     'omschrijving milieuaspecten:',
     'milieu-aspecten:',
-  ], 300)
+  ], 1000)
   const stap6omschrijvingMilieuaspecten = stap6omschrijvingMilieuaspectenRaw
-    ? cleanupLongFieldText(stap6omschrijvingMilieuaspectenRaw, 300) || undefined
+    ? cleanupLongFieldText(stap6omschrijvingMilieuaspectenRaw, 1000) || undefined
     : undefined
 
   // Toelichting onderhoud
@@ -707,9 +766,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'toelichting onderhoud:',
     'toelichting bouwkundig:',
     'toelichting staat van onderhoud:',
-  ], 400)
+  ], 2000)
   const stap6toelichtingOnderhoud = stap6toelichtingOnderhoudRaw
-    ? cleanupLongFieldText(stap6toelichtingOnderhoudRaw, 400) || undefined
+    ? cleanupLongFieldText(stap6toelichtingOnderhoudRaw, 2000) || undefined
     : undefined
 
   // Toelichting parkeren
@@ -719,9 +778,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'parkeermogelijkheden:',
     'parkeerplaatsen:',
     'parkeren:',
-  ], 300)
+  ], 1000)
   const stap6toelichtingParkeren = stap6toelichtingParkerenRaw
-    ? cleanupLongFieldText(stap6toelichtingParkerenRaw, 300) || undefined
+    ? cleanupLongFieldText(stap6toelichtingParkerenRaw, 1000) || undefined
     : undefined
 
   // Toelichting functionaliteit
@@ -730,9 +789,9 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'functionaliteit:',
     'gebruiksmogelijkheden:',
     'indeelbaarheid:',
-  ], 300)
+  ], 1000)
   const stap6toelichtingFunctionaliteit = stap6toelichtingFunctionaliteitRaw
-    ? cleanupLongFieldText(stap6toelichtingFunctionaliteitRaw, 300) || undefined
+    ? cleanupLongFieldText(stap6toelichtingFunctionaliteitRaw, 1000) || undefined
     : undefined
 
   // --- Stap 5: Juridische Info ---
@@ -799,13 +858,13 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'opstalrecht:',
     'recht van opstal:',
     'erfdienstbaarheid:',
-  ], 300)
+  ], 1000)
 
   const stap5kwalitatieveVerplichtingen = extractSectionAfterKeyword(text, [
     'kwalitatieve verplichting:',
     'kwalitatieve verplichtingen:',
     'kettingbeding:',
-  ], 120)
+  ], 300)
 
   const stap5bestemmingsplanRaw = extractSectionAfterKeyword(text, [
     'vigerend bestemmingsplan:',
@@ -814,7 +873,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'bestemmingsplan:',
     'bestemming:',
     'planologische bestemming:',
-  ], 300)
+  ], 1000)
   // Apply stop-word truncation (Bug 12)
   let stap5bestemmingsplan = stap5bestemmingsplanRaw
   if (stap5bestemmingsplan) {
@@ -825,7 +884,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       .replace(/\s*(?:Pagina\s+\d+(\s+van\s+\d+)?|Printdatum[:\s][^\n]*|Uitvoerend\s+taxateur[:\s][^\n]*|\d+\s+van\s+\d+|[A-Z][a-z]+\s+[A-Z][a-z]+\s+R\.?T\.?)\s*/gi, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim()
-    stap5bestemmingsplan = cleanupLongFieldText(stap5bestemmingsplan, 300) || undefined
+    stap5bestemmingsplan = cleanupLongFieldText(stap5bestemmingsplan, 1000) || undefined
   }
 
   // Gebruik conform omgevingsplan
@@ -833,14 +892,14 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'gebruik conform omgevingsplan:',
     'conform omgevingsplan:',
     'gebruik conform bestemmingsplan:',
-  ], 200)
+  ], 1000)
 
   // Bijzondere publiekrechtelijke bepalingen
   const stap5bijzonderePubliekrechtelijkeBepalingen = extractSectionAfterKeyword(text, [
     'bijzondere publiekrechtelijke bepalingen:',
     'publiekrechtelijke bepalingen:',
     'publiekrechtelijke beperkingen:',
-  ], 300)
+  ], 1000)
 
   // Aantekeningen kadastraal object
   const stap5aantekeningenKadastraalObject = extractSectionAfterKeyword(text, [
@@ -848,14 +907,14 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'aantekeningen kadaster:',
     'kadastraal object aantekeningen:',
     'aantekeningen:',
-  ], 300)
+  ], 1000)
 
   // Toelichting eigendom perceel
   const stap5toelichtingEigendomPerceel = extractSectionAfterKeyword(text, [
     'toelichting eigendom perceel:',
     'toelichting eigendomssituatie:',
     'toelichting perceel:',
-  ], 300)
+  ], 1000)
 
   // --- Stap 7: Vergunningen ---
   // Energielabel: check for "Geen"/"-"/undefined values first
@@ -981,7 +1040,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'toelichting vergunningen:',
     'vergunningen toelichting:',
     'asbest toelichting:',
-  ], 200)
+  ], 1000)
 
   // Toelichting duurzaamheid: extract from energielabel/duurzaamheid section
   const stap7toelichtingDuurzaamheid = extractSectionAfterKeyword(text, [
@@ -992,7 +1051,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'energetische maatregelen:',
     'verduurzaming:',
     'energieprestatie toelichting:',
-  ], 300)
+  ], 1000)
 
   // --- Stap 8: Waardering ---
   const WAARDERINGSMETHODEN: { keyword: string; value: WaarderingsMethode }[] = [
@@ -1054,8 +1113,8 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       'algemene uitgangspunten:',
       'uitgangspunten:',
       'taxatie onnauwkeurigheid:',
-    ], 600)
-    return raw ? summarizeAannames(raw, 450) || undefined : undefined
+    ], 2000)
+    return raw ? summarizeAannames(raw, 1500) || undefined : undefined
   })()
 
   const stap9voorbehouden = (() => {
@@ -1067,26 +1126,26 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
       'bijzondere aannames:',
       'onzekerheidsmarge:',
       'disclaimer:',
-    ], 600)
-    return raw ? summarizeAannames(raw, 450) || undefined : undefined
+    ], 2000)
+    return raw ? summarizeAannames(raw, 1500) || undefined : undefined
   })()
 
   const stap9bijzondereOmstandigheden = extractSectionAfterKeyword(text, [
     'bijzondere omstandigheden:',
     'bijzonderheden:',
-  ], 200)
+  ], 1000)
 
   // Algemene uitgangspunten (separate from aannames to avoid overlap with the combined field)
   const stap9algemeneUitgangspunten = extractSectionAfterKeyword(text, [
     'algemene uitgangspunten:',
     'uitgangspunten:',
-  ], 600)
+  ], 2000)
 
   // Bijzondere uitgangspunten
   const stap9bijzondereUitgangspunten = extractSectionAfterKeyword(text, [
     'bijzondere uitgangspunten:',
     'specifieke uitgangspunten:',
-  ], 400)
+  ], 2000)
 
   // Ontvangen informatie
   const stap9ontvangenInformatie = extractSectionAfterKeyword(text, [
@@ -1094,7 +1153,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'verstrekte informatie:',
     'ingeziene documenten:',
     'informatieverstrekking:',
-  ], 600)
+  ], 2000)
 
   // Wezenlijke veranderingen
   const stap9wezenlijkeVeranderingen = extractSectionAfterKeyword(text, [
@@ -1102,7 +1161,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'relevante veranderingen:',
     'veranderingen na inspectie:',
     'verklaring wezenlijke veranderingen:',
-  ], 300)
+  ], 1000)
 
   // Taxatie onnauwkeurigheid
   const stap9taxatieOnnauwkeurigheid = extractSectionAfterKeyword(text, [
@@ -1110,13 +1169,13 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
     'onnauwkeurigheid:',
     'onzekerheidsmarge:',
     'marge van onnauwkeurigheid:',
-  ], 300)
+  ], 1000)
 
   // --- Build wizardData ---
   // Field-length constants (Bug 24)
   const MAX_FIELD_LENGTH_SHORT = 120    // objectnaam, gemeente, provincie, huurder, contracttype
-  const MAX_FIELD_LENGTH_MEDIUM = 300   // bereikbaarheid, eigendomssituatie, erfpacht, zakelijkeRechten, bestemmingsplan
-  const MAX_FIELD_LENGTH_TEXTAREA = 800 // fundering, dakbedekking, installaties, achterstalligOnderhoud, aannames, voorbehouden, bijzondereOmstandigheden, toelichting
+  const MAX_FIELD_LENGTH_MEDIUM = 2000  // bereikbaarheid, eigendomssituatie, erfpacht, zakelijkeRechten, bestemmingsplan
+  const MAX_FIELD_LENGTH_TEXTAREA = 5000 // fundering, dakbedekking, installaties, achterstalligOnderhoud, aannames, voorbehouden, bijzondereOmstandigheden, toelichting
 
   const wizardData: Partial<Dossier> = {}
 
@@ -1251,7 +1310,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 export async function parsePdfToRapport(file: File): Promise<Partial<HistorischRapport>> {
   const text = await extractTextFromPdf(file)
   const result: Partial<HistorischRapport> = {
-    rapportTeksten: { volledig: text },
+    rapportTeksten: splitReportIntoSections(text),
   }
 
   // --- Adres ---

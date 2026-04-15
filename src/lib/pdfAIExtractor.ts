@@ -12,7 +12,83 @@ import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel
 import type { ExtractionDebugRecord } from './pdfFieldExtractors'
 
 /** Maximum PDF text length to send to the AI (cost-conscious). */
-const MAX_TEXT_CHARS = 12000
+const MAX_TEXT_CHARS = 30000
+
+/**
+ * Maps missing field names to the most relevant `rapportTeksten` section keys.
+ * Fields not listed will fall back to `samenvatting` and then `volledig`.
+ */
+const FIELD_TO_SECTIONS: Record<string, string[]> = {
+  energielabel:           ['duurzaamheid', 'technisch'],
+  marktwaarde:            ['waardering', 'samenvatting'],
+  bar:                    ['waardering'],
+  nar:                    ['waardering'],
+  kapitalisatiefactor:    ['waardering'],
+  waardepeildatum:        ['waardering', 'samenvatting'],
+  eigendomssituatie:      ['juridisch'],
+  bestemmingsplan:        ['juridisch'],
+  erfpacht:               ['juridisch'],
+  bereikbaarheid:         ['locatie'],
+  ligging:                ['locatie'],
+  gemeente:               ['locatie', 'samenvatting'],
+  provincie:              ['locatie', 'samenvatting'],
+  bvo:                    ['samenvatting', 'object'],
+  vvo:                    ['samenvatting', 'object'],
+  perceeloppervlak:       ['object', 'samenvatting'],
+  bouwjaar:               ['technisch', 'object'],
+  typeObject:             ['object', 'samenvatting'],
+  gebruiksdoel:           ['object', 'samenvatting'],
+  straat:                 ['samenvatting'],
+  huisnummer:             ['samenvatting'],
+  postcode:               ['samenvatting'],
+  plaats:                 ['samenvatting'],
+  naamTaxateur:           ['samenvatting'],
+  inspectiedatum:         ['samenvatting'],
+  objectnaam:             ['samenvatting', 'object'],
+  markthuurPerJaar:       ['waardering', 'samenvatting'],
+  huurprijsPerJaar:       ['waardering', 'samenvatting'],
+}
+
+/**
+ * Returns the most relevant sections from `rapportTeksten` for the given missing fields,
+ * concatenated up to `MAX_TEXT_CHARS`. Falls back to the full text when no sections match.
+ */
+export function getRelevantTextForFields(
+  rapportTeksten: Record<string, string>,
+  missingFields: string[]
+): string {
+  const sectionKeys = new Set<string>()
+
+  for (const field of missingFields) {
+    const keys = FIELD_TO_SECTIONS[field] ?? ['samenvatting']
+    for (const key of keys) {
+      sectionKeys.add(key)
+    }
+  }
+
+  // Always include samenvatting as it contains the most concise overview
+  sectionKeys.add('samenvatting')
+
+  const parts: string[] = []
+  let totalLength = 0
+
+  for (const key of sectionKeys) {
+    const section = rapportTeksten[key]
+    if (!section) continue
+    const remaining = MAX_TEXT_CHARS - totalLength
+    if (remaining <= 0) break
+    parts.push(section.length > remaining ? section.slice(0, remaining) + '…' : section)
+    totalLength += section.length
+  }
+
+  // If we have no sections or very little content, fall back to the full text (truncated)
+  if (totalLength < 500 && rapportTeksten['volledig']) {
+    const full = rapportTeksten['volledig']
+    return full.length > MAX_TEXT_CHARS ? full.slice(0, MAX_TEXT_CHARS) + '…' : full
+  }
+
+  return parts.join('\n\n---\n\n')
+}
 
 /** Per-field AI result returned by the edge function. */
 interface AIFieldResult {
@@ -101,10 +177,17 @@ export async function aiExtractMissingFields(
     return { result: currentResult, aiDebug: {} }
   }
 
-  const truncatedText = text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) + '…' : text
+  // Use sectioned text when available for smarter, more targeted AI extraction
+  const rapportTeksten = currentResult.rapportTeksten
+  let relevantText: string
+  if (rapportTeksten && Object.keys(rapportTeksten).length > 1) {
+    relevantText = getRelevantTextForFields(rapportTeksten, missingFields)
+  } else {
+    relevantText = text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) + '…' : text
+  }
 
   const { data, error } = await supabase.functions.invoke('openai-pdf-extract', {
-    body: { text: truncatedText, missingFields },
+    body: { text: relevantText, missingFields },
   })
 
   if (error || !data) {

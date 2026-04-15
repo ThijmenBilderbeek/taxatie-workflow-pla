@@ -21,6 +21,7 @@ import {
 import { extractAllFieldsWithConfidence, extractAantalBouwlagen, extractBar, extractNar, extractMarktwaarde } from './pdfFieldExtractors'
 import { detectChapters } from './chapterDetector'
 import { cleanExtractedPdfText } from './pdfTextCleaner'
+import { chunkSections, type TextChunk } from './pdfTextChunker'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -1329,7 +1330,7 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
 
 export async function parsePdfToRapport(
   file: File,
-): Promise<Partial<HistorischRapport> & { _parseWarnings: string[] }> {
+): Promise<Partial<HistorischRapport> & { _parseWarnings: string[]; _textChunks: TextChunk[] }> {
   const parseWarnings: string[] = []
   const rawText = await extractTextFromPdf(file)
   const text = cleanExtractedPdfText(rawText)
@@ -1342,6 +1343,10 @@ export async function parsePdfToRapport(
       'Er konden geen logische secties in het rapport worden gedetecteerd. De volledige tekst wordt als één geheel opgeslagen.',
     )
   }
+
+  // Chunk sections so that downstream consumers receive safe-size text blocks
+  const textChunks = chunkSections(sections)
+  console.log(`[parsePdfToRapport] Produced ${textChunks.length} text chunk(s) from ${sectionKeys.length} named section(s)`)
 
   const result: Partial<HistorischRapport> = {
     rapportTeksten: sections,
@@ -1604,5 +1609,5 @@ export async function parsePdfToRapport(
     console.warn('[parsePdfToRapport] AI fallback failed:', aiErr instanceof Error ? aiErr.message : aiErr)
   }
 
-  return Object.assign(result, { _parseWarnings: parseWarnings })
+  return Object.assign(result, { _parseWarnings: parseWarnings, _textChunks: textChunks })
 }

@@ -20,6 +20,7 @@ import {
 } from './pdfNormalizers'
 import { extractAllFieldsWithConfidence, extractAantalBouwlagen, extractBar, extractNar, extractMarktwaarde } from './pdfFieldExtractors'
 import { detectChapters } from './chapterDetector'
+import { cleanExtractedPdfText } from './pdfTextCleaner'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -1330,7 +1331,8 @@ export async function parsePdfToRapport(
   file: File,
 ): Promise<Partial<HistorischRapport> & { _parseWarnings: string[] }> {
   const parseWarnings: string[] = []
-  const text = await extractTextFromPdf(file)
+  const rawText = await extractTextFromPdf(file)
+  const text = cleanExtractedPdfText(rawText)
   const sections = splitReportIntoSections(text)
 
   // Warn when section detection failed (only the fallback `volledig` key is present)

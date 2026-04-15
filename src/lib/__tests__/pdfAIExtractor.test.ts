@@ -187,4 +187,30 @@ describe('aiExtractMissingFields — stap9 merge logic', () => {
     expect(result.wizardData?.stap9?.aannames).toBe('Regex-extracted aannames')
     expect(result.wizardData?.stap9?.swotSterktes).toBe('Regex-extracted sterktes')
   })
+
+  it('returns current result gracefully when edge function returns an error', async () => {
+    const mockInvoke = vi.mocked(supabase.functions.invoke)
+    mockInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Bad Request' },
+    })
+
+    const currentResult = {
+      adres: { straat: 'Teststraat', huisnummer: '1', postcode: '1234 AB', plaats: 'Amsterdam' },
+      typeObject: 'kantoor' as const,
+      gebruiksdoel: 'verhuurd_belegging' as const,
+      bvo: 1000,
+      marktwaarde: 500000,
+      bar: 7.5,
+      nar: 6.5,
+      waardepeildatum: '2024-01-01',
+      wizardData: {},
+    }
+
+    // Should not throw — graceful return with current result
+    const { result, aiDebug } = await aiExtractMissingFields('dummy text', currentResult)
+
+    expect(result).toEqual(currentResult)
+    expect(aiDebug).toEqual({})
+  })
 })

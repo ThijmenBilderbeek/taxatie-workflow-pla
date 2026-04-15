@@ -292,7 +292,19 @@ export function splitReportIntoSections(text: string): Record<string, string> {
   }
 
   // Build the result, joining multiple detected sections under the same key
-  const result: Record<string, string> = { volledig: text }
+  const hasNamedSections = Object.keys(sections).length > 0
+
+  // When sections are detected, truncate `volledig` to avoid oversized JSONB payloads.
+  // The full text is preserved across the named section keys.
+  // ~50 000 chars is enough for backward-compat fallbacks while staying well within
+  // Supabase JSONB row limits and edge function request body limits.
+  const MAX_VOLLEDIG_CHARS = 50000
+  const volledigValue =
+    hasNamedSections && text.length > MAX_VOLLEDIG_CHARS
+      ? text.slice(0, MAX_VOLLEDIG_CHARS) + '…'
+      : text
+
+  const result: Record<string, string> = { volledig: volledigValue }
   for (const [key, parts] of Object.entries(sections)) {
     result[key] = parts.join('\n\n')
   }

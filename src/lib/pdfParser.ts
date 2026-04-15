@@ -1582,6 +1582,7 @@ export async function parsePdfToRapport(
         if (aiWd.stap5) wd.stap5 = { ...aiWd.stap5, ...wd.stap5 }
         if (aiWd.stap7) wd.stap7 = { ...aiWd.stap7, ...wd.stap7 }
         if (aiWd.stap8) wd.stap8 = { ...aiWd.stap8, ...wd.stap8 }
+        if (aiWd.stap9) wd.stap9 = { ...aiWd.stap9, ...wd.stap9 }
       }
     }
   } catch (aiErr) {

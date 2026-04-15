@@ -8,7 +8,7 @@
  */
 
 import { supabase } from './supabaseClient'
-import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering } from '../types'
+import type { HistorischRapport, ObjectType, Gebruiksdoel, Ligging, Energielabel, Dossier, AlgemeneGegevens, AdresLocatie, Oppervlaktes, Huurgegevens, JuridischeInfo, Vergunningen, Waardering, Aannames } from '../types'
 import type { ExtractionDebugRecord } from './pdfFieldExtractors'
 
 /** Maximum PDF text length to send to the AI (cost-conscious). */
@@ -19,34 +19,48 @@ const MAX_TEXT_CHARS = 30000
  * Fields not listed will fall back to `samenvatting` and then `volledig`.
  */
 const FIELD_TO_SECTIONS: Record<string, string[]> = {
-  energielabel:           ['duurzaamheid', 'technisch'],
-  marktwaarde:            ['waardering', 'samenvatting'],
-  bar:                    ['waardering'],
-  nar:                    ['waardering'],
-  kapitalisatiefactor:    ['waardering'],
-  waardepeildatum:        ['waardering', 'samenvatting'],
-  eigendomssituatie:      ['juridisch'],
-  bestemmingsplan:        ['juridisch'],
-  erfpacht:               ['juridisch'],
-  bereikbaarheid:         ['locatie'],
-  ligging:                ['locatie'],
-  gemeente:               ['locatie', 'samenvatting'],
-  provincie:              ['locatie', 'samenvatting'],
-  bvo:                    ['samenvatting', 'object'],
-  vvo:                    ['samenvatting', 'object'],
-  perceeloppervlak:       ['object', 'samenvatting'],
-  bouwjaar:               ['technisch', 'object'],
-  typeObject:             ['object', 'samenvatting'],
-  gebruiksdoel:           ['object', 'samenvatting'],
-  straat:                 ['samenvatting'],
-  huisnummer:             ['samenvatting'],
-  postcode:               ['samenvatting'],
-  plaats:                 ['samenvatting'],
-  naamTaxateur:           ['samenvatting'],
-  inspectiedatum:         ['samenvatting'],
-  objectnaam:             ['samenvatting', 'object'],
-  markthuurPerJaar:       ['waardering', 'samenvatting'],
-  huurprijsPerJaar:       ['waardering', 'samenvatting'],
+  energielabel:               ['duurzaamheid', 'technisch'],
+  marktwaarde:                ['waardering', 'samenvatting'],
+  bar:                        ['waardering'],
+  nar:                        ['waardering'],
+  kapitalisatiefactor:        ['waardering'],
+  waardepeildatum:            ['waardering', 'samenvatting'],
+  eigendomssituatie:          ['juridisch'],
+  bestemmingsplan:            ['juridisch'],
+  erfpacht:                   ['juridisch'],
+  bereikbaarheid:             ['locatie'],
+  ligging:                    ['locatie'],
+  gemeente:                   ['locatie', 'samenvatting'],
+  provincie:                  ['locatie', 'samenvatting'],
+  bvo:                        ['samenvatting', 'object'],
+  vvo:                        ['samenvatting', 'object'],
+  perceeloppervlak:           ['object', 'samenvatting'],
+  bouwjaar:                   ['technisch', 'object'],
+  typeObject:                 ['object', 'samenvatting'],
+  gebruiksdoel:               ['object', 'samenvatting'],
+  straat:                     ['samenvatting'],
+  huisnummer:                 ['samenvatting'],
+  postcode:                   ['samenvatting'],
+  plaats:                     ['samenvatting'],
+  naamTaxateur:               ['samenvatting'],
+  inspectiedatum:             ['samenvatting'],
+  objectnaam:                 ['samenvatting', 'object'],
+  markthuurPerJaar:           ['waardering', 'samenvatting'],
+  huurprijsPerJaar:           ['waardering', 'samenvatting'],
+  // Stap 9 fields
+  aannames:                   ['aannames', 'samenvatting'],
+  voorbehouden:               ['aannames'],
+  bijzondereOmstandigheden:   ['aannames'],
+  algemeneUitgangspunten:     ['aannames', 'samenvatting'],
+  bijzondereUitgangspunten:   ['aannames'],
+  ontvangenInformatie:        ['aannames', 'samenvatting'],
+  wezenlijkeVeranderingen:    ['aannames'],
+  taxatieOnnauwkeurigheid:    ['aannames', 'waardering'],
+  // SWOT fields
+  swotSterktes:               ['swot'],
+  swotZwaktes:                ['swot'],
+  swotKansen:                 ['swot'],
+  swotBedreigingen:           ['swot'],
 }
 
 /** Minimum combined section length before falling back to the full text. */
@@ -145,6 +159,18 @@ function getMissingFields(result: Partial<HistorischRapport>): string[] {
   if (!result.wizardData?.stap4?.huurprijsPerJaar) missing.push('huurprijsPerJaar')
   if (!result.wizardData?.stap5?.eigendomssituatie) missing.push('eigendomssituatie')
   if (!result.wizardData?.stap2?.ligging) missing.push('ligging')
+  if (!result.wizardData?.stap9?.aannames) missing.push('aannames')
+  if (!result.wizardData?.stap9?.voorbehouden) missing.push('voorbehouden')
+  if (!result.wizardData?.stap9?.bijzondereOmstandigheden) missing.push('bijzondereOmstandigheden')
+  if (!result.wizardData?.stap9?.algemeneUitgangspunten) missing.push('algemeneUitgangspunten')
+  if (!result.wizardData?.stap9?.bijzondereUitgangspunten) missing.push('bijzondereUitgangspunten')
+  if (!result.wizardData?.stap9?.ontvangenInformatie) missing.push('ontvangenInformatie')
+  if (!result.wizardData?.stap9?.wezenlijkeVeranderingen) missing.push('wezenlijkeVeranderingen')
+  if (!result.wizardData?.stap9?.taxatieOnnauwkeurigheid) missing.push('taxatieOnnauwkeurigheid')
+  if (!result.wizardData?.stap9?.swotSterktes) missing.push('swotSterktes')
+  if (!result.wizardData?.stap9?.swotZwaktes) missing.push('swotZwaktes')
+  if (!result.wizardData?.stap9?.swotKansen) missing.push('swotKansen')
+  if (!result.wizardData?.stap9?.swotBedreigingen) missing.push('swotBedreigingen')
 
   return missing
 }
@@ -405,6 +431,27 @@ export async function aiExtractMissingFields(
   if (fields.kapitalisatiefactor?.value && !currentResult.wizardData?.stap8?.kapitalisatiefactor) {
     const v = toNumber(fields.kapitalisatiefactor.value)
     if (v !== undefined && v > 0) { stap8.kapitalisatiefactor = v; recordAI('kapitalisatiefactor', v, fields.kapitalisatiefactor.confidence) }
+  }
+
+  // WizardData stap9
+  if (!merged.wizardData!.stap9) merged.wizardData!.stap9 = {} as Aannames
+  const stap9 = merged.wizardData!.stap9!
+
+  const stap9TextFields = [
+    'aannames', 'voorbehouden', 'bijzondereOmstandigheden',
+    'algemeneUitgangspunten', 'bijzondereUitgangspunten',
+    'ontvangenInformatie', 'wezenlijkeVeranderingen', 'taxatieOnnauwkeurigheid',
+    'swotSterktes', 'swotZwaktes', 'swotKansen', 'swotBedreigingen',
+  ] as const
+
+  for (const fieldName of stap9TextFields) {
+    if (fields[fieldName]?.value && !currentResult.wizardData?.stap9?.[fieldName]) {
+      const v = toString(fields[fieldName].value)
+      if (v) {
+        ;(stap9 as any)[fieldName] = v
+        recordAI(fieldName, v, fields[fieldName].confidence)
+      }
+    }
   }
 
   // Sync BVO between top-level and stap3 if AI filled either

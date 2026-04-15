@@ -415,7 +415,7 @@ export function extractRenovatiejaar(text: string): ExtractionResult<number> | u
 }
 
 export function extractMarkthuur(text: string): ExtractionResult<number> | undefined {
-  const re = /(?:Markt\/herz\.\s*huur|markthuur(?:waarde|prijs)?|marktconforme\s+huur|jaarhuursom|bruto\s+huur|contracthuur|huuropbrengst)[:\s|]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
+  const re = /(?:Markt\/herz\.\s*huur|markthuur(?:waarde|prijs)?|marktconforme\s+huur)[:\s|]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/i
   const match = text.match(re)
   if (match) {
     const val = normalizeEuro(match[1])

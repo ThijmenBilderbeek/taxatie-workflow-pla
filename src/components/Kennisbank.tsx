@@ -96,8 +96,6 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
     setIsLoading(true)
     setLoadingMessage('PDF wordt verwerkt...')
     try {
-      // parsePdfToRapport now calls AI fallback internally; show appropriate loading message
-      setLoadingMessage('AI analyseert ontbrekende velden...')
       const parsed = await parsePdfToRapport(file)
       const debug = (parsed.extractionDebug ?? {}) as ExtractionDebugRecord
       setExtractionDebug(debug)

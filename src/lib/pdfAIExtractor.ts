@@ -299,9 +299,13 @@ export async function aiExtractMissingFields(
     if (v !== undefined && v > 0) { stap8.kapitalisatiefactor = v; recordAI('kapitalisatiefactor', v, fields.kapitalisatiefactor.confidence) }
   }
 
-  // Sync top-level bvo with stap3.bvo if AI filled it
+  // Sync BVO between top-level and stap3 if AI filled either
   if (merged.wizardData!.stap3?.bvo && !currentResult.bvo) {
     merged.bvo = merged.wizardData!.stap3.bvo
+  }
+  if (merged.bvo && !merged.wizardData!.stap3?.bvo) {
+    if (!merged.wizardData!.stap3) merged.wizardData!.stap3 = {} as Oppervlaktes
+    merged.wizardData!.stap3.bvo = merged.bvo
   }
 
   return { result: merged, aiDebug }

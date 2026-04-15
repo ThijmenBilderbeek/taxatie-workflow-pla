@@ -126,7 +126,11 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-/** Maximum characters of PDF text to send to the AI (cost-conscious). */
+/** 
+ * Maximum characters of PDF text to send to the AI (cost-conscious).
+ * 12 000 chars ≈ 3 000 tokens, which is well within the gpt-4o-mini context
+ * window while covering the typical first few pages that contain field data.
+ */
 const MAX_TEXT_CHARS = 12000
 
 serve(async (req: Request) => {

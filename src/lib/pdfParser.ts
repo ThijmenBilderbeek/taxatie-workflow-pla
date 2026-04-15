@@ -1314,10 +1314,23 @@ export function extractWizardDataFromText(text: string): Partial<Dossier> {
   return wizardData
 }
 
-export async function parsePdfToRapport(file: File): Promise<Partial<HistorischRapport>> {
+export async function parsePdfToRapport(
+  file: File,
+): Promise<Partial<HistorischRapport> & { _parseWarnings: string[] }> {
+  const parseWarnings: string[] = []
   const text = await extractTextFromPdf(file)
+  const sections = splitReportIntoSections(text)
+
+  // Warn when section detection failed (only the fallback `volledig` key is present)
+  const sectionKeys = Object.keys(sections).filter((k) => k !== 'volledig')
+  if (sectionKeys.length === 0) {
+    parseWarnings.push(
+      'Er konden geen logische secties in het rapport worden gedetecteerd. De volledige tekst wordt als één geheel opgeslagen.',
+    )
+  }
+
   const result: Partial<HistorischRapport> = {
-    rapportTeksten: splitReportIntoSections(text),
+    rapportTeksten: sections,
   }
 
   // --- Adres ---
@@ -1540,7 +1553,9 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
   // This is optional and gracefully falls back to the regex-only result if it fails.
   try {
     const { aiExtractMissingFields } = await import('./pdfAIExtractor')
-    const { result: aiResult, aiDebug } = await aiExtractMissingFields(text, result)
+    const { result: aiResult, aiDebug, warnings: aiWarnings } = await aiExtractMissingFields(text, result)
+    // Propagate any AI warnings (e.g. text truncation) to the caller
+    parseWarnings.push(...aiWarnings)
     // Merge AI debug entries into extractionDebug (regex entries take precedence)
     if (Object.keys(aiDebug).length > 0) {
       result.extractionDebug = { ...aiDebug, ...result.extractionDebug }
@@ -1574,5 +1589,5 @@ export async function parsePdfToRapport(file: File): Promise<Partial<HistorischR
     console.warn('[parsePdfToRapport] AI fallback failed:', aiErr instanceof Error ? aiErr.message : aiErr)
   }
 
-  return result
+  return Object.assign(result, { _parseWarnings: parseWarnings })
 }

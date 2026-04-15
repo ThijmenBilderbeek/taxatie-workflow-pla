@@ -2451,6 +2451,11 @@ function Stap9({ data, onChange, dossierId, suggesties, dismissedSuggesties, isL
         toast.error('Kon geen tekst uit het PDF-bestand lezen.')
         return
       }
+
+      // Show any parse-time warnings (truncation, section detection failure)
+      for (const warning of parsed._parseWarnings ?? []) {
+        toast.warning(warning)
+      }
       const documentId = generateInzageDocumentId(dossierId, label)
       const knowledge = extractDocumentKnowledge(fullText, documentId, {
         documentType: label,

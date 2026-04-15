@@ -55,11 +55,13 @@ const MIN_SECTION_LENGTH_THRESHOLD = 500
 /**
  * Returns the most relevant sections from `rapportTeksten` for the given missing fields,
  * concatenated up to `MAX_TEXT_CHARS`. Falls back to the full text when no sections match.
+ *
+ * The `truncated` flag is `true` when any section or fallback text was cut short.
  */
 export function getRelevantTextForFields(
   rapportTeksten: Record<string, string>,
   missingFields: string[]
-): string {
+): { text: string; truncated: boolean } {
   const relevantSectionKeys = new Set<string>()
 
   for (const field of missingFields) {
@@ -74,23 +76,32 @@ export function getRelevantTextForFields(
 
   const parts: string[] = []
   let totalLength = 0
+  let truncated = false
 
   for (const key of relevantSectionKeys) {
     const section = rapportTeksten[key]
     if (!section) continue
     const remaining = MAX_TEXT_CHARS - totalLength
-    if (remaining <= 0) break
-    parts.push(section.length > remaining ? section.slice(0, remaining) + '…' : section)
+    if (remaining <= 0) { truncated = true; break }
+    if (section.length > remaining) {
+      parts.push(section.slice(0, remaining) + '…')
+      truncated = true
+    } else {
+      parts.push(section)
+    }
     totalLength += section.length
   }
 
   // If we have no sections or very little content, fall back to the full text (truncated)
   if (totalLength < MIN_SECTION_LENGTH_THRESHOLD && rapportTeksten['volledig']) {
     const full = rapportTeksten['volledig']
-    return full.length > MAX_TEXT_CHARS ? full.slice(0, MAX_TEXT_CHARS) + '…' : full
+    if (full.length > MAX_TEXT_CHARS) {
+      return { text: full.slice(0, MAX_TEXT_CHARS) + '…', truncated: true }
+    }
+    return { text: full, truncated: false }
   }
 
-  return parts.join('\n\n---\n\n')
+  return { text: parts.join('\n\n---\n\n'), truncated }
 }
 
 /** Per-field AI result returned by the edge function. */
@@ -173,20 +184,31 @@ function toString(v: unknown): string | undefined {
 export async function aiExtractMissingFields(
   text: string,
   currentResult: Partial<HistorischRapport>
-): Promise<{ result: Partial<HistorischRapport>; aiDebug: ExtractionDebugRecord }> {
+): Promise<{ result: Partial<HistorischRapport>; aiDebug: ExtractionDebugRecord; warnings: string[] }> {
   const missingFields = getMissingFields(currentResult)
 
   if (missingFields.length === 0) {
-    return { result: currentResult, aiDebug: {} }
+    return { result: currentResult, aiDebug: {}, warnings: [] }
   }
 
   // Use sectioned text when available for smarter, more targeted AI extraction
   const rapportTeksten = currentResult.rapportTeksten
   let relevantText: string
+  let textTruncated = false
   if (rapportTeksten && Object.keys(rapportTeksten).length > 1) {
-    relevantText = getRelevantTextForFields(rapportTeksten, missingFields)
+    const { text: sectionText, truncated } = getRelevantTextForFields(rapportTeksten, missingFields)
+    relevantText = sectionText
+    textTruncated = truncated
+  } else if (text.length > MAX_TEXT_CHARS) {
+    relevantText = text.slice(0, MAX_TEXT_CHARS) + '…'
+    textTruncated = true
   } else {
-    relevantText = text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) + '…' : text
+    relevantText = text
+  }
+
+  const warnings: string[] = []
+  if (textTruncated) {
+    warnings.push('Het rapport is te groot om volledig door AI te verwerken. Sommige gegevens zijn mogelijk niet automatisch ingevuld.')
   }
 
   const { data, error } = await supabase.functions.invoke('openai-pdf-extract', {
@@ -394,7 +416,7 @@ export async function aiExtractMissingFields(
     merged.wizardData!.stap3.bvo = merged.bvo
   }
 
-  return { result: merged, aiDebug }
+  return { result: merged, aiDebug, warnings }
 }
 
 /**

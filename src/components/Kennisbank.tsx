@@ -177,6 +177,11 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
       if (!hasAddress && !hasMarktwaarde && !hasBvo) {
         toast.warning('Er kon weinig informatie uit deze PDF worden gehaald. Mogelijk is dit een gescand document zonder tekst.')
       }
+
+      // Show any parse-time warnings (truncation, section detection failure)
+      for (const warning of parsed._parseWarnings ?? []) {
+        toast.warning(warning)
+      }
     } catch (err) {
       console.error('[PDF parse error]', err)
       const msg = err instanceof Error ? err.message : String(err)

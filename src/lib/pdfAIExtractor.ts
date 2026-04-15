@@ -525,6 +525,13 @@ export async function aiExtractMissingFieldsWithChunks(
   // Collects structured results from all chunks for the final priority-aware merge.
   const allChunkResults: ChunkExtractionResult[] = []
 
+  // Counters for summary logging.
+  let aiCallsDone = 0
+  let aiCallsSkipped = 0
+  let consecutiveEmptyAIResponses = 0
+  let earlyStopApplied = false
+  const EARLY_STOP_THRESHOLD = 3
+
   // Ensure nested objects exist so merging below is safe.
   if (!merged.adres) merged.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
   if (!merged.wizardData) merged.wizardData = {}
@@ -557,13 +564,27 @@ export async function aiExtractMissingFieldsWithChunks(
         extractionType: 'rule_based',
         extractedFields: ruleBasedFound,
       })
+      // Also update accumulator so rule-based fields are not requested from AI again
+      for (const [key, value] of Object.entries(ruleBasedFound)) {
+        if (!(key in aiAccumulator)) aiAccumulator[key] = value
+      }
     }
 
     // Step 2: determine which fields are still missing.
     const missingFields = getMissingFieldsForChunk(merged, aiAccumulator)
     if (missingFields.length === 0) {
       console.log(`[pdfAIExtractor] ${chunkLabel} No missing fields — skipping AI call`)
+      aiCallsSkipped++
       continue
+    }
+
+    // Early-stop: skip remaining chunks if AI has found nothing new for N consecutive chunks.
+    if (consecutiveEmptyAIResponses >= EARLY_STOP_THRESHOLD) {
+      console.log(`[pdfAIExtractor] Early stop: ${EARLY_STOP_THRESHOLD} consecutive chunks with no new AI fields — stopping`)
+      earlyStopApplied = true
+      // Current chunk + all remaining chunks are skipped (AI call not made for any of them)
+      aiCallsSkipped += textChunks.length - chunk.chunkIndex
+      break
     }
 
     console.log(`[pdfAIExtractor] ${chunkLabel} Sending ${missingFields.length} missing field(s) to AI: ${missingFields.join(', ')}`)
@@ -587,18 +608,21 @@ export async function aiExtractMissingFieldsWithChunks(
 
     if (error || !data) {
       console.warn(`[pdfAIExtractor] ${chunkLabel} Edge function error:`, error?.message ?? 'No data returned')
+      consecutiveEmptyAIResponses++
       continue
     }
 
-    // Step 4: validate AI response.
+    // Step 4: validate AI response — filter to only fields that were requested.
     const rawJson = typeof data === 'string' ? data : JSON.stringify(data)
-    const aiFields = parseAndValidateAIOutput(rawJson, AI_EXTRACTABLE_FIELDS)
+    const aiFields = parseAndValidateAIOutput(rawJson, AI_EXTRACTABLE_FIELDS, missingFields)
     const aiKeys = Object.keys(aiFields)
+    aiCallsDone++
     console.log(
       `[pdfAIExtractor] ${chunkLabel} AI returned ${aiKeys.length} valid field(s)${aiKeys.length > 0 ? ': ' + aiKeys.join(', ') : ''}`,
     )
 
     if (aiKeys.length > 0) {
+      consecutiveEmptyAIResponses = 0
       // Collect structured AI result for priority-aware merge.
       allChunkResults.push({
         sectionTitle: chunk.sectionTitle,
@@ -612,6 +636,8 @@ export async function aiExtractMissingFieldsWithChunks(
       for (const [key, value] of Object.entries(aiFields)) {
         if (!(key in aiAccumulator)) aiAccumulator[key] = value
       }
+    } else {
+      consecutiveEmptyAIResponses++
     }
   }
 
@@ -761,7 +787,16 @@ export async function aiExtractMissingFieldsWithChunks(
   applyAIFields(mergedChunkFields)
 
   const aiFilledCount = Object.keys(aiDebug).length
-  console.log(`[pdfAIExtractor] Chunk-based AI extraction complete — ${aiFilledCount} field(s) filled by AI`)
+  const ruleBasedFilledCount = allChunkResults
+    .filter((r) => r.extractionType === 'rule_based')
+    .reduce((acc, r) => acc + Object.keys(r.extractedFields).length, 0)
+  console.log(
+    `[pdfAIExtractor] Chunk-based AI extraction complete — ` +
+    `chunks processed: ${textChunks.length}, ` +
+    `AI calls: ${aiCallsDone} done / ${aiCallsSkipped} skipped, ` +
+    `rule-based filled: ${ruleBasedFilledCount}, AI filled: ${aiFilledCount}` +
+    (earlyStopApplied ? ' [early stop applied]' : ''),
+  )
 
   return { result: merged, aiDebug, warnings }
 }

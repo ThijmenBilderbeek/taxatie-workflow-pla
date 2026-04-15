@@ -533,6 +533,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
         <DialogContent className={preview ? "sm:max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col" : "sm:max-w-lg"}>
           <DialogHeader className="shrink-0">
             <DialogTitle>Taxatierapport uploaden als PDF</DialogTitle>
+            <DialogDescription>Upload een PDF-bestand om gegevens automatisch te extraheren en op te slaan in de kennisbank.</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-4 py-2">
             {!preview && (
@@ -1576,6 +1577,7 @@ export function Kennisbank({ historischeRapporten, onAddRapport, onDeleteRapport
         <DialogContent className="sm:max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle>Rapport bewerken</DialogTitle>
+            <DialogDescription>Pas de gegevens van dit rapport aan.</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto">
           {bewerkFormulier && (

@@ -434,9 +434,6 @@ export async function aiExtractMissingFields(
   }
 
   // WizardData stap9
-  if (!merged.wizardData!.stap9) merged.wizardData!.stap9 = {} as Aannames
-  const stap9 = merged.wizardData!.stap9!
-
   const stap9TextFields = [
     'aannames', 'voorbehouden', 'bijzondereOmstandigheden',
     'algemeneUitgangspunten', 'bijzondereUitgangspunten',
@@ -448,7 +445,8 @@ export async function aiExtractMissingFields(
     if (fields[fieldName]?.value && !currentResult.wizardData?.stap9?.[fieldName]) {
       const v = toString(fields[fieldName].value)
       if (v) {
-        ;(stap9 as any)[fieldName] = v
+        if (!merged.wizardData!.stap9) merged.wizardData!.stap9 = {} as Aannames
+        ;(merged.wizardData!.stap9 as Partial<Aannames>)[fieldName] = v
         recordAI(fieldName, v, fields[fieldName].confidence)
       }
     }

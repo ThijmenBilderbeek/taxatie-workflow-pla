@@ -84,49 +84,43 @@ async function logUsage(
 }
 
 /**
- * Focused system prompt.
- *
- * - Only the requested missing fields may be returned.
- * - AI must use only information that is literally present in the provided chunk.
- * - No inference, no assumptions, no free text — only JSON.
- * - Omit fields that cannot be found in the chunk.
+ * Builds a focused, dynamic system prompt that lists only the requested
+ * missing fields. This prevents AI from returning fields that are already
+ * filled by rule-based extraction and keeps the prompt compact.
  */
-const SYSTEM_PROMPT = `Je bent een data-extractie-assistent voor Nederlandse taxatierapporten.
+function buildSystemPrompt(missingFields: string[]): string {
+  return `Je bent een data-extractie engine voor Nederlandse taxatierapporten.
 
-TAAK: Extraheer uitsluitend de velden die expliciet aanwezig zijn in de gegeven tekst.
+INSTRUCTIES:
+- Extraheer ALLEEN de volgende velden: ${missingFields.join(', ')}
+- Gebruik ALLEEN informatie die letterlijk in de tekst staat
+- Neem NIETS aan of leid NIETS af buiten de tekst
+- Laat een veld WEG als de informatie niet expliciet in de tekst staat
+- Retourneer ALLEEN een plat JSON-object zonder uitleg
+- Gebruik geen geneste objecten met "value"/"confidence"
+- SWOT velden (swot_sterktes, swot_zwaktes, swot_kansen, swot_bedreigingen) als arrays van strings
+- Alle andere velden als string of nummer
 
-REGELS:
-1. Retourneer ALLEEN een JSON-object met de gevraagde velden.
-2. Gebruik ALLEEN informatie die letterlijk in de tekst staat — geen aannames of afleidingen.
-3. Laat een veld WEG als het niet expliciet in de tekst staat.
-4. Lege strings, null of "onbekend" zijn niet toegestaan — laat het veld gewoon weg.
-5. Geen uitleg, geen commentaar, alleen JSON.
-
-VELDFORMATEN (alleen retourneren als letterlijk aanwezig):
+Veldtypes:
 - adres: volledig adres als string
 - object_type: een van [kantoor, bedrijfscomplex, bedrijfshal, winkel, woning, appartement, overig]
 - bouwjaar: getal (bijv. 1985)
-- marktwaarde: getal in euro's (bijv. 1250000)
-- marktwaarde_kk_afgerond: getal in euro's, afgerond kosten koper
-- markthuur: markthuur per jaar in euro's als getal
-- netto_huurwaarde: netto huurwaarde per jaar in euro's als getal
-- marktwaarde_per_m2: marktwaarde per m² als getal
-- vloeroppervlak_bvo: BVO in m² als getal
-- vloeroppervlak_vvo: VVO in m² als getal
-- bebouwd_oppervlak: bebouwd/perceel oppervlak in m² als getal
-- dakoppervlak: dakoppervlak in m² als getal
-- glasoppervlak: glasoppervlak in m² als getal
-- locatie_score: locatiescore als getal of korte string
-- object_score: objectscore als getal of korte string
-- courantheid_verhuur: courantheid verhuur als string (bijv. "Goed")
-- courantheid_verkoop: courantheid verkoop als string
-- verhuurtijd_maanden: verwachte verhuurtijd in maanden als getal
-- verkooptijd_maanden: verwachte verkooptijd in maanden als getal
-- energielabel: energielabel (A++++, A+++, A++, A+, A, B, C, D, E, F, G of geen)
-- swot_sterktes: array van strings met sterktes
-- swot_zwaktes: array van strings met zwaktes
-- swot_kansen: array van strings met kansen
-- swot_bedreigingen: array van strings met bedreigingen`
+- marktwaarde, marktwaarde_kk_afgerond: getal in euro's (bijv. 1250000)
+- markthuur, netto_huurwaarde: getal in euro's per jaar
+- marktwaarde_per_m2: getal in euro's per m²
+- vloeroppervlak_bvo, vloeroppervlak_vvo, bebouwd_oppervlak: getal in m²
+- energielabel: letter (A++++, A+++, A++, A+, A, B, C, D, E, F, G)
+- locatie_score, object_score, courantheid_verhuur, courantheid_verkoop: tekst
+- verhuurtijd_maanden, verkooptijd_maanden: getal
+- dakoppervlak, glasoppervlak: getal in m²
+
+Voorbeeld output:
+{
+  "bouwjaar": 2025,
+  "energielabel": "A+",
+  "swot_sterktes": ["Nieuwbouw", "Goede bereikbaarheid"]
+}`
+}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -181,23 +175,17 @@ serve(async (req: Request) => {
     // Truncate text to stay within token limits
     const truncatedText = text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) + '…' : text
 
-    // Build context header for the prompt
-    let contextHeader = ''
-    if (chunkContext) {
-      const parts: string[] = []
-      if (chunkContext.sectionTitle) parts.push(`Sectie: ${chunkContext.sectionTitle}`)
-      if (chunkContext.chunkIndex !== undefined && chunkContext.totalChunks !== undefined) {
-        parts.push(`Deel ${chunkContext.chunkIndex + 1} van ${chunkContext.totalChunks}`)
-      }
-      if (parts.length > 0) contextHeader = parts.join(' | ') + '\n\n'
-    }
+    // Build context line for the prompt
+    const contextLine = chunkContext
+      ? `\nDit is chunk ${(chunkContext.chunkIndex ?? 0) + 1}/${chunkContext.totalChunks ?? 1} uit sectie "${chunkContext.sectionTitle ?? 'onbekend'}".`
+      : ''
 
-    const userPrompt = `${contextHeader}Ontbrekende velden om te extraheren: ${missingFields.join(', ')}\n\nTekst:\n${truncatedText}`
+    const userPrompt = `Extraheer de volgende velden uit deze tekst: ${missingFields.join(', ')}${contextLine}\n\nTekst:\n${truncatedText}`
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt(missingFields) },
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },

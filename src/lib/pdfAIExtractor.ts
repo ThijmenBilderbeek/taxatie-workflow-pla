@@ -618,8 +618,11 @@ export async function aiExtractMissingFieldsWithChunks(
     const aiKeys = Object.keys(aiFields)
     aiCallsDone++
     console.log(
-      `[pdfAIExtractor] ${chunkLabel} AI returned ${aiKeys.length} valid field(s)${aiKeys.length > 0 ? ': ' + aiKeys.join(', ') : ''}`,
+      `[pdfAIExtractor] ${chunkLabel} AI JSON valid: true, fields filled: ${aiKeys.length}`,
     )
+    if (aiKeys.length > 0) {
+      console.log(`[pdfAIExtractor] ${chunkLabel} AI filled: ${aiKeys.join(', ')}`)
+    }
 
     if (aiKeys.length > 0) {
       consecutiveEmptyAIResponses = 0

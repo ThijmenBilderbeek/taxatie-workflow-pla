@@ -40,6 +40,8 @@ export interface ExtractionResult<T> {
   discardedCandidates?: Array<{ value: unknown; reason: string }>
   /** Zero-based page index where the match was found (when available) */
   sourcePage?: number
+  /** Whether this field was filled by AI (as opposed to regex matching) */
+  sourceType?: 'regex' | 'ai'
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +184,7 @@ export function extractObjectnaam(text: string): ExtractionResult<string> | unde
 export function extractWaardepeildatum(text: string): ExtractionResult<string> | undefined {
   const DUTCH_MONTH_PAT = 'januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december'
   const dateRe = new RegExp(
-    `(?:waardepeildatum|waarde\\s+op|peildatum|getaxeerd\\s+per|getaxeerd\\s+op)[:\\s]+(\\d{1,2}[\\s\\-](?:${DUTCH_MONTH_PAT})[\\s\\-]\\d{4}|\\d{1,2}-\\d{1,2}-\\d{4})`,
+    `(?:waardepeildatum|waarde\\s+op|peildatum|getaxeerd\\s+per|getaxeerd\\s+op|datum\\s+taxatie|taxatiedatum|datum\\s+waardering|opnamedatum|datum\\s+van\\s+taxatie)[:\\s]+(\\d{1,2}[\\s\\-](?:${DUTCH_MONTH_PAT})[\\s\\-]\\d{4}|\\d{1,2}-\\d{1,2}-\\d{4})`,
     'i'
   )
   const match = text.match(dateRe)
@@ -330,7 +332,7 @@ export function extractLigging(text: string): ExtractionResult<string> | undefin
 }
 
 export function extractBvo(text: string): ExtractionResult<number> | undefined {
-  const re = /(?:Totaal\s+BVO(?:\s+m[²2]\s+of\s+stuks)?|BVO|bruto\s+vloeroppervlak|gebruiksoppervlak(?:te)?)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/gi
+  const re = /(?:Totaal\s+BVO(?:\s+m[²2]\s+of\s+stuks)?|BVO|bruto\s+vloeroppervlak|gebruiksoppervlak(?:te)?|bruto\s+oppervlak(?:te)?|bruto\s+vloeroppervlakte|totale?\s+oppervlak(?:te)?|totaal\s+m[²2]|bruto\s+m[²2])[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/gi
   let match: RegExpExecArray | null
   while ((match = re.exec(text)) !== null) {
     if (isInReferenceSection(text, match.index)) continue
@@ -346,8 +348,8 @@ export function extractBvo(text: string): ExtractionResult<number> | undefined {
 }
 
 export function extractVvo(text: string): ExtractionResult<number> | undefined {
-  // Accept "VVO 870", "VVO: 870", "totaal VVO 870", "Totaal VVO m² of stuks: 870"
-  const re = /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|totaal\s+VVO|VVO|verhuurbaar\s+vloeroppervlak)[\s:]+([0-9]{1,6}[.,]?[0-9]*)\s*(?:m[²2])?/gi
+  // Accept "VVO 870", "VVO: 870", "totaal VVO 870", "Totaal VVO m² of stuks: 870", "NVO", "verhuurbare oppervlakte", "netto vloeroppervlak"
+  const re = /(?:Totaal\s+VVO(?:\s+m[²2]\s+of\s+stuks)?|totaal\s+VVO|VVO|NVO|verhuurbaar\s+vloeroppervlak|verhuurbare\s+oppervlak(?:te)?|netto\s+vloeroppervlak(?:te)?|netto\s+oppervlak(?:te)?)[\s:]+([0-9]{1,6}[.,]?[0-9]*)\s*(?:m[²2])?/gi
   let match: RegExpExecArray | null
   while ((match = re.exec(text)) !== null) {
     if (isInReferenceSection(text, match.index)) continue
@@ -361,7 +363,7 @@ export function extractVvo(text: string): ExtractionResult<number> | undefined {
 }
 
 export function extractPerceeloppervlak(text: string): ExtractionResult<number> | undefined {
-  const re = /(?:Perceeloppervlak(?:te)?|Kaveloppervlak|Kadastrale\s+grootte|Kadastrale\s+oppervlak(?:te)?)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/gi
+  const re = /(?:Perceeloppervlak(?:te)?|Kaveloppervlak|Kadastrale\s+grootte|Kadastrale\s+oppervlak(?:te)?|terreinoppervlak(?:te)?|grondoppervlak(?:te)?|kavelmaat)[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*[.,]?[0-9]*)\s*m[²2]?/gi
   let match: RegExpExecArray | null
   while ((match = re.exec(text)) !== null) {
     if (isInReferenceSection(text, match.index)) continue
@@ -376,7 +378,7 @@ export function extractPerceeloppervlak(text: string): ExtractionResult<number> 
 }
 
 export function extractBouwjaar(text: string): ExtractionResult<number> | undefined {
-  const re = /(?:bouwjaar|gebouwd\s+in|jaar\s+van\s+oplevering)[:\s]+([0-9]{4})/gi
+  const re = /(?:bouwjaar|gebouwd\s+in|jaar\s+van\s+oplevering|jaar\s+van\s+bouw|oorspronkelijk\s+bouwjaar|bouwperiode|opgeleverd\s+in)[:\s]+([0-9]{4})/gi
   let match: RegExpExecArray | null
   while ((match = re.exec(text)) !== null) {
     if (isInReferenceSection(text, match.index)) continue
@@ -477,7 +479,7 @@ export function extractTeTaxerenBelang(text: string): ExtractionResult<string> |
 
 export function extractMarktwaarde(text: string): ExtractionResult<number> | undefined {
   // Prefer non-rounded value over rounded one, and skip reference sections
-  const re = /(?:marktwaarde\s+kosten\s+koper|marktwaarde\s+k[.\s]?k[.]?|marktwaarde)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/gi
+  const re = /(?:marktwaarde\s+kosten\s+koper|marktwaarde\s+k[.\s]?k[.]?|marktwaarde|getaxeerde\s+waarde|geschatte\s+waarde|taxatiewaarde|waarde\s+k\.?k\.?|waarde\s+kosten\s+koper)[:\s]+(?:€\s*)?([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{1,2})?)/gi
   let exactVal: number | undefined
   let roundedVal: number | undefined
   let exactSnippet = ''
@@ -621,7 +623,7 @@ export function extractEnergielabel(text: string): ExtractionResult<string> | un
 
   // Use tryExactLabelOutsideRef to avoid reference section matches
   const GEEN_VALUES = ['geen', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen label', 'niet van toepassing', 'onbekend', 'niet', '- / geen', 'nee']
-  const exact = tryExactLabelOutsideRef(text, ['energielabel', 'energieklasse'])
+  const exact = tryExactLabelOutsideRef(text, ['energielabel', 'energieklasse', 'energie-index', 'epc', 'energieprestatie'])
   if (exact) {
     const rawLower = exact.raw.trim().toLowerCase()
     const snippet = exact.snippet
@@ -645,9 +647,16 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
   const PHYSICAL_TYPES: { keyword: string; value: string }[] = [
     { keyword: 'bedrijfscomplex', value: 'bedrijfscomplex' },
     { keyword: 'bedrijfshal', value: 'bedrijfshal' },
+    { keyword: 'bedrijfsruimte', value: 'bedrijfshal' },
+    { keyword: 'distributiecentrum', value: 'bedrijfshal' },
+    { keyword: 'logistiek', value: 'bedrijfshal' },
+    { keyword: 'magazijn', value: 'bedrijfshal' },
     { keyword: 'kantoorgebouw', value: 'kantoor' },
     { keyword: 'kantoor', value: 'kantoor' },
     { keyword: 'winkel', value: 'winkel' },
+    { keyword: 'horeca', value: 'overig' },
+    { keyword: 'hotel', value: 'overig' },
+    { keyword: 'zorgvastgoed', value: 'overig' },
     { keyword: 'appartement', value: 'appartement' },
     { keyword: 'woning', value: 'woning' },
   ]
@@ -1045,6 +1054,7 @@ export type ExtractionDebugRecord = Record<
     wasNormalized?: boolean
     discardedCandidates?: Array<{ value: unknown; reason: string }>
     sourcePage?: number
+    sourceType?: 'regex' | 'ai'
   }
 >
 

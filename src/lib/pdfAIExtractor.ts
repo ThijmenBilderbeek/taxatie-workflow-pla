@@ -20,8 +20,10 @@ import {
   extractRuleBasedFieldsFromChunk,
   getMissingFieldsForChunk,
   parseAndValidateAIOutput,
+  mergeExtractionResults,
   AI_EXTRACTABLE_FIELDS,
   type AIFieldValue,
+  type ChunkExtractionResult,
 } from './pdfChunkAIExtractor'
 
 /** Maximum PDF text length to send to the AI (cost-conscious). */
@@ -520,6 +522,9 @@ export async function aiExtractMissingFieldsWithChunks(
   // Accumulates AI-found values across chunks so we don't ask twice.
   const aiAccumulator: Record<string, AIFieldValue> = {}
 
+  // Collects structured results from all chunks for the final priority-aware merge.
+  const allChunkResults: ChunkExtractionResult[] = []
+
   // Ensure nested objects exist so merging below is safe.
   if (!merged.adres) merged.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
   if (!merged.wizardData) merged.wizardData = {}
@@ -545,6 +550,13 @@ export async function aiExtractMissingFieldsWithChunks(
     const ruleBasedKeys = Object.keys(ruleBasedFound)
     if (ruleBasedKeys.length > 0) {
       console.log(`[pdfAIExtractor] ${chunkLabel} Rule-based found: ${ruleBasedKeys.join(', ')}`)
+      allChunkResults.push({
+        sectionTitle: chunk.sectionTitle,
+        chunkIndex: chunk.chunkIndex,
+        totalChunks: chunk.totalChunks,
+        extractionType: 'rule_based',
+        extractedFields: ruleBasedFound,
+      })
     }
 
     // Step 2: determine which fields are still missing.
@@ -586,17 +598,37 @@ export async function aiExtractMissingFieldsWithChunks(
       `[pdfAIExtractor] ${chunkLabel} AI returned ${aiKeys.length} valid field(s)${aiKeys.length > 0 ? ': ' + aiKeys.join(', ') : ''}`,
     )
 
-    // Step 5: merge into accumulator (don't overwrite already-found fields).
-    for (const [key, value] of Object.entries(aiFields)) {
-      if (key in aiAccumulator) continue
-      aiAccumulator[key] = value
+    if (aiKeys.length > 0) {
+      // Collect structured AI result for priority-aware merge.
+      allChunkResults.push({
+        sectionTitle: chunk.sectionTitle,
+        chunkIndex: chunk.chunkIndex,
+        totalChunks: chunk.totalChunks,
+        extractionType: 'ai',
+        extractedFields: aiFields,
+      })
+
+      // Also update accumulator so subsequent chunks skip already-found fields.
+      for (const [key, value] of Object.entries(aiFields)) {
+        if (!(key in aiAccumulator)) aiAccumulator[key] = value
+      }
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Apply accumulated AI fields to the merged result
-  // (only fill slots that are still empty from rule-based extraction)
+  // Merge all chunk results via priority-aware merge strategy, then apply to
+  // the HistorischRapport result (only filling slots still empty after
+  // full-document rule-based extraction).
   // ---------------------------------------------------------------------------
+
+  const { fields: mergedChunkFields, conflicts } = mergeExtractionResults(allChunkResults)
+
+  // Log all conflicts for debugging.
+  for (const conflict of conflicts) {
+    console.log(
+      `[pdfAIExtractor] Conflict on "${conflict.fieldName}": existing="${conflict.existingValue}" incoming="${conflict.incomingValue}" → chosen="${conflict.chosenValue}" (${conflict.reason})`,
+    )
+  }
 
   const applyAIFields = (fields: Record<string, AIFieldValue>) => {
     // Adres — AI returns the full address as a combined string.
@@ -701,7 +733,7 @@ export async function aiExtractMissingFieldsWithChunks(
       }
     }
 
-    // SWOT fields
+    // SWOT fields — after merge, values may be string[] (combined across chunks)
     const swotMapping = [
       ['swot_sterktes', 'swotSterktes'],
       ['swot_zwaktes', 'swotZwaktes'],
@@ -726,7 +758,7 @@ export async function aiExtractMissingFieldsWithChunks(
     }
   }
 
-  applyAIFields(aiAccumulator)
+  applyAIFields(mergedChunkFields)
 
   const aiFilledCount = Object.keys(aiDebug).length
   console.log(`[pdfAIExtractor] Chunk-based AI extraction complete — ${aiFilledCount} field(s) filled by AI`)

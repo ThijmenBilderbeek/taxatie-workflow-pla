@@ -26,6 +26,42 @@ import {
 } from './pdfFieldExtractors'
 
 // ---------------------------------------------------------------------------
+// Source metadata and chunk result types
+// ---------------------------------------------------------------------------
+
+/** Provenance metadata for a single extracted field value. */
+export interface FieldSourceMeta {
+  sectionTitle: string
+  chunkIndex: number
+  extractionType: 'rule_based' | 'ai' | 'combined'
+}
+
+/**
+ * Structured extraction result for a single chunk.
+ * Contains all fields found (rule-based or AI) together with chunk provenance.
+ */
+export interface ChunkExtractionResult {
+  sectionTitle: string
+  chunkIndex: number
+  totalChunks: number
+  extractionType: 'rule_based' | 'ai' | 'combined'
+  extractedFields: Record<string, AIFieldValue>
+}
+
+/**
+ * Conflict log entry emitted when two meaningful values compete for the same
+ * field and one must be dropped.
+ */
+export interface ConflictLog {
+  fieldName: string
+  existingValue: AIFieldValue
+  incomingValue: AIFieldValue
+  chosenValue: AIFieldValue
+  reason: string
+  sourceMeta: FieldSourceMeta
+}
+
+// ---------------------------------------------------------------------------
 // Allowed field list
 // ---------------------------------------------------------------------------
 
@@ -282,4 +318,199 @@ function unwrapLegacyValue(raw: unknown): unknown {
     return (raw as Record<string, unknown>)['value']
   }
   return raw
+}
+
+// ---------------------------------------------------------------------------
+// Merge helpers
+// ---------------------------------------------------------------------------
+
+/** SWOT fields that are combined as unique arrays instead of replaced. */
+const SWOT_FIELDS = new Set(['swot_sterktes', 'swot_zwaktes', 'swot_kansen', 'swot_bedreigingen'])
+
+/**
+ * High-priority fields: rule_based values for these fields receive an extra
+ * priority bonus and will never be overwritten by AI once found.
+ */
+const PRIORITY_FIELDS = new Set([
+  'marktwaarde_kk_afgerond',
+  'netto_huurwaarde',
+  'markthuur',
+  'bouwjaar',
+  'energielabel',
+  'marktwaarde',
+])
+
+/** Placeholder values that are treated as meaningless. */
+const MEANINGLESS_VALUES = new Set(['onbekend', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen'])
+
+/**
+ * Returns `true` when `value` is a meaningful, non-empty, non-placeholder value.
+ *
+ * Handles strings, numbers, and arrays of strings (SWOT fields).
+ */
+export function isMeaningfulValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'number') return isFinite(value)
+  if (Array.isArray(value)) {
+    return value.some((item) => typeof item === 'string' && item.trim().length > 0)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length > 0 && !MEANINGLESS_VALUES.has(trimmed.toLowerCase())
+  }
+  return false
+}
+
+/**
+ * Returns a numeric priority for a field value.
+ * Higher value = wins in a conflict.
+ *
+ * Priority tiers:
+ * - `rule_based` / `combined` from any section: 100 (+ 20 bonus for PRIORITY_FIELDS)
+ * - `ai` from a specific named section (not FULL_DOCUMENT): 50
+ * - `ai` from FULL_DOCUMENT or generic section title: 10
+ */
+export function getFieldPriority(
+  fieldName: string,
+  extractionType: 'rule_based' | 'ai' | 'combined',
+  sectionTitle: string,
+): number {
+  if (extractionType === 'rule_based' || extractionType === 'combined') {
+    return PRIORITY_FIELDS.has(fieldName) ? 120 : 100
+  }
+  // AI
+  const isFullDoc = !sectionTitle || sectionTitle.toUpperCase() === 'FULL_DOCUMENT'
+  return isFullDoc ? 10 : 50
+}
+
+/**
+ * Merges `incoming` into `existing` for a single field.
+ *
+ * Rules applied in order:
+ * 1. Non-meaningful `incoming` is always ignored.
+ * 2. Non-meaningful (or absent) `existing` → incoming wins unconditionally.
+ * 3. SWOT arrays: both arrays are combined without duplicates (regardless of priority).
+ * 4. Both meaningful scalars: higher priority wins; equal priority → existing wins.
+ *
+ * Returns the winning value, its source metadata, and an optional ConflictLog
+ * entry (only emitted when both values are meaningful and differ).
+ */
+export function mergeFieldValue(
+  existing: AIFieldValue | undefined,
+  existingMeta: FieldSourceMeta | undefined,
+  incoming: AIFieldValue,
+  incomingMeta: FieldSourceMeta,
+  fieldName: string,
+): { value: AIFieldValue; meta: FieldSourceMeta; conflict?: ConflictLog } {
+  // SWOT: always combine as unique arrays regardless of priority
+  if (SWOT_FIELDS.has(fieldName)) {
+    const toItems = (v: AIFieldValue | undefined): string[] => {
+      if (!v) return []
+      if (Array.isArray(v)) return v.filter((s) => typeof s === 'string' && s.trim()).map((s) => String(s).trim())
+      if (typeof v === 'string' && v.trim()) return v.split('\n').map((s) => s.trim()).filter(Boolean)
+      return []
+    }
+    const combined = [...toItems(existing)]
+    for (const item of toItems(incoming)) {
+      if (!combined.includes(item)) combined.push(item)
+    }
+    return { value: combined, meta: incomingMeta }
+  }
+
+  // Non-meaningful incoming → keep existing (or return incoming as placeholder)
+  if (!isMeaningfulValue(incoming)) {
+    return { value: existing ?? incoming, meta: existingMeta ?? incomingMeta }
+  }
+
+  // No existing meaningful value → incoming wins
+  if (!isMeaningfulValue(existing)) {
+    return { value: incoming, meta: incomingMeta }
+  }
+
+  // Both meaningful scalars → compare priorities
+  // `existing` is confirmed meaningful by isMeaningfulValue above.
+  const existingValue = existing as AIFieldValue
+  const existingPriority = existingMeta
+    ? getFieldPriority(fieldName, existingMeta.extractionType, existingMeta.sectionTitle)
+    : 0
+  const incomingPriority = getFieldPriority(fieldName, incomingMeta.extractionType, incomingMeta.sectionTitle)
+
+  if (incomingPriority > existingPriority) {
+    const conflict: ConflictLog = {
+      fieldName,
+      existingValue,
+      incomingValue: incoming,
+      chosenValue: incoming,
+      reason: `Incoming priority ${incomingPriority} > existing priority ${existingPriority}`,
+      sourceMeta: incomingMeta,
+    }
+    return { value: incoming, meta: incomingMeta, conflict }
+  }
+
+  // Existing wins (equal or higher priority — stability preference)
+  const conflict: ConflictLog | undefined =
+    String(existingValue) !== String(incoming)
+      ? {
+          fieldName,
+          existingValue,
+          incomingValue: incoming,
+          chosenValue: existingValue,
+          reason: `Existing priority ${existingPriority} >= incoming priority ${incomingPriority}; existing preserved`,
+          sourceMeta: existingMeta ?? incomingMeta,
+        }
+      : undefined
+  return { value: existingValue, meta: existingMeta ?? incomingMeta, conflict }
+}
+
+/**
+ * Merges all chunk extraction results into a single flat field map.
+ *
+ * Processing order:
+ * 1. Results are sorted by `chunkIndex` ascending.
+ * 2. Within the same chunk, `rule_based` results are processed before `ai`.
+ * 3. Conflicts are resolved via `mergeFieldValue` and collected in `conflicts`.
+ *
+ * Returns:
+ * - `fields`: merged flat field map (ready to pass to `applyAIFields`)
+ * - `sourceMeta`: provenance metadata per field (for debugging/logging)
+ * - `conflicts`: all conflict log entries
+ */
+export function mergeExtractionResults(results: ChunkExtractionResult[]): {
+  fields: Record<string, AIFieldValue>
+  sourceMeta: Record<string, FieldSourceMeta>
+  conflicts: ConflictLog[]
+} {
+  const fields: Record<string, AIFieldValue> = {}
+  const sourceMeta: Record<string, FieldSourceMeta> = {}
+  const conflicts: ConflictLog[] = []
+
+  // Sort: ascending chunkIndex, rule_based/combined before ai
+  const typeOrder: Record<ChunkExtractionResult['extractionType'], number> = {
+    rule_based: 0,
+    combined: 1,
+    ai: 2,
+  }
+  const sorted = [...results].sort((a, b) => {
+    if (a.chunkIndex !== b.chunkIndex) return a.chunkIndex - b.chunkIndex
+    return typeOrder[a.extractionType] - typeOrder[b.extractionType]
+  })
+
+  for (const result of sorted) {
+    const meta: FieldSourceMeta = {
+      sectionTitle: result.sectionTitle,
+      chunkIndex: result.chunkIndex,
+      extractionType: result.extractionType,
+    }
+
+    for (const [fieldName, value] of Object.entries(result.extractedFields)) {
+      const merged = mergeFieldValue(fields[fieldName], sourceMeta[fieldName], value, meta, fieldName)
+      fields[fieldName] = merged.value
+      sourceMeta[fieldName] = merged.meta
+      if (merged.conflict) {
+        conflicts.push(merged.conflict)
+      }
+    }
+  }
+
+  return { fields, sourceMeta, conflicts }
 }

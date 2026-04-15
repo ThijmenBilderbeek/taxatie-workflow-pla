@@ -22,10 +22,7 @@ import {
   extractMarkthuur,
   extractTypeObject,
   extractAdres,
-  extractBar,
-  extractNar,
   extractPerceeloppervlak,
-  extractKapitalisatiefactor,
 } from './pdfFieldExtractors'
 
 // ---------------------------------------------------------------------------
@@ -166,17 +163,8 @@ export function extractRuleBasedFieldsFromChunk(
   const typeObject = extractTypeObject(content)
   if (typeObject?.value) found['object_type'] = typeObject.value
 
-  const bar = extractBar(content)
-  if (bar?.value) found['bar'] = bar.value
-
-  const nar = extractNar(content)
-  if (nar?.value) found['nar'] = nar.value
-
   const perceeloppervlak = extractPerceeloppervlak(content)
   if (perceeloppervlak?.value) found['bebouwd_oppervlak'] = perceeloppervlak.value
-
-  const kapitalisatiefactor = extractKapitalisatiefactor(content)
-  if (kapitalisatiefactor?.value) found['kapitalisatiefactor'] = kapitalisatiefactor.value
 
   // Address — flatten to a combined string for easy comparison
   const adresResult = extractAdres(content)

@@ -599,12 +599,14 @@ export async function aiExtractMissingFieldsWithChunks(
   // ---------------------------------------------------------------------------
 
   const applyAIFields = (fields: Record<string, AIFieldValue>) => {
-    // Adres
+    // Adres — AI returns the full address as a combined string.
+    // Try to apply it to merged.adres.straat so the merge in pdfParser picks it up.
     if (fields['adres'] && !currentResult.adres?.straat) {
-      const v = typeof fields['adres'] === 'string' ? fields['adres'] : undefined
+      const v = typeof fields['adres'] === 'string' ? fields['adres'].trim() : undefined
       if (v) {
-        // AI returns the full address as a string — store it as objectnaam-style;
-        // proper address parsing stays with the regex path.
+        // Store the combined address in straat as a best-effort fallback.
+        // Proper address components (huisnummer, postcode, plaats) stay from regex path.
+        merged.adres!.straat = v
         recordAI('adres', v)
       }
     }

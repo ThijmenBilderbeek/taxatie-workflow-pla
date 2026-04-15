@@ -1582,6 +1582,7 @@ export async function parsePdfToRapport(
       result.extractionDebug = { ...aiDebug, ...result.extractionDebug }
       // Apply AI field values to result (only fields not already set by regex)
       Object.assign(result, {
+        adres: result.adres?.straat ? result.adres : aiResult.adres,
         typeObject: result.typeObject ?? aiResult.typeObject,
         gebruiksdoel: result.gebruiksdoel ?? aiResult.gebruiksdoel,
         bvo: result.bvo ?? aiResult.bvo,

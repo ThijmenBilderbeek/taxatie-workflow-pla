@@ -284,6 +284,7 @@ export interface HistorischRapport {
   waardepeildatum: string
   rapportTeksten: Record<string, string>
   wizardData: Partial<Dossier>
+  extractedData?: import('../lib/pdfDataExtractor').ExtractedData
   extractionDebug?: Record<string, {
     value: unknown
     confidence: 'high' | 'medium' | 'low'

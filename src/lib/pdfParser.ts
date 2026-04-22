@@ -1568,6 +1568,42 @@ export async function parsePdfToRapport(
   // --- extractionDebug: confidence info for each field ---
   result.extractionDebug = extractAllFieldsWithConfidence(text)
 
+  // --- extractedData: structured field extraction via extractPdfData ---
+  try {
+    const { extractPdfData, logExtractionResult } = await import('./pdfDataExtractor')
+    const extractedData = extractPdfData(text)
+    result.extractedData = extractedData
+    if (process.env.NODE_ENV !== 'production') {
+      logExtractionResult(text, extractedData)
+    }
+  } catch (extractErr) {
+    console.error('[parsePdfToRapport] extractPdfData failed:', extractErr instanceof Error ? extractErr.message : extractErr)
+    // Return empty ExtractedData conforming to the interface
+    result.extractedData = {
+      marktwaarde_kk_afgerond: null,
+      markthuur: null,
+      netto_huurwaarde: null,
+      marktwaarde_per_m2: null,
+      vloeroppervlak_bvo: null,
+      vloeroppervlak_vvo: null,
+      locatie_score: null,
+      object_score: null,
+      courantheid_verhuur: null,
+      courantheid_verkoop: null,
+      verhuurtijd_maanden: null,
+      verkooptijd_maanden: null,
+      energielabel: null,
+      constructie: null,
+      terrein: null,
+      voorzieningen: null,
+      omgeving_en_belendingen: null,
+      swot_sterktes: [],
+      swot_zwaktes: [],
+      swot_kansen: [],
+      swot_bedreigingen: [],
+    }
+  }
+
   // --- AI fallback: fill missing fields per chunk using OpenAI ---
   // This is optional and gracefully falls back to the regex-only result if it fails.
   // Uses the chunk-based approach: rule-based extraction runs first per chunk,

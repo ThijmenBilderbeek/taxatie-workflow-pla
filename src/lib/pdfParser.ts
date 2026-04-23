@@ -347,6 +347,11 @@ function mapChapterToSectionKey(chapter: string, subchapter: string, headingText
   // locatie — word-boundary matches only; never match substrings like "locatiebeschrijving" accidentally
   if (/\blocatie\b|\bligging\b|\bomgeving\b|\bbuurt\b|\bbereikbaarheid\b|\bontsluiting\b/.test(normalised)) return 'locatie'
   if (/juridisch|eigendom|erfpacht|bestemmingsplan|planolog|recht(?:en)?/.test(normalised)) return 'juridisch'
+  // Note: 'kadaster' was intentionally removed from the juridisch pattern above.
+  // Any heading containing "kadastraal/kadastrale" is matched earlier by the bijlagen check
+  // (cadastral extracts/maps are appendix items in Dutch taxatie reports). Body content
+  // about cadastral rights that happens to sit under a 'juridisch' heading section is
+  // not affected — only the heading line itself is passed to this function.
   if (/technisch|bouwkundig|onderhoud|fundering|dak|installatie|constructie|gebouwstaat/.test(normalised)) return 'technisch'
   if (/waarde(?:ring|peildatum)?|taxatie(?:methode)?|marktwaarde|\bbar\b|\bnar\b|dcf|rendement/.test(normalised)) return 'waardering'
   // onderbouwing (e.g. "H ONDERBOUWING")

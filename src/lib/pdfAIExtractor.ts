@@ -655,17 +655,19 @@ export async function aiExtractMissingFieldsWithChunks(
     // For bijlagen/appendix chunks, apply the broader BIJLAGEN_SENSITIVE_FIELDS filter
     // (includes adres, scores, courantheid, SWOT in addition to REFERENCE_SENSITIVE_FIELDS).
     // For other reference/appendix chunks, apply the narrower REFERENCE_SENSITIVE_FIELDS filter.
+    // isReferenceOrAppendixChunk() already returns true for bijlagen chunks, so we use
+    // isBijlagenChunk() only to decide which sensitive-field set to apply.
     const isBijlChunk = isBijlagenChunk(chunk)
-    const isRefChunk = !isBijlChunk && isReferenceOrAppendixChunk(chunk)
+    const isAnyRefChunk = isReferenceOrAppendixChunk(chunk)
     const sensitiveFields = isBijlChunk ? BIJLAGEN_SENSITIVE_FIELDS : REFERENCE_SENSITIVE_FIELDS
-    const effectiveMissingFields = (isBijlChunk || isRefChunk)
+    const effectiveMissingFields = isAnyRefChunk
       ? missingFields.filter((f) => !sensitiveFields.includes(f))
       : missingFields
     if (isBijlChunk) {
       const excluded = missingFields.length - effectiveMissingFields.length
       console.log(`[pdfAIExtractor] ${chunkLabel} Bijlagen/appendix chunk — excluding ${excluded} sensitive field(s) from AI request`)
       if (excluded > 0) bijlagenChunksSkipped++
-    } else if (isRefChunk && effectiveMissingFields.length < missingFields.length) {
+    } else if (isAnyRefChunk && effectiveMissingFields.length < missingFields.length) {
       console.log(`[pdfAIExtractor] ${chunkLabel} Reference/appendix chunk — excluding ${missingFields.length - effectiveMissingFields.length} sensitive field(s) from AI request`)
     }
     if (effectiveMissingFields.length === 0) {

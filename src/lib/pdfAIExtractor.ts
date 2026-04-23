@@ -37,34 +37,58 @@ const MAX_TEXT_CHARS = 30000
  * Fields not listed will fall back to `samenvatting` and then `volledig`.
  */
 const FIELD_TO_SECTIONS: Record<string, string[]> = {
+  // Duurzaamheid
   energielabel:               ['duurzaamheid', 'technisch'],
+  // Waardering / onderbouwing
   marktwaarde:                ['waardering', 'samenvatting'],
   bar:                        ['waardering'],
   nar:                        ['waardering'],
   kapitalisatiefactor:        ['waardering'],
   waardepeildatum:            ['waardering', 'samenvatting'],
+  // Nieuw: onderbouwing sections for huur/waarde fields
+  markthuur:                  ['onderbouwing', 'waardering'],
+  markthuurPerJaar:           ['onderbouwing', 'waardering'],
+  huurprijsPerJaar:           ['onderbouwing', 'waardering'],
+  netto_huurwaarde:           ['onderbouwing', 'waardering'],
+  // Juridisch
   eigendomssituatie:          ['juridisch'],
   bestemmingsplan:            ['juridisch'],
   erfpacht:                   ['juridisch'],
+  // Locatie
   bereikbaarheid:             ['locatie'],
   ligging:                    ['locatie'],
   gemeente:                   ['locatie', 'samenvatting'],
   provincie:                  ['locatie', 'samenvatting'],
+  locatie_score:              ['locatie'],
+  omgevingEnBelendingen:      ['locatie'],
+  omgeving_en_belendingen:    ['locatie'],
+  voorzieningen:              ['locatie'],
+  // Object
   bvo:                        ['samenvatting', 'object'],
   vvo:                        ['samenvatting', 'object'],
   perceeloppervlak:           ['object', 'samenvatting'],
   bouwjaar:                   ['technisch', 'object'],
   typeObject:                 ['object', 'samenvatting'],
   gebruiksdoel:               ['object', 'samenvatting'],
+  objectnaam:                 ['samenvatting', 'object'],
+  object_score:               ['object'],
+  // Technisch / object overlap
+  constructie:                ['object', 'technisch'],
+  terrein:                    ['object', 'technisch'],
+  gevels:                     ['technisch'],
+  afwerking:                  ['technisch'],
+  // Beoordeling / swot (new semantic keys introduced)
+  courantheid_verhuur:        ['beoordeling', 'swot'],
+  courantheid_verkoop:        ['beoordeling', 'swot'],
+  verhuurtijd_maanden:        ['beoordeling', 'swot'],
+  verkooptijd_maanden:        ['beoordeling', 'swot'],
+  // Algemeen
   straat:                     ['samenvatting'],
   huisnummer:                 ['samenvatting'],
   postcode:                   ['samenvatting'],
   plaats:                     ['samenvatting'],
   naamTaxateur:               ['samenvatting'],
   inspectiedatum:             ['samenvatting'],
-  objectnaam:                 ['samenvatting', 'object'],
-  markthuurPerJaar:           ['waardering', 'samenvatting'],
-  huurprijsPerJaar:           ['waardering', 'samenvatting'],
   // Stap 9 fields
   aannames:                   ['aannames', 'samenvatting'],
   voorbehouden:               ['aannames'],
@@ -79,13 +103,6 @@ const FIELD_TO_SECTIONS: Record<string, string[]> = {
   swotZwaktes:                ['swot'],
   swotKansen:                 ['swot'],
   swotBedreigingen:           ['swot'],
-  // Stap 6 / stap 2 tekstvelden
-  constructie:                ['technisch'],
-  terrein:                    ['technisch', 'object'],
-  gevels:                     ['technisch'],
-  afwerking:                  ['technisch'],
-  omgevingEnBelendingen:      ['locatie'],
-  voorzieningen:              ['locatie'],
 }
 
 /** Minimum combined section length before falling back to the full text. */

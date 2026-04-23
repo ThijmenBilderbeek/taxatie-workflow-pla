@@ -11,6 +11,7 @@ import {
   dutchNumberWordToDigit,
   cleanGemeente,
   truncateField,
+  stripAddressLeadingContext,
 } from '../pdfNormalizers'
 
 // ---------------------------------------------------------------------------
@@ -339,5 +340,71 @@ describe('truncateField', () => {
     const text = 'abcde'
     expect(truncateField(text, 5)).toBe('abcde')
     expect(truncateField(text, 4)).toBe('abcd')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// stripAddressLeadingContext
+// ---------------------------------------------------------------------------
+describe('stripAddressLeadingContext', () => {
+  it('strips "bij EP-online." prefix from address', () => {
+    const result = stripAddressLeadingContext('bij EP-online. Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBe('Collse Hoefdijk, 16, 5674VK, Nuenen')
+  })
+
+  it('strips "gebruik mogelijk." prefix from address', () => {
+    const result = stripAddressLeadingContext('gebruik mogelijk. Hoofdstraat 1, 1234AB, Utrecht')
+    expect(result).toBe('Hoofdstraat 1, 1234AB, Utrecht')
+  })
+
+  it('strips "schriftelijke toestemming." prefix from address', () => {
+    const result = stripAddressLeadingContext('schriftelijke toestemming. Dorpsstraat 5, 5678CD, Amsterdam')
+    expect(result).toBe('Dorpsstraat 5, 5678CD, Amsterdam')
+  })
+
+  it('leaves clean address unchanged', () => {
+    const result = stripAddressLeadingContext('Columbusweg 13, 5928LA Venlo')
+    expect(result).toBe('Columbusweg 13, 5928LA Venlo')
+  })
+
+  it('returns empty string unchanged', () => {
+    expect(stripAddressLeadingContext('')).toBe('')
+  })
+
+  it('returns string without postcode unchanged', () => {
+    const result = stripAddressLeadingContext('geen adres hier')
+    expect(result).toBe('geen adres hier')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// parseAddress — leading context stripping
+// ---------------------------------------------------------------------------
+describe('parseAddress — polluted address strings', () => {
+  it('parses "bij EP-online. Collse Hoefdijk, 16, 5674VK, Nuenen"', () => {
+    const result = parseAddress('bij EP-online. Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBeDefined()
+    expect(result?.straat).toBe('Collse Hoefdijk')
+    expect(result?.huisnummer).toBe('16')
+    expect(result?.postcode).toBe('5674VK')
+    expect(result?.plaats).toBe('Nuenen')
+  })
+
+  it('parses "gebruik mogelijk. Hoofdstraat 1, 1234AB, Utrecht"', () => {
+    const result = parseAddress('gebruik mogelijk. Hoofdstraat 1, 1234AB, Utrecht')
+    expect(result).toBeDefined()
+    expect(result?.straat).toBe('Hoofdstraat')
+    expect(result?.huisnummer).toBe('1')
+    expect(result?.postcode).toBe('1234AB')
+    expect(result?.plaats).toBe('Utrecht')
+  })
+
+  it('parses "schriftelijke toestemming. Dorpsstraat 5, 5678CD, Amsterdam"', () => {
+    const result = parseAddress('schriftelijke toestemming. Dorpsstraat 5, 5678CD, Amsterdam')
+    expect(result).toBeDefined()
+    expect(result?.straat).toBe('Dorpsstraat')
+    expect(result?.huisnummer).toBe('5')
+    expect(result?.postcode).toBe('5678CD')
+    expect(result?.plaats).toBe('Amsterdam')
   })
 })

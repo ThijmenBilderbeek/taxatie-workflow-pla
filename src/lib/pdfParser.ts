@@ -35,10 +35,49 @@ async function extractTextFromPdf(file: File): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const content = await page.getTextContent()
-    const pageText = content.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ')
-    pages.push(pageText)
+
+    // Reconstruct line structure by grouping text items with the same y-coordinate.
+    // The default pdfjs approach (join all items with ' ') collapses every page into
+    // a single long line, which prevents the heading regex from detecting section
+    // boundaries that fall in the middle of a page.
+    // PDF coordinate units are typically "user space" points (1 pt ≈ 0.353 mm).
+    // A tolerance of 5 pt covers sub-pixel font rendering differences within one line
+    // while being well below typical line spacing (~12–14 pt for body text).
+    const LINE_Y_TOLERANCE = 5
+
+    type TextPos = { x: number; str: string }
+    const lineMap = new Map<number, TextPos[]>()
+
+    for (const rawItem of content.items) {
+      if (!('str' in rawItem)) continue
+      const item = rawItem as { str: string; transform: number[] }
+      if (!item.str) continue
+      const y = item.transform[5] // f = vertical position (0 = bottom of page)
+      const x = item.transform[4] // e = horizontal position
+
+      // Find an existing y-group within tolerance, or create a new one
+      let groupY = y
+      for (const [existingY] of lineMap) {
+        if (Math.abs(existingY - y) <= LINE_Y_TOLERANCE) {
+          groupY = existingY
+          break
+        }
+      }
+      if (!lineMap.has(groupY)) lineMap.set(groupY, [])
+      lineMap.get(groupY)!.push({ x, str: item.str })
+    }
+
+    // Sort line groups by y descending (higher y = higher on page in PDF coordinate space)
+    const sortedLines = [...lineMap.entries()]
+      .sort(([ya], [yb]) => yb - ya)
+      .map(([, items]) => {
+        // Sort items within each line left-to-right
+        items.sort((a, b) => a.x - b.x)
+        return items.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim()
+      })
+      .filter(Boolean)
+
+    pages.push(sortedLines.join('\n'))
   }
 
   return pages.join('\n')
@@ -247,30 +286,47 @@ export function extractSwotFromText(text: string): {
  * @param subchapter - Sub-section identifier (e.g. "B.1") or empty string.
  * @param headingText - The primary label used for matching: typically `subchapter`
  *                      when present, otherwise `chapter`.
- * @returns A section key such as "samenvatting", "technisch", etc., or undefined
- *          when the heading cannot be mapped to a known section.
+ * @returns A section key such as "samenvatting", "technisch", etc., or "overig"
+ *          when the heading cannot be mapped to a known section (never undefined,
+ *          so headings are never silently dropped into a catch-all key).
+ *
+ * Expected mappings:
+ *   "C SWOT-ANALYSE EN BEOORDELING" → "swot"
+ *   "C.2 BEOORDELING"               → "beoordeling"
+ *   "E LOCATIE"                      → "locatie"
+ *   "F OBJECT"                       → "object"
+ *   "H ONDERBOUWING"                 → "onderbouwing"
+ *   "I DUURZAAMHEID"                 → "duurzaamheid"
  */
-function mapChapterToSectionKey(chapter: string, subchapter: string, headingText: string): string | undefined {
-  const lower = (headingText + ' ' + chapter + ' ' + subchapter).toLowerCase()
+function mapChapterToSectionKey(chapter: string, subchapter: string, headingText: string): string {
+  // Normalise: collapse Unicode whitespace (NBSP U+00A0, narrow NBSP U+202F, thin-space
+  // U+2009, em-space U+2003, soft-hyphen U+00AD) to regular ASCII spaces, then lowercase.
+  const normalised = (headingText + ' ' + chapter + ' ' + subchapter)
+    .replace(/[\u00A0\u202F\u2003\u2009\u00AD]+/g, ' ')
+    .replace(/^\s+|\s+$/g, '')
+    .toLowerCase()
 
-  if (/samenvatting|inhoudsopgave|resume|inleiding|conclusie|summary/.test(lower)) return 'samenvatting'
-  // Bare \bobject\b added so uppercase headings like "F OBJECT" (from extractSections) map correctly
-  if (/\bobject\b|object(?:omschrijving|beschrijving|gegevens)|type\s+object|vastgoed(?:type)?|object\s+type/.test(lower)) return 'object'
-  if (/locatie|ligging|omgeving|bereikbaarheid|infrastructuur|buurt|ontsluiting/.test(lower)) return 'locatie'
-  if (/juridisch|eigendom|erfpacht|bestemmingsplan|planolog|kadaster|recht(?:en)?/.test(lower)) return 'juridisch'
-  if (/technisch|bouwkundig|onderhoud|fundering|dak|installatie|constructie|gebouwstaat/.test(lower)) return 'technisch'
-  if (/waarde(?:ring|peildatum)?|taxatie(?:methode)?|marktwaarde|bar|nar|dcf|rendement/.test(lower)) return 'waardering'
-  if (/swot/.test(lower)) return 'swot'
-  // New semantic key: headings containing "beoordeling" (e.g. "C.2 BEOORDELING")
-  if (/beoordeling/.test(lower)) return 'beoordeling'
-  // New semantic key: headings containing "onderbouwing" (e.g. "H ONDERBOUWING")
-  if (/onderbouwing/.test(lower)) return 'onderbouwing'
-  if (/referentie|vergelijking(?:sobject)?|koopreferentie|huurreferentie|comparable/.test(lower)) return 'referenties'
-  if (/markt(?:analyse|onderzoek|ontwikkeling|context)|vraag\s+en\s+aanbod|\btransacties\b|conjunctuur/.test(lower)) return 'marktanalyse'
-  if (/aannam|voorbehoud|uitgangspunt|bijzondere\s+omstandigh|disclaimer/.test(lower)) return 'aannames'
-  if (/duurzaamheid|energie(?:label|prestatie)?|milieu|epc|verduurzaming|co2|gas(?:verbruik)?/.test(lower)) return 'duurzaamheid'
+  if (/samenvatting|inhoudsopgave|resume|inleiding|conclusie|summary/.test(normalised)) return 'samenvatting'
+  // swot must come BEFORE beoordeling because "SWOT-ANALYSE EN BEOORDELING" contains both
+  if (/swot/.test(normalised)) return 'swot'
+  // beoordeling (e.g. "C.2 BEOORDELING")
+  if (/beoordeling/.test(normalised)) return 'beoordeling'
+  // object — \bobject\b so uppercase headings like "F OBJECT" map correctly
+  if (/\bobject\b|object(?:omschrijving|beschrijving|gegevens)|type\s+object|vastgoed(?:type)?|object\s+type/.test(normalised)) return 'object'
+  // locatie — word-boundary matches only; never match substrings like "locatiebeschrijving" accidentally
+  if (/\blocatie\b|\bligging\b|\bomgeving\b|\bbuurt\b|\bbereikbaarheid\b|\bontsluiting\b/.test(normalised)) return 'locatie'
+  if (/juridisch|eigendom|erfpacht|bestemmingsplan|planolog|kadaster|recht(?:en)?/.test(normalised)) return 'juridisch'
+  if (/technisch|bouwkundig|onderhoud|fundering|dak|installatie|constructie|gebouwstaat/.test(normalised)) return 'technisch'
+  if (/waarde(?:ring|peildatum)?|taxatie(?:methode)?|marktwaarde|\bbar\b|\bnar\b|dcf|rendement/.test(normalised)) return 'waardering'
+  // onderbouwing (e.g. "H ONDERBOUWING")
+  if (/onderbouwing/.test(normalised)) return 'onderbouwing'
+  if (/referentie|vergelijking(?:sobject)?|koopreferentie|huurreferentie|comparable/.test(normalised)) return 'referenties'
+  if (/markt(?:analyse|onderzoek|ontwikkeling|context)|vraag\s+en\s+aanbod|\btransacties\b|conjunctuur/.test(normalised)) return 'marktanalyse'
+  if (/aannam|voorbehoud|uitgangspunt|bijzondere\s+omstandigh|disclaimer/.test(normalised)) return 'aannames'
+  if (/duurzaamheid|energie(?:label|prestatie)?|milieu|\bepc\b|verduurzaming|co2|gas(?:verbruik)?/.test(normalised)) return 'duurzaamheid'
 
-  return undefined
+  // Unmapped headings → 'overig' (never silently collapse into locatie or another section)
+  return 'overig'
 }
 
 /**
@@ -284,7 +340,7 @@ function mapChapterToSectionKey(chapter: string, subchapter: string, headingText
  *
  * Section keys: samenvatting, object, locatie, juridisch, technisch, waardering,
  *               swot, beoordeling, onderbouwing, marktanalyse, referenties,
- *               aannames, duurzaamheid, volledig
+ *               aannames, duurzaamheid, overig, volledig
  */
 export function splitReportIntoSections(text: string): Record<string, string> {
   const sections: Record<string, string[]> = {}
@@ -292,35 +348,48 @@ export function splitReportIntoSections(text: string): Record<string, string> {
   // --- Primary: improved section parser (replaces detectChapters as source of truth) ---
   // Handles production PDFs with UPPERCASE headings: "C.2 BEOORDELING", "F OBJECT", etc.
   const rawSections = extractRawSections(text)
+  const rawHeadingCount = Object.keys(rawSections).length
+
+  console.log(`[splitReportIntoSections] Raw headings detected: ${rawHeadingCount}`)
+
   for (const [sectionName, content] of Object.entries(rawSections)) {
     if (!content) continue
     const key = mapChapterToSectionKey('', '', sectionName)
-    if (key) {
-      if (!sections[key]) sections[key] = []
-      sections[key].push(content)
-    }
+    console.log(`[splitReportIntoSections] Raw heading "${sectionName}" → key="${key}" (${content.length} chars)`)
+    if (!sections[key]) sections[key] = []
+    sections[key].push(content)
   }
 
   // --- Fallback: legacy detectChapters for mixed-case / numeric heading formats ---
   // Used when the improved parser finds no named sections (e.g. "A. Samenvatting" style).
-  if (Object.keys(sections).length === 0) {
+  // Exclude 'overig' sections when counting, to prevent falling through on fully-unmapped docs.
+  const namedSectionsCount = Object.keys(sections).filter((k) => k !== 'overig').length
+  if (namedSectionsCount === 0) {
     const detectedSections = detectChapters(text)
+    console.log(`[splitReportIntoSections] Fallback detectChapters: ${detectedSections.length} section(s)`)
     for (const section of detectedSections) {
       if (!section.text) continue
+      // Skip the pseudo-section that detectChapters creates when NO headings are found
+      // (it has empty chapter and empty subchapter). Without this guard, the body text
+      // would be passed to mapChapterToSectionKey and incorrectly mapped to 'overig'.
+      if (!section.chapter && !section.subchapter) continue
       // Use the full heading line from the original text as the primary label for
       // section mapping so that title keywords (e.g. "Samenvatting" in "A. Samenvatting")
       // are available to mapChapterToSectionKey even for letter-based chapters.
       const headingLine = text.slice(section.startIndex, section.startIndex + 200).split('\n')[0]
       const key = mapChapterToSectionKey(section.chapter, section.subchapter, headingLine)
-      if (key) {
-        if (!sections[key]) sections[key] = []
-        sections[key].push(section.text)
-      }
+      console.log(`[splitReportIntoSections] Fallback heading "${headingLine.trim()}" → key="${key}" (${section.text.length} chars)`)
+      if (!sections[key]) sections[key] = []
+      sections[key].push(section.text)
     }
   }
 
+  const finalSectionKeys = Object.keys(sections)
+  const namedKeys = finalSectionKeys.filter((k) => k !== 'overig')
+  console.log(`[splitReportIntoSections] Final section keys (${namedKeys.length} named + ${sections['overig'] ? 1 : 0} overig): ${finalSectionKeys.join(', ')}`)
+
   // Build the result, joining multiple detected sections under the same key
-  const hasNamedSections = Object.keys(sections).length > 0
+  const hasNamedSections = namedKeys.length > 0
 
   // When sections are detected, truncate `volledig` to avoid oversized JSONB payloads.
   // The full text is preserved across the named section keys.
@@ -1492,6 +1561,8 @@ export async function parsePdfToRapport(
     { keyword: 'logistiek', value: 'bedrijfshal' },
     { keyword: 'magazijn', value: 'bedrijfshal' },
     { keyword: 'kantoorgebouw', value: 'kantoor' },
+    { keyword: 'kantoorpand', value: 'kantoor' },
+    { keyword: 'kantoorruimte', value: 'kantoor' },
     { keyword: 'kantoor', value: 'kantoor' },
     { keyword: 'winkel', value: 'winkel' },
     { keyword: 'horeca', value: 'overig' },
@@ -1500,6 +1571,13 @@ export async function parsePdfToRapport(
     { keyword: 'appartement', value: 'appartement' },
     { keyword: 'woning', value: 'woning' },
   ]
+
+  // Office-signal keywords: if any of these appear as word-boundary matches in the text,
+  // assigning "woning" from a generic keyword scan would be a false positive.
+  // Note: an identical regex is used in pdfFieldExtractors.ts → extractTypeObject.
+  // Both copies are intentionally kept in sync; a future refactor could extract them
+  // to a shared utils module.
+  const OFFICE_SIGNAL_RE = /\bkantoor(?:gebouw|pand|ruimte|en)?\b|\bkantorenmarkt\b/i
 
   const lowerText = text.toLowerCase()
 
@@ -1514,17 +1592,28 @@ export async function parsePdfToRapport(
     const lower = typeObjectLabelRaw.toLowerCase()
     for (const { keyword, value } of PHYSICAL_OBJECT_TYPES) {
       if (lower.includes(keyword)) {
+        console.log(`[extractWizardDataFromText] typeObject="${value}" from label (matched keyword="${keyword}", raw="${typeObjectLabelRaw.slice(0, 60)}")`)
         result.typeObject = value
         break
       }
     }
   }
   // Fallback: word-boundary safe keyword scan — prevents "woning" matching "woningbouw" etc.
-  // Where old section detection was made word-boundary safe for object type fallback.
+  // Guard: if the text contains clear office/kantoor signals, do not assign "woning" from a
+  // generic keyword scan (to prevent false positives from residential market-analysis text).
   if (!result.typeObject) {
+    const hasOfficeSignal = OFFICE_SIGNAL_RE.test(text)
     for (const { keyword, value } of PHYSICAL_OBJECT_TYPES) {
+      // Skip "woning" assignment when office signals are present in the document
+      if (value === 'woning' && hasOfficeSignal) {
+        console.log(`[extractWizardDataFromText] Skipping typeObject="woning" — office signal present in document`)
+        continue
+      }
       const re = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
       if (re.test(lowerText)) {
+        const matchIdx = lowerText.search(re)
+        const snippet = text.slice(Math.max(0, matchIdx - 20), matchIdx + keyword.length + 20).replace(/\s+/g, ' ')
+        console.log(`[extractWizardDataFromText] typeObject="${value}" from fulltext scan (keyword="${keyword}", snippet="${snippet}")`)
         result.typeObject = value
         break
       }

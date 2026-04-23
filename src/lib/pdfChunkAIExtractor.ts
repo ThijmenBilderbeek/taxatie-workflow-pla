@@ -506,13 +506,23 @@ export function getFieldPriority(
 }
 
 /**
+ * Office-type values that should beat "woning" in conflict resolution for object_type.
+ *
+ * These correspond to the 'value' field in PHYSICAL_OBJECT_TYPES (pdfParser.ts /
+ * pdfFieldExtractors.ts). Keep in sync when adding new commercial property types.
+ */
+const OFFICE_TYPE_VALUES = new Set(['kantoor', 'bedrijfscomplex', 'bedrijfshal', 'winkel'])
+
+/**
  * Merges `incoming` into `existing` for a single field.
  *
  * Rules applied in order:
  * 1. Non-meaningful `incoming` is always ignored.
  * 2. Non-meaningful (or absent) `existing` → incoming wins unconditionally.
  * 3. SWOT arrays: both arrays are combined without duplicates (regardless of priority).
- * 4. Both meaningful scalars: higher priority wins; equal priority → existing wins.
+ * 4. object_type special rule: office/commercial types beat "woning" regardless of priority
+ *    (prevents false positives from residential market-analysis text in commercial reports).
+ * 5. Both meaningful scalars: higher priority wins; equal priority → existing wins.
  *
  * Returns the winning value, its source metadata, and an optional ConflictLog
  * entry (only emitted when both values are meaningful and differ).
@@ -552,6 +562,37 @@ export function mergeFieldValue(
   // Both meaningful scalars → compare priorities
   // `existing` is confirmed meaningful by isMeaningfulValue above.
   const existingValue = existing as AIFieldValue
+
+  // Special rule for object_type: office/commercial types beat "woning" regardless of
+  // extraction priority. This prevents residential market-analysis text (which can contain
+  // standalone "woning" mentions) from polluting the type of a commercial property.
+  if (fieldName === 'object_type') {
+    const existingStr = String(existingValue).toLowerCase()
+    const incomingStr = String(incoming).toLowerCase()
+    if (existingStr === 'woning' && OFFICE_TYPE_VALUES.has(incomingStr)) {
+      const conflict: ConflictLog = {
+        fieldName,
+        existingValue,
+        incomingValue: incoming,
+        chosenValue: incoming,
+        reason: `Office type "${incomingStr}" overrides weak "woning" detection`,
+        sourceMeta: incomingMeta,
+      }
+      return { value: incoming, meta: incomingMeta, conflict }
+    }
+    if (incomingStr === 'woning' && OFFICE_TYPE_VALUES.has(existingStr)) {
+      const conflict: ConflictLog = {
+        fieldName,
+        existingValue,
+        incomingValue: incoming,
+        chosenValue: existingValue,
+        reason: `Existing office type "${existingStr}" is stronger than incoming "woning"`,
+        sourceMeta: existingMeta ?? incomingMeta,
+      }
+      return { value: existingValue, meta: existingMeta ?? incomingMeta, conflict }
+    }
+  }
+
   const existingPriority = existingMeta
     ? getFieldPriority(fieldName, existingMeta.extractionType, existingMeta.sectionTitle)
     : 0

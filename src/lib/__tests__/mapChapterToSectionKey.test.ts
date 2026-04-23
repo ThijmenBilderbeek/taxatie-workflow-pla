@@ -94,4 +94,32 @@ describe('mapChapterToSectionKey (via splitReportIntoSections)', () => {
       expect(result[expectedKey]).toContain(body)
     })
   }
+
+  it('"C SWOT-ANALYSE EN BEOORDELING" maps to swot (not beoordeling)', () => {
+    // SWOT must take priority over beoordeling because the heading contains both terms
+    const text = makeText('C SWOT-ANALYSE EN BEOORDELING', 'Sterktes: goede ligging.')
+    const result = splitReportIntoSections(text)
+    expect(result).toHaveProperty('swot')
+    expect(result).not.toHaveProperty('beoordeling')
+  })
+
+  it('"E LOCATIE" maps to locatie (word-boundary match)', () => {
+    const text = makeText('E LOCATIE', 'Het object ligt in Amsterdam.')
+    const result = splitReportIntoSections(text)
+    expect(result).toHaveProperty('locatie')
+  })
+
+  it('"I DUURZAAMHEID" maps to duurzaamheid', () => {
+    const text = makeText('I DUURZAAMHEID', 'Energielabel: A.')
+    const result = splitReportIntoSections(text)
+    expect(result).toHaveProperty('duurzaamheid')
+  })
+
+  it('unrecognized uppercase heading maps to overig (never to locatie)', () => {
+    // An unmapped heading must go to 'overig', not accidentally become 'locatie'
+    const text = makeText('X ONBEKEND HOOFDSTUK', 'Tekst zonder locatie keyword.')
+    const result = splitReportIntoSections(text)
+    expect(result).not.toHaveProperty('locatie')
+    expect(result).toHaveProperty('overig')
+  })
 })

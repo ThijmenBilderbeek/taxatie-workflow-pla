@@ -138,24 +138,40 @@ function parseDutchNumber(raw: string): number | null {
  *   • "C SWOT-ANALYSE EN BEOORDELING"  (single uppercase letter + words)
  *   • "C.1 SWOT ANALYSE"               (letter + digit sub-section)
  *   • "E.2 LOCATIE INFORMATIE"
+ *
+ * Normalisation applied before matching:
+ *   • Non-breaking spaces (U+00A0) and other Unicode spaces are converted to
+ *     regular ASCII spaces so the regex reliably detects headings from PDFs
+ *     that use non-standard whitespace.
  */
 export function extractSections(text: string): Record<string, string> {
+  // Normalise Unicode whitespace (NBSP U+00A0, narrow NBSP U+202F, thin-space U+2009,
+  // em-space U+2003, soft-hyphen U+00AD) to regular ASCII space.
+  // This ensures the heading regex fires reliably on production PDFs.
+  const normalised = text.replace(/[\u00A0\u202F\u2003\u2009\u00AD]+/g, ' ')
+
   // Match headings of the form:
-  //   [A-Z](\.\d+)? <space> UPPERCASE-WORDS
+  //   [A-Z](\.\d+)? <space(s)> UPPERCASE-WORDS-OR-DIGITS
+  // The heading name character class deliberately excludes \n/\r so the regex
+  // does not accidentally span multiple lines on documents where lines may run
+  // together (e.g. after y-position-based reconstruction).
+  // Digits (0-9) are included to handle headings like "SWOT-ANALYSE C.2 BEOORDELING".
   // Allow optional surrounding whitespace / line-ends.
   const sectionRegex =
-    /(?:^|\n)[ \t]*([A-Z]\d*(?:\.\d+)?[ \t]+[A-Z][A-Z\s\-–/()]+?)[ \t]*(?:\r?\n|$)/g
+    /(?:^|\n)[ \t]*([A-Z]\d*(?:\.\d+)?[ \t]+[A-Z][A-Z0-9 \t\-–/()]+?)[ \t]*(?:\r?\n|$)/g
 
   const sections: Record<string, string> = {}
   const matches: Array<{ name: string; startContent: number }> = []
 
   let m: RegExpExecArray | null
-  while ((m = sectionRegex.exec(text)) !== null) {
-    const name = m[1].trim().replace(/\s+/g, ' ')
+  while ((m = sectionRegex.exec(normalised)) !== null) {
+    const name = m[1].trim().replace(/[ \t]+/g, ' ')
     // startContent: right after the heading line
     const startContent = m.index + m[0].length
     matches.push({ name, startContent })
   }
+
+  console.log(`[extractSections] Detected ${matches.length} heading(s): ${matches.map((x) => `"${x.name}"`).join(', ')}`)
 
   for (let i = 0; i < matches.length; i++) {
     const { name, startContent } = matches[i]
@@ -164,8 +180,8 @@ export function extractSections(text: string): Record<string, string> {
     // and the surrounding newline characters captured by the regex group.
     const endContent = i + 1 < matches.length
       ? matches[i + 1].startContent - matches[i + 1].name.length - 2
-      : text.length
-    const content = text.slice(startContent, Math.max(startContent, endContent)).trim()
+      : normalised.length
+    const content = normalised.slice(startContent, Math.max(startContent, endContent)).trim()
     // Keep only the first occurrence of a section name (in case of duplicates)
     if (!(name in sections)) {
       sections[name] = content

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { splitReportIntoSections } from '../pdfParser'
+import { mergeFieldValue, type FieldSourceMeta } from '../pdfChunkAIExtractor'
+import { extractTypeObject } from '../pdfFieldExtractors'
 
 describe('splitReportIntoSections', () => {
   it('always includes volledig key with the full original text', () => {
@@ -153,5 +155,146 @@ Bijlage 1: tekeningen.`
     const keys = Object.keys(result)
     expect(keys).toEqual(['volledig'])
     expect(result.volledig).toBe(text)
+  })
+
+  it('production scenario: UPPERCASE-heading PDF produces multiple named sections', () => {
+    // Simulates what the y-coordinate line reconstruction produces for a real
+    // taxatie PDF with chapter headings like "C SWOT-ANALYSE EN BEOORDELING".
+    // Each heading on its own line (as guaranteed by extractTextFromPdf after fix).
+    const text = [
+      'C SWOT-ANALYSE EN BEOORDELING',
+      'De SWOT-analyse van het object.',
+      '',
+      'C.2 BEOORDELING',
+      'Courantheid verhuur: Goed.',
+      '',
+      'E LOCATIE',
+      'Het object is gelegen in Amsterdam.',
+      '',
+      'F OBJECT',
+      'Het betreft een kantoorpand.',
+      '',
+      'H ONDERBOUWING',
+      'Markthuur: € 109.050.',
+      '',
+      'I DUURZAAMHEID',
+      'Energielabel: A.',
+    ].join('\n')
+
+    const result = splitReportIntoSections(text)
+
+    // Must produce multiple named sections — NOT collapse into one
+    const namedKeys = Object.keys(result).filter((k) => k !== 'volledig' && k !== 'overig')
+    expect(namedKeys.length).toBeGreaterThanOrEqual(4)
+
+    expect(result).toHaveProperty('swot')
+    expect(result.swot).toContain('SWOT-analyse')
+
+    expect(result).toHaveProperty('beoordeling')
+    expect(result.beoordeling).toContain('Courantheid')
+
+    expect(result).toHaveProperty('locatie')
+    expect(result.locatie).toContain('Amsterdam')
+
+    expect(result).toHaveProperty('object')
+    expect(result.object).toContain('kantoorpand')
+
+    expect(result).toHaveProperty('onderbouwing')
+    expect(result.onderbouwing).toContain('Markthuur')
+
+    expect(result).toHaveProperty('duurzaamheid')
+    expect(result.duurzaamheid).toContain('Energielabel')
+  })
+
+  it('locatie terms without word boundary do NOT accidentally map to locatie', () => {
+    // "infrastructuur" embedded in longer words should not match
+    // Generic headings like "OMSCHRIJVING" have no locatie keyword → overig
+    const text = 'OMSCHRIJVING\nAlgemene tekst over het pand.\n'
+    const result = splitReportIntoSections(text)
+    // OMSCHRIJVING has no locatie keywords → must not appear as locatie
+    expect(result).not.toHaveProperty('locatie')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// object_type false-positive prevention (Task 5 + Task 7)
+// ---------------------------------------------------------------------------
+
+describe('extractTypeObject — no woning false positive for office reports', () => {
+  it('returns kantoor when document has explicit kantoor label', () => {
+    const text = 'Type object: kantoor\nHet betreft een kantoorpand in Amsterdam.'
+    const result = extractTypeObject(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('kantoor')
+  })
+
+  it('does NOT return woning when document has office signals + residential market text', () => {
+    // This simulates the production failure: market analysis text in an office report
+    // contains standalone "woning" mentions, but the report is clearly about a kantoor.
+    const text = [
+      'De kantorenmarkt in Amsterdam is actief.',
+      'Het kantoorpand beschikt over moderne faciliteiten.',
+      'In vergelijking met de woningmarkt is de kantorenmarkt stabieler.',
+      'Een gemiddelde huurwoning kost € 1.500 per maand.',
+      'Het betreft een kantoor aan de Herengracht.',
+    ].join('\n')
+
+    const result = extractTypeObject(text)
+    // kantoor should be detected, NOT woning
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('kantoor')
+    expect(result!.value).not.toBe('woning')
+  })
+
+  it('detects kantoorpand as kantoor', () => {
+    const text = 'Het object betreft een kantoorpand uit 2005.'
+    const result = extractTypeObject(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('kantoor')
+  })
+
+  it('detects kantoorruimte as kantoor', () => {
+    const text = 'De kantoorruimte heeft een BVO van 500 m².'
+    const result = extractTypeObject(text)
+    expect(result).toBeDefined()
+    expect(result!.value).toBe('kantoor')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// mergeFieldValue — office beats woning in conflict resolution (Task 7)
+// ---------------------------------------------------------------------------
+
+describe('mergeFieldValue — object_type office-over-woning rule', () => {
+  const metaRuleBased: FieldSourceMeta = {
+    sectionTitle: 'locatie',
+    chunkIndex: 0,
+    extractionType: 'rule_based',
+  }
+
+  it('office type (kantoor) overrides weak woning when existing=woning, incoming=kantoor', () => {
+    const { value, conflict } = mergeFieldValue('woning', metaRuleBased, 'kantoor', metaRuleBased, 'object_type')
+    expect(value).toBe('kantoor')
+    expect(conflict).toBeDefined()
+    expect(conflict!.reason).toMatch(/office type/i)
+  })
+
+  it('office type (bedrijfshal) overrides woning', () => {
+    const { value } = mergeFieldValue('woning', metaRuleBased, 'bedrijfshal', metaRuleBased, 'object_type')
+    expect(value).toBe('bedrijfshal')
+  })
+
+  it('existing office type (kantoor) is NOT overridden by incoming woning', () => {
+    const { value, conflict } = mergeFieldValue('kantoor', metaRuleBased, 'woning', metaRuleBased, 'object_type')
+    expect(value).toBe('kantoor')
+    expect(conflict).toBeDefined()
+    expect(conflict!.reason).toMatch(/office type/i)
+  })
+
+  it('does not apply office-over-woning rule for non-object_type fields', () => {
+    // For other fields, normal priority logic applies
+    const { value } = mergeFieldValue('woning', metaRuleBased, 'kantoor', metaRuleBased, 'adres')
+    // rule_based vs rule_based, existing wins (equal priority → stability preference)
+    expect(value).toBe('woning')
   })
 })

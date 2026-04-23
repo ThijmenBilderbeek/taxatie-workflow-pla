@@ -692,17 +692,17 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
   }
 
   // Priority 3: keyword in full text (medium confidence), skip reference sections
+  // Word-boundary safe: use \b to prevent e.g. "woning" matching "woningbouw"
   const lower = text.toLowerCase()
   for (const { keyword, value } of PHYSICAL_TYPES) {
-    let kwIdx = 0
-    while (true) {
-      const idx = lower.indexOf(keyword, kwIdx)
-      if (idx === -1) break
+    const re = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')
+    let match: RegExpExecArray | null
+    while ((match = re.exec(lower)) !== null) {
+      const idx = match.index
       if (!isInReferenceSection(text, idx)) {
         const snippet = text.slice(Math.max(0, idx - 10), idx + keyword.length + 20).replace(/\s+/g, ' ')
         return { value, confidence: 'medium', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 1', parserRule: 'fulltext-keyword' }
       }
-      kwIdx = idx + 1
     }
   }
   return undefined

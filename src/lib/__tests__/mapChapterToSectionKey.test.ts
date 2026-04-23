@@ -69,6 +69,21 @@ describe('mapChapterToSectionKey (via splitReportIntoSections)', () => {
       expectedKey: 'referenties',
       body: 'Vergelijkingsobjecten gebruikt bij de taxatie.',
     },
+    {
+      heading: 'C.2 BEOORDELING',
+      expectedKey: 'beoordeling',
+      body: 'Courantheid verhuur: Goed. Verhuurtijd: 6 maanden.',
+    },
+    {
+      heading: 'H ONDERBOUWING',
+      expectedKey: 'onderbouwing',
+      body: 'Markthuur: € 109.050. Netto huurwaarde: € 98.885.',
+    },
+    {
+      heading: 'F OBJECT',
+      expectedKey: 'object',
+      body: 'Het object betreft een kantoorgebouw.',
+    },
   ]
 
   for (const { heading, expectedKey, body } of cases) {

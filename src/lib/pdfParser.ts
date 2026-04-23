@@ -22,6 +22,8 @@ import { extractAllFieldsWithConfidence, extractAantalBouwlagen, extractBar, ext
 import { detectChapters } from './chapterDetector'
 import { cleanExtractedPdfText } from './pdfTextCleaner'
 import { chunkSections, type TextChunk } from './pdfTextChunker'
+// Improved section parser from pdfDataExtractor used as primary section detector
+import { extractSections as extractRawSections } from './pdfDataExtractor'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
@@ -252,12 +254,17 @@ function mapChapterToSectionKey(chapter: string, subchapter: string, headingText
   const lower = (headingText + ' ' + chapter + ' ' + subchapter).toLowerCase()
 
   if (/samenvatting|inhoudsopgave|resume|inleiding|conclusie|summary/.test(lower)) return 'samenvatting'
-  if (/object(?:omschrijving|beschrijving|gegevens)|type\s+object|vastgoed(?:type)?|object\s+type/.test(lower)) return 'object'
+  // Bare \bobject\b added so uppercase headings like "F OBJECT" (from extractSections) map correctly
+  if (/\bobject\b|object(?:omschrijving|beschrijving|gegevens)|type\s+object|vastgoed(?:type)?|object\s+type/.test(lower)) return 'object'
   if (/locatie|ligging|omgeving|bereikbaarheid|infrastructuur|buurt|ontsluiting/.test(lower)) return 'locatie'
   if (/juridisch|eigendom|erfpacht|bestemmingsplan|planolog|kadaster|recht(?:en)?/.test(lower)) return 'juridisch'
   if (/technisch|bouwkundig|onderhoud|fundering|dak|installatie|constructie|gebouwstaat/.test(lower)) return 'technisch'
   if (/waarde(?:ring|peildatum)?|taxatie(?:methode)?|marktwaarde|bar|nar|dcf|rendement/.test(lower)) return 'waardering'
   if (/swot/.test(lower)) return 'swot'
+  // New semantic key: headings containing "beoordeling" (e.g. "C.2 BEOORDELING")
+  if (/beoordeling/.test(lower)) return 'beoordeling'
+  // New semantic key: headings containing "onderbouwing" (e.g. "H ONDERBOUWING")
+  if (/onderbouwing/.test(lower)) return 'onderbouwing'
   if (/referentie|vergelijking(?:sobject)?|koopreferentie|huurreferentie|comparable/.test(lower)) return 'referenties'
   if (/markt(?:analyse|onderzoek|ontwikkeling|context)|vraag\s+en\s+aanbod|\btransacties\b|conjunctuur/.test(lower)) return 'marktanalyse'
   if (/aannam|voorbehoud|uitgangspunt|bijzondere\s+omstandigh|disclaimer/.test(lower)) return 'aannames'
@@ -269,27 +276,46 @@ function mapChapterToSectionKey(chapter: string, subchapter: string, headingText
 /**
  * Splits raw PDF text into logical named sections for a Dutch taxatie rapport.
  *
- * Sections are detected using chapter headings (letter/numeric/ALL-CAPS) and
- * mapped to predefined keys. The full text is always stored under `volledig`
+ * Sections are detected using the improved section parser from pdfDataExtractor
+ * (primary, handles UPPERCASE-heading PDFs like "C.2 BEOORDELING", "F OBJECT"),
+ * with detectChapters as fallback for mixed-case / numeric heading formats.
+ * Mapped to predefined keys. The full text is always stored under `volledig`
  * for backward compatibility.
  *
  * Section keys: samenvatting, object, locatie, juridisch, technisch, waardering,
- *               swot, marktanalyse, referenties, aannames, duurzaamheid, volledig
+ *               swot, beoordeling, onderbouwing, marktanalyse, referenties,
+ *               aannames, duurzaamheid, volledig
  */
 export function splitReportIntoSections(text: string): Record<string, string> {
   const sections: Record<string, string[]> = {}
-  const detectedSections = detectChapters(text)
 
-  for (const section of detectedSections) {
-    if (!section.text) continue
-    // Use the full heading line from the original text as the primary label for
-    // section mapping so that title keywords (e.g. "Samenvatting" in "A. Samenvatting")
-    // are available to mapChapterToSectionKey even for letter-based chapters.
-    const headingLine = text.slice(section.startIndex, section.startIndex + 200).split('\n')[0]
-    const key = mapChapterToSectionKey(section.chapter, section.subchapter, headingLine)
+  // --- Primary: improved section parser (replaces detectChapters as source of truth) ---
+  // Handles production PDFs with UPPERCASE headings: "C.2 BEOORDELING", "F OBJECT", etc.
+  const rawSections = extractRawSections(text)
+  for (const [sectionName, content] of Object.entries(rawSections)) {
+    if (!content) continue
+    const key = mapChapterToSectionKey('', '', sectionName)
     if (key) {
       if (!sections[key]) sections[key] = []
-      sections[key].push(section.text)
+      sections[key].push(content)
+    }
+  }
+
+  // --- Fallback: legacy detectChapters for mixed-case / numeric heading formats ---
+  // Used when the improved parser finds no named sections (e.g. "A. Samenvatting" style).
+  if (Object.keys(sections).length === 0) {
+    const detectedSections = detectChapters(text)
+    for (const section of detectedSections) {
+      if (!section.text) continue
+      // Use the full heading line from the original text as the primary label for
+      // section mapping so that title keywords (e.g. "Samenvatting" in "A. Samenvatting")
+      // are available to mapChapterToSectionKey even for letter-based chapters.
+      const headingLine = text.slice(section.startIndex, section.startIndex + 200).split('\n')[0]
+      const key = mapChapterToSectionKey(section.chapter, section.subchapter, headingLine)
+      if (key) {
+        if (!sections[key]) sections[key] = []
+        sections[key].push(section.text)
+      }
     }
   }
 
@@ -1344,6 +1370,12 @@ export async function parsePdfToRapport(
     )
   }
 
+  // Debug logging: show detected section names, content lengths, and total count
+  console.log(`[parsePdfToRapport] Detected ${sectionKeys.length} named section(s): ${sectionKeys.join(', ')}`)
+  for (const key of sectionKeys) {
+    console.log(`[parsePdfToRapport] Section "${key}": ${sections[key]?.length ?? 0} chars`)
+  }
+
   // Chunk sections so that downstream consumers receive safe-size text blocks
   const textChunks = chunkSections(sections)
   console.log(`[parsePdfToRapport] Produced ${textChunks.length} text chunk(s) from ${sectionKeys.length} named section(s)`)
@@ -1487,10 +1519,12 @@ export async function parsePdfToRapport(
       }
     }
   }
-  // Fallback: keyword scan in full text, but only if strong contextual signal
+  // Fallback: word-boundary safe keyword scan — prevents "woning" matching "woningbouw" etc.
+  // Where old section detection was made word-boundary safe for object type fallback.
   if (!result.typeObject) {
     for (const { keyword, value } of PHYSICAL_OBJECT_TYPES) {
-      if (lowerText.includes(keyword)) {
+      const re = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+      if (re.test(lowerText)) {
         result.typeObject = value
         break
       }

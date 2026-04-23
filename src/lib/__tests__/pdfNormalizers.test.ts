@@ -375,6 +375,28 @@ describe('stripAddressLeadingContext', () => {
     const result = stripAddressLeadingContext('geen adres hier')
     expect(result).toBe('geen adres hier')
   })
+
+  // New: polluted prefix patterns from deploy logs
+  it('strips score-word "Goed" prefix from address', () => {
+    const result = stripAddressLeadingContext('Goed Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBe('Collse Hoefdijk, 16, 5674VK, Nuenen')
+  })
+
+  it('strips "| Eindhoven" pipe-prefixed city context from address', () => {
+    const result = stripAddressLeadingContext('| Eindhoven Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBe('Collse Hoefdijk, 16, 5674VK, Nuenen')
+  })
+
+  it('strips "Verhuurbare eenheid" generic noun phrase from address', () => {
+    const result = stripAddressLeadingContext('Verhuurbare eenheid Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBe('Collse Hoefdijk, 16, 5674VK, Nuenen')
+  })
+
+  it('strips other score words (Redelijk, Matig, Slecht)', () => {
+    expect(stripAddressLeadingContext('Redelijk Collse Hoefdijk, 16, 5674VK, Nuenen')).toBe('Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(stripAddressLeadingContext('Matig Collse Hoefdijk, 16, 5674VK, Nuenen')).toBe('Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(stripAddressLeadingContext('Slecht Collse Hoefdijk, 16, 5674VK, Nuenen')).toBe('Collse Hoefdijk, 16, 5674VK, Nuenen')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -406,5 +428,32 @@ describe('parseAddress — polluted address strings', () => {
     expect(result?.huisnummer).toBe('5')
     expect(result?.postcode).toBe('5678CD')
     expect(result?.plaats).toBe('Amsterdam')
+  })
+
+  it('parses "Goed Collse Hoefdijk, 16, 5674VK, Nuenen" (score-word prefix)', () => {
+    const result = parseAddress('Goed Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBeDefined()
+    expect(result?.straat).toBe('Collse Hoefdijk')
+    expect(result?.huisnummer).toBe('16')
+    expect(result?.postcode).toBe('5674VK')
+    expect(result?.plaats).toBe('Nuenen')
+  })
+
+  it('parses "| Eindhoven Collse Hoefdijk, 16, 5674VK, Nuenen" (pipe + city prefix)', () => {
+    const result = parseAddress('| Eindhoven Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBeDefined()
+    expect(result?.straat).toBe('Collse Hoefdijk')
+    expect(result?.huisnummer).toBe('16')
+    expect(result?.postcode).toBe('5674VK')
+    expect(result?.plaats).toBe('Nuenen')
+  })
+
+  it('parses "Verhuurbare eenheid Collse Hoefdijk, 16, 5674VK, Nuenen" (noun phrase prefix)', () => {
+    const result = parseAddress('Verhuurbare eenheid Collse Hoefdijk, 16, 5674VK, Nuenen')
+    expect(result).toBeDefined()
+    expect(result?.straat).toBe('Collse Hoefdijk')
+    expect(result?.huisnummer).toBe('16')
+    expect(result?.postcode).toBe('5674VK')
+    expect(result?.plaats).toBe('Nuenen')
   })
 })

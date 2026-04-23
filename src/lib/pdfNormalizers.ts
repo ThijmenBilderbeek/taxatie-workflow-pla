@@ -259,7 +259,7 @@ export function stripAddressLeadingContext(text: string): string {
   // Slice everything before the last postcode.
   const beforePostcode = trimmed.slice(0, lastMatch.index)
 
-  // Find the last sentence boundary (`. ` or `: `) before the postcode.
+  // 1. Find the last sentence boundary (`. ` or `: `) before the postcode.
   // We want the position immediately after the boundary — that's where the
   // real street name starts.
   // The greedy `.*` (with `s` flag for dotall) ensures we match up to the LAST
@@ -267,6 +267,39 @@ export function stripAddressLeadingContext(text: string): string {
   const boundaryMatch = beforePostcode.match(/^.*[.:]\s+/s)
   if (boundaryMatch) {
     return trimmed.slice(boundaryMatch[0].length).trim()
+  }
+
+  // 2. Strip leading pipe (`|`) prefix sections.
+  // Handles: "| Eindhoven Collse Hoefdijk, 16, 5674VK, Nuenen"
+  // After the pipe, also strip a standalone city-context word when it is followed
+  // by a Dutch adjectival modifier (a word ending in -se, -sche, -erse, etc.),
+  // which indicates the city word is context, not part of the street name.
+  const pipeMatch = beforePostcode.match(/^[^|]*\|\s*/)
+  if (pipeMatch) {
+    const afterPipe = trimmed.slice(pipeMatch[0].length).trim()
+    // Detect pattern: [CityContextWord] [StreetModifier ending in -se/-sche] …
+    // Example: "Eindhoven Collse Hoefdijk" → strip "Eindhoven"
+    // The same character class is used in both the capturing group and the lookahead;
+    // this is intentional to keep the regex self-contained.
+    const wordChars = '[A-Za-zÀ-öø-ÿ\\-\']'
+    const cityPrefixRe = new RegExp(
+      `^([A-Z]${wordChars}+)\\s+(?=[A-Z]${wordChars}*(?:se|sche)\\s)`,
+    )
+    const cityMatch = afterPipe.match(cityPrefixRe)
+    if (cityMatch) {
+      return afterPipe.slice(cityMatch[0].length).trim()
+    }
+    return afterPipe
+  }
+
+  // 3. Strip known leading noise: score/quality words and generic noun phrases
+  // that appear directly before the street name with no sentence boundary.
+  // Handles: "Goed Collse Hoefdijk, …" and "Verhuurbare eenheid Collse Hoefdijk, …"
+  const noisePrefixRe =
+    /^(?:Goed|Redelijk|Matig|Slecht|Voldoende|Onvoldoende|Verhuurbare\s+eenheid)\s+/i
+  const noiseMatch = trimmed.match(noisePrefixRe)
+  if (noiseMatch) {
+    return trimmed.slice(noiseMatch[0].length).trim()
   }
 
   return trimmed

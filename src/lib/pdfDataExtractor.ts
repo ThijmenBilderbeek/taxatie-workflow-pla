@@ -328,6 +328,77 @@ function fallbackExtractField(fullText: string, label: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: extractObjectScore (rule-based, tolerant regex)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the object score from section content using a tolerant regex.
+ * Supports label variants: "Object score", "Objectscore", "Object-score".
+ * Accepted values: Goed, Redelijk, Matig, Slecht, Voldoende, Onvoldoende.
+ */
+export function extractObjectScore(sectionContent: string): string | null {
+  const re =
+    /object[-\s]?score\s*[:\-–]?\s*(Goed|Redelijk|Matig|Slecht|Voldoende|Onvoldoende)\b/i
+  const match = sectionContent.match(re)
+  return match ? match[1] : null
+}
+
+// ---------------------------------------------------------------------------
+// Helper: extractNettoHuurwaarde (rule-based, multiple label variants)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the netto huurwaarde from section content.
+ * Supports label variants: "Netto huurwaarde", "Netto markt/herz. huur",
+ * "Netto markt-/herz. huur", and similar.
+ * Returns the value as a number (integer) or null.
+ */
+export function extractNettoHuurwaarde(sectionContent: string): number | null {
+  // Try specific label variants first (most precise)
+  const labelVariants = [
+    'Netto huurwaarde',
+    'Netto markt/herz. huur',
+    'Netto markt-/herz. huur',
+    'Netto markthuur',
+  ]
+  for (const label of labelVariants) {
+    const raw = extractField(sectionContent, label)
+    if (raw) {
+      const val = parseCurrency(raw)
+      if (val !== null) return val
+    }
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Helper: extractMarktwaardePerM2 (rule-based, multiple label variants)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the marktwaarde per m² from section content.
+ * Supports label variants: "Marktwaarde per m²", "Marktwaarde per m2",
+ * "Marktwaarde p/m²", "Marktwaarde p/m2", and similar.
+ * Returns the value as a number (integer) or null.
+ */
+export function extractMarktwaardePerM2(sectionContent: string): number | null {
+  const labelVariants = [
+    'Marktwaarde per m²',
+    'Marktwaarde per m2',
+    'Marktwaarde p/m²',
+    'Marktwaarde p/m2',
+  ]
+  for (const label of labelVariants) {
+    const raw = extractField(sectionContent, label)
+    if (raw) {
+      const val = parseCurrency(raw)
+      if (val !== null) return val
+    }
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
 // Main: extractPdfData
 // ---------------------------------------------------------------------------
 
@@ -407,6 +478,8 @@ export function extractPdfData(text: string): ExtractedData {
       result.locatie_score ??= extractField(sectionContent, 'Locatiescore')
         ?? extractField(sectionContent, 'Locatie score')
       result.omgeving_en_belendingen ??= extractFreeText(sectionContent, 'Omgeving en belendingen')
+        ?? extractFreeText(sectionContent, 'Belendingen')
+        ?? extractFreeText(sectionContent, 'Omgeving')
       result.voorzieningen ??= extractFreeText(sectionContent, 'Voorzieningen')
     }
 
@@ -414,10 +487,11 @@ export function extractPdfData(text: string): ExtractedData {
     // F / F.x — OBJECT
     // -----------------------------------------------------------------------
     if (/^F\b/.test(sectionName) || nameLower.includes('object')) {
-      result.object_score ??= extractField(sectionContent, 'Object score')
-        ?? extractField(sectionContent, 'Objectscore')
-      result.constructie ??= extractFreeText(sectionContent, 'Constructie')
-      result.terrein ??= extractFreeText(sectionContent, 'Terrein')
+      result.object_score ??= extractObjectScore(sectionContent)
+      result.constructie ??= extractFreeText(sectionContent, 'Constructie en afwerking')
+        ?? extractFreeText(sectionContent, 'Constructie')
+      result.terrein ??= extractFreeText(sectionContent, 'Terreingesteldheid')
+        ?? extractFreeText(sectionContent, 'Terrein')
     }
 
     // -----------------------------------------------------------------------
@@ -426,11 +500,18 @@ export function extractPdfData(text: string): ExtractedData {
     if (/^H\b/.test(sectionName) || nameLower.includes('onderbouwing')) {
       result.marktwaarde_kk_afgerond ??= parseCurrency(extractField(sectionContent, 'Marktwaarde'))
       result.markthuur ??= parseCurrency(extractField(sectionContent, 'Markthuur'))
-      result.netto_huurwaarde ??= parseCurrency(extractField(sectionContent, 'Netto huurwaarde'))
-      result.marktwaarde_per_m2 ??= parseCurrency(extractField(sectionContent, 'Marktwaarde per m²'))
-        ?? parseCurrency(extractField(sectionContent, 'Marktwaarde per m2'))
+      result.netto_huurwaarde ??= extractNettoHuurwaarde(sectionContent)
+      result.marktwaarde_per_m2 ??= extractMarktwaardePerM2(sectionContent)
       result.vloeroppervlak_bvo ??= parseNumber(extractField(sectionContent, 'BVO'))
       result.vloeroppervlak_vvo ??= parseNumber(extractField(sectionContent, 'VVO'))
+    }
+
+    // -----------------------------------------------------------------------
+    // Waardering section — fallback source for financial fields
+    // -----------------------------------------------------------------------
+    if (nameLower.includes('waardering')) {
+      result.netto_huurwaarde ??= extractNettoHuurwaarde(sectionContent)
+      result.marktwaarde_per_m2 ??= extractMarktwaardePerM2(sectionContent)
     }
 
     // -----------------------------------------------------------------------
@@ -454,8 +535,8 @@ export function extractPdfData(text: string): ExtractedData {
   }> = [
     { key: 'marktwaarde_kk_afgerond', labels: ['Marktwaarde'], parse: parseCurrency },
     { key: 'markthuur', labels: ['Markthuur'], parse: parseCurrency },
-    { key: 'netto_huurwaarde', labels: ['Netto huurwaarde'], parse: parseCurrency },
-    { key: 'marktwaarde_per_m2', labels: ['Marktwaarde per m²', 'Marktwaarde per m2'], parse: parseCurrency },
+    { key: 'netto_huurwaarde', labels: ['Netto huurwaarde', 'Netto markt/herz. huur', 'Netto markt-/herz. huur', 'Netto markthuur'], parse: parseCurrency },
+    { key: 'marktwaarde_per_m2', labels: ['Marktwaarde per m²', 'Marktwaarde per m2', 'Marktwaarde p/m²', 'Marktwaarde p/m2'], parse: parseCurrency },
     { key: 'vloeroppervlak_bvo', labels: ['BVO'], parse: parseNumber },
     { key: 'vloeroppervlak_vvo', labels: ['VVO'], parse: parseNumber },
     { key: 'verhuurtijd_maanden', labels: ['Verhuurtijd (maanden)', 'Verhuurtijd'], parse: parseNumber },
@@ -469,7 +550,7 @@ export function extractPdfData(text: string): ExtractedData {
   }> = [
     { key: 'energielabel', labels: ['Energielabel'] },
     { key: 'locatie_score', labels: ['Locatiescore', 'Locatie score'] },
-    { key: 'object_score', labels: ['Object score', 'Objectscore'] },
+    { key: 'object_score', labels: ['Object score', 'Objectscore', 'Object-score'] },
     { key: 'courantheid_verhuur', labels: ['Courantheid verhuur'] },
     { key: 'courantheid_verkoop', labels: ['Courantheid verkoop'] },
   ]

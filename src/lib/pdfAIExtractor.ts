@@ -64,6 +64,7 @@ const FIELD_TO_SECTIONS: Record<string, string[]> = {
   markthuurPerJaar:           ['onderbouwing', 'waardering'],
   huurprijsPerJaar:           ['onderbouwing', 'waardering'],
   netto_huurwaarde:           ['onderbouwing', 'waardering'],
+  marktwaarde_per_m2:         ['onderbouwing', 'waardering'],
   // Juridisch
   eigendomssituatie:          ['juridisch'],
   bestemmingsplan:            ['juridisch'],

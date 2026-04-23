@@ -71,7 +71,9 @@ describe('getFieldPriority', () => {
   })
 
   it('gives priority fields a bonus for rule_based', () => {
-    const normal = getFieldPriority('adres', 'rule_based', 'samenvatting')
+    // bebouwd_oppervlak is NOT in PRIORITY_FIELDS → heading_block tier (250)
+    const normal = getFieldPriority('bebouwd_oppervlak', 'rule_based', 'samenvatting')
+    // marktwaarde_kk_afgerond IS in PRIORITY_FIELDS → exact_label tier (300)
     const priority = getFieldPriority('marktwaarde_kk_afgerond', 'rule_based', 'samenvatting')
     expect(priority).toBeGreaterThan(normal)
   })

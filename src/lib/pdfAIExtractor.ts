@@ -869,8 +869,9 @@ export async function aiExtractMissingFieldsWithChunks(
       }
     }
 
-    // netto_huurwaarde
-    if (fields['netto_huurwaarde'] && !currentResult.wizardData?.stap4?.huurprijsPerJaar) {
+    // netto_huurwaarde — AI fills only when rule-based extraction did not already fill it
+    // (checked via merged.wizardData.stap4.huurprijsPerJaar which is applied before AI runs)
+    if (fields['netto_huurwaarde'] && !merged.wizardData?.stap4?.huurprijsPerJaar) {
       const v = toNumber(fields['netto_huurwaarde'])
       if (v !== undefined && v > 0) {
         if (!merged.wizardData!.stap4) merged.wizardData!.stap4 = {} as Huurgegevens
@@ -910,8 +911,8 @@ export async function aiExtractMissingFieldsWithChunks(
       }
     }
 
-    // energielabel
-    if (fields['energielabel'] && !currentResult.wizardData?.stap7?.energielabel) {
+    // energielabel — AI fills only when rule-based extraction did not already fill it
+    if (fields['energielabel'] && !merged.wizardData?.stap7?.energielabel) {
       const v = typeof fields['energielabel'] === 'string' ? fields['energielabel'].trim() : undefined
       if (v && VALID_ENERGIELABELS.has(v)) {
         if (!merged.wizardData!.stap7) merged.wizardData!.stap7 = {} as Vergunningen
@@ -919,6 +920,27 @@ export async function aiExtractMissingFieldsWithChunks(
         recordAI('energielabel', v)
       }
     }
+
+    // locatie_score — stored in extractedData; AI fills only when not already set
+    if (fields['locatie_score'] && !merged.wizardData?.stap2?.locatiescore) {
+      const v = toString(fields['locatie_score'])
+      if (v) {
+        if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie
+        merged.wizardData!.stap2!.locatiescore = v
+        recordAI('locatiescore', v)
+      }
+    }
+
+    // object_score — stored in extractedData only (no typed field in Oppervlaktes).
+    // The value is accessible from result.extractedData.object_score.
+    // isFieldFilledInResult checks extractedData for this field.
+
+    // courantheid_verhuur / courantheid_verkoop / verhuurtijd_maanden / verkooptijd_maanden
+    // — stored in extractedData only (no typed field in Aannames).
+    // isFieldFilledInResult checks extractedData for these fields.
+
+    // marktwaarde_per_m2 — stored in extractedData only (no typed field in Waardering).
+    // isFieldFilledInResult checks extractedData for this field.
 
     // SWOT fields — after merge, values may be string[] (combined across chunks)
     const swotMapping = [
@@ -952,7 +974,7 @@ export async function aiExtractMissingFieldsWithChunks(
       ['afwerking', 'afwerking'],
     ] as const
     for (const [aiKey, stap6Key] of stap6Fields) {
-      if (fields[aiKey] && !currentResult.wizardData?.stap6?.[stap6Key]) {
+      if (fields[aiKey] && !merged.wizardData?.stap6?.[stap6Key]) {
         const v = toString(fields[aiKey])
         if (v) {
           if (!merged.wizardData!.stap6) merged.wizardData!.stap6 = {} as TechnischeStaat
@@ -968,7 +990,7 @@ export async function aiExtractMissingFieldsWithChunks(
       ['voorzieningen', 'voorzieningen'],
     ] as const
     for (const [aiKey, stap2Key] of stap2TextFields) {
-      if (fields[aiKey] && !currentResult.wizardData?.stap2?.[stap2Key]) {
+      if (fields[aiKey] && !merged.wizardData?.stap2?.[stap2Key]) {
         const v = toString(fields[aiKey])
         if (v) {
           if (!merged.wizardData!.stap2) merged.wizardData!.stap2 = {} as AdresLocatie

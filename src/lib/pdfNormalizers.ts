@@ -262,7 +262,9 @@ export function stripAddressLeadingContext(text: string): string {
   // Find the last sentence boundary (`. ` or `: `) before the postcode.
   // We want the position immediately after the boundary — that's where the
   // real street name starts.
-  const boundaryMatch = beforePostcode.match(/^[\s\S]*[.:]\s+/)
+  // The greedy `.*` (with `s` flag for dotall) ensures we match up to the LAST
+  // boundary, not the first — intentional: multiple sentence fragments are all stripped.
+  const boundaryMatch = beforePostcode.match(/^.*[.:]\s+/s)
   if (boundaryMatch) {
     return trimmed.slice(boundaryMatch[0].length).trim()
   }

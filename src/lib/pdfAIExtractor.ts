@@ -597,19 +597,20 @@ export async function aiExtractMissingFieldsWithChunks(
   const isFullDocumentMode = textChunks.length > 0 && textChunks.every((c) => c.sectionTitle === FULL_DOCUMENT_SECTION_TITLE)
 
   // High-value sections that must all be processed before early stop is allowed.
+  // Also used as the routing high-priority set — these sections are sorted first.
   const HIGH_VALUE_SECTIONS = new Set(['swot', 'beoordeling', 'locatie', 'object', 'oppervlakte', 'onderbouwing', 'duurzaamheid'])
   // Tracks which high-value sections have been seen during the loop.
   const seenHighValueSections = new Set<string>()
   const allHighValueSeen = () => [...HIGH_VALUE_SECTIONS].every((s) => seenHighValueSections.has(s))
 
   // Routing priority: process high-value sections before low-value ones.
+  // High-value sections share priority 0 (derived from HIGH_VALUE_SECTIONS above).
   // Chunks within the same priority group retain their original order.
-  const HIGH_PRIORITY_SECTIONS = ['swot', 'beoordeling', 'locatie', 'object', 'oppervlakte', 'onderbouwing', 'duurzaamheid']
-  const LOW_PRIORITY_SECTIONS = ['overig', 'aannames', 'referenties', 'bijlagen']
+  const LOW_PRIORITY_SECTIONS = new Set(['overig', 'aannames', 'referenties', 'bijlagen'])
   const getSectionPriority = (title: string): number => {
     const lower = title.toLowerCase().trim()
-    if (HIGH_PRIORITY_SECTIONS.includes(lower)) return 0
-    if (LOW_PRIORITY_SECTIONS.includes(lower)) return 2
+    if (HIGH_VALUE_SECTIONS.has(lower)) return 0
+    if (LOW_PRIORITY_SECTIONS.has(lower)) return 2
     return 1
   }
   const sortedChunks = [...textChunks].sort((a, b) => {

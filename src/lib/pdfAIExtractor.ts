@@ -23,7 +23,9 @@ import {
   parseAndValidateAIOutput,
   mergeExtractionResults,
   isReferenceOrAppendixChunk,
+  isBijlagenChunk,
   REFERENCE_SENSITIVE_FIELDS,
+  BIJLAGEN_SENSITIVE_FIELDS,
   AI_EXTRACTABLE_FIELDS,
   type AIFieldValue,
   type ChunkExtractionResult,
@@ -33,8 +35,17 @@ import {
 const MAX_TEXT_CHARS = 30000
 
 /**
+ * Section keys that are bijlagen/appendix and must never be primary sources
+ * for business fields. Used to filter out bijlagen from getRelevantTextForFields.
+ */
+const BIJLAGEN_SECTION_KEYS = new Set(['bijlagen', 'appendix'])
+
+/**
  * Maps missing field names to the most relevant `rapportTeksten` section keys.
  * Fields not listed will fall back to `samenvatting` and then `volledig`.
+ *
+ * Note: bijlagen/appendix section keys are never included here — those sections
+ * are excluded from business field extraction entirely.
  */
 const FIELD_TO_SECTIONS: Record<string, string[]> = {
   // Duurzaamheid
@@ -66,6 +77,9 @@ const FIELD_TO_SECTIONS: Record<string, string[]> = {
   // Object
   bvo:                        ['samenvatting', 'object'],
   vvo:                        ['samenvatting', 'object'],
+  // vloeroppervlak_bvo / _vvo: search oppervlakte section first (F.2 OPPERVLAKTE), then object
+  vloeroppervlak_bvo:         ['oppervlakte', 'object', 'samenvatting'],
+  vloeroppervlak_vvo:         ['oppervlakte', 'object', 'samenvatting'],
   perceeloppervlak:           ['object', 'samenvatting'],
   bouwjaar:                   ['technisch', 'object'],
   typeObject:                 ['object', 'samenvatting'],
@@ -77,11 +91,13 @@ const FIELD_TO_SECTIONS: Record<string, string[]> = {
   terrein:                    ['object', 'technisch'],
   gevels:                     ['technisch'],
   afwerking:                  ['technisch'],
-  // Beoordeling / swot (new semantic keys introduced)
-  courantheid_verhuur:        ['beoordeling', 'swot'],
-  courantheid_verkoop:        ['beoordeling', 'swot'],
-  verhuurtijd_maanden:        ['beoordeling', 'swot'],
-  verkooptijd_maanden:        ['beoordeling', 'swot'],
+  // Beoordeling: courantheid and market-timing fields must come from the true beoordeling
+  // section (C.2 BEOORDELING) only — NOT from headings that merely contain the word
+  // "BEOORDELING" (e.g. "F.4 MILIEUASPECTEN EN BEOORDELING").
+  courantheid_verhuur:        ['beoordeling'],
+  courantheid_verkoop:        ['beoordeling'],
+  verhuurtijd_maanden:        ['beoordeling'],
+  verkooptijd_maanden:        ['beoordeling'],
   // Algemeen
   straat:                     ['samenvatting'],
   huisnummer:                 ['samenvatting'],
@@ -112,6 +128,8 @@ const MIN_SECTION_LENGTH_THRESHOLD = 500
  * Returns the most relevant sections from `rapportTeksten` for the given missing fields,
  * concatenated up to `MAX_TEXT_CHARS`. Falls back to the full text when no sections match.
  *
+ * Bijlagen / appendix sections are never included, regardless of field preferences.
+ *
  * The `truncated` flag is `true` when any section or fallback text was cut short.
  */
 export function getRelevantTextForFields(
@@ -123,7 +141,10 @@ export function getRelevantTextForFields(
   for (const field of missingFields) {
     const keys = FIELD_TO_SECTIONS[field] ?? ['samenvatting']
     for (const key of keys) {
-      relevantSectionKeys.add(key)
+      // Never include bijlagen/appendix as a source for business fields
+      if (!BIJLAGEN_SECTION_KEYS.has(key)) {
+        relevantSectionKeys.add(key)
+      }
     }
   }
 
@@ -135,6 +156,8 @@ export function getRelevantTextForFields(
   let truncated = false
 
   for (const key of relevantSectionKeys) {
+    // Extra safety: skip bijlagen even if somehow added
+    if (BIJLAGEN_SECTION_KEYS.has(key)) continue
     const section = rapportTeksten[key]
     if (!section) continue
     const remaining = MAX_TEXT_CHARS - totalLength
@@ -587,6 +610,9 @@ export async function aiExtractMissingFieldsWithChunks(
     }
   }
 
+  // Counter for bijlagen chunks skipped (logged in the summary)
+  let bijlagenChunksSkipped = 0
+
   for (const chunk of textChunks) {
     const chunkLabel = `[chunk ${chunk.chunkIndex + 1}/${chunk.totalChunks} "${chunk.sectionTitle}"]`
 
@@ -626,12 +652,20 @@ export async function aiExtractMissingFieldsWithChunks(
       break
     }
 
-    // For reference/appendix chunks, exclude fields that must not be sourced from comparables.
-    const isRefChunk = isReferenceOrAppendixChunk(chunk)
-    const effectiveMissingFields = isRefChunk
-      ? missingFields.filter((f) => !REFERENCE_SENSITIVE_FIELDS.includes(f))
+    // For bijlagen/appendix chunks, apply the broader BIJLAGEN_SENSITIVE_FIELDS filter
+    // (includes adres, scores, courantheid, SWOT in addition to REFERENCE_SENSITIVE_FIELDS).
+    // For other reference/appendix chunks, apply the narrower REFERENCE_SENSITIVE_FIELDS filter.
+    const isBijlChunk = isBijlagenChunk(chunk)
+    const isRefChunk = !isBijlChunk && isReferenceOrAppendixChunk(chunk)
+    const sensitiveFields = isBijlChunk ? BIJLAGEN_SENSITIVE_FIELDS : REFERENCE_SENSITIVE_FIELDS
+    const effectiveMissingFields = (isBijlChunk || isRefChunk)
+      ? missingFields.filter((f) => !sensitiveFields.includes(f))
       : missingFields
-    if (isRefChunk && effectiveMissingFields.length < missingFields.length) {
+    if (isBijlChunk) {
+      const excluded = missingFields.length - effectiveMissingFields.length
+      console.log(`[pdfAIExtractor] ${chunkLabel} Bijlagen/appendix chunk — excluding ${excluded} sensitive field(s) from AI request`)
+      if (excluded > 0) bijlagenChunksSkipped++
+    } else if (isRefChunk && effectiveMissingFields.length < missingFields.length) {
       console.log(`[pdfAIExtractor] ${chunkLabel} Reference/appendix chunk — excluding ${missingFields.length - effectiveMissingFields.length} sensitive field(s) from AI request`)
     }
     if (effectiveMissingFields.length === 0) {
@@ -702,6 +736,11 @@ export async function aiExtractMissingFieldsWithChunks(
   // the HistorischRapport result (only filling slots still empty after
   // full-document rule-based extraction).
   // ---------------------------------------------------------------------------
+
+  // Log bijlagen chunk skipped count for deploy verification
+  if (bijlagenChunksSkipped > 0) {
+    console.log(`[pdfAIExtractor] Bijlagen/appendix chunks with excluded sensitive fields: ${bijlagenChunksSkipped}`)
+  }
 
   const { fields: mergedChunkFields, conflicts } = mergeExtractionResults(allChunkResults)
 
@@ -885,6 +924,7 @@ export async function aiExtractMissingFieldsWithChunks(
     `chunks processed: ${textChunks.length}, ` +
     `AI calls: ${aiCallsDone} done / ${aiCallsSkipped} skipped, ` +
     `rule-based filled: ${ruleBasedFilledCount}, AI filled: ${aiFilledCount}` +
+    (bijlagenChunksSkipped > 0 ? `, bijlagen chunks with excluded fields: ${bijlagenChunksSkipped}` : '') +
     (consecutiveErrors > 0 ? `, edge function errors: ${consecutiveErrors}` : '') +
     (earlyStopApplied ? ' [early stop applied]' : ''),
   )

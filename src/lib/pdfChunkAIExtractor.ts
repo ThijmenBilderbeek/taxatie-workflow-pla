@@ -129,6 +129,28 @@ export const REFERENCE_SENSITIVE_FIELDS: AIExtractableField[] = [
   'voorzieningen',
 ]
 
+/**
+ * Fields that must not be extracted from bijlagen / appendix sections.
+ * This is a superset of REFERENCE_SENSITIVE_FIELDS: in addition to the
+ * reference-sensitive fields above, appendix content must never be the
+ * source for address, scores, courantheid, or SWOT fields — those fields
+ * must come from the main report body only.
+ */
+export const BIJLAGEN_SENSITIVE_FIELDS: AIExtractableField[] = [
+  ...REFERENCE_SENSITIVE_FIELDS,
+  'adres',
+  'locatie_score',
+  'object_score',
+  'courantheid_verhuur',
+  'courantheid_verkoop',
+  'verhuurtijd_maanden',
+  'verkooptijd_maanden',
+  'swot_sterktes',
+  'swot_zwaktes',
+  'swot_kansen',
+  'swot_bedreigingen',
+]
+
 /** Signals in chunk sectionTitle or content that indicate a reference/appendix section. */
 const REFERENCE_CHUNK_SIGNALS = [
   'referentie type',
@@ -140,10 +162,22 @@ const REFERENCE_CHUNK_SIGNALS = [
 ]
 
 /**
+ * Returns true when the chunk belongs to a bijlagen / appendix section
+ * (section title is "bijlagen" or "appendix").
+ * These sections must not contribute to business-field extraction.
+ */
+export function isBijlagenChunk(chunk: TextChunk): boolean {
+  const title = chunk.sectionTitle.toLowerCase()
+  return title === 'bijlagen' || title === 'appendix'
+}
+
+/**
  * Returns true when the chunk belongs to a reference or appendix section.
- * Checks both the sectionTitle and the content for reference signals.
+ * Checks the section title (bijlagen/appendix) and the content for reference signals.
  */
 export function isReferenceOrAppendixChunk(chunk: TextChunk): boolean {
+  // Bijlagen sections are always appendix-like
+  if (isBijlagenChunk(chunk)) return true
   const lower = (chunk.sectionTitle + ' ' + chunk.content).toLowerCase()
   return REFERENCE_CHUNK_SIGNALS.some((s) => lower.includes(s))
 }
@@ -301,16 +335,20 @@ export function extractRuleBasedFieldsFromChunk(
     if (constructie?.value) found['constructie'] = constructie.value
   }
 
-  // Address — flatten to a combined string for easy comparison
-  const adresResult = extractAdres(content)
-  if (adresResult?.value?.straat) {
-    const parts = [
-      adresResult.value.straat,
-      adresResult.value.huisnummer,
-      adresResult.value.postcode,
-      adresResult.value.plaats,
-    ].filter(Boolean)
-    found['adres'] = parts.join(', ')
+  // Address — skip in reference/appendix chunks to prevent appendix address conflicts
+  // (bijlagen and comparable-object sections often contain different property addresses
+  //  which would pollute the main object's address field)
+  if (!isRefChunk) {
+    const adresResult = extractAdres(content)
+    if (adresResult?.value?.straat) {
+      const parts = [
+        adresResult.value.straat,
+        adresResult.value.huisnummer,
+        adresResult.value.postcode,
+        adresResult.value.plaats,
+      ].filter(Boolean)
+      found['adres'] = parts.join(', ')
+    }
   }
 
   // terrein, gevels, afwerking, omgeving_en_belendingen, voorzieningen — skip in reference/appendix chunks

@@ -84,6 +84,18 @@ describe('mapChapterToSectionKey (via splitReportIntoSections)', () => {
       expectedKey: 'object',
       body: 'Het object betreft een kantoorgebouw.',
     },
+    // Task 3: F.2 OPPERVLAKTE → oppervlakte (not overig)
+    {
+      heading: 'F.2 OPPERVLAKTE',
+      expectedKey: 'oppervlakte',
+      body: 'BVO: 1.500 m². VVO: 1.200 m².',
+    },
+    // Task 1: L BIJLAGEN OVERZICHT → bijlagen (not overig)
+    {
+      heading: 'L BIJLAGEN OVERZICHT',
+      expectedKey: 'bijlagen',
+      body: 'Bijlage 1: kadastrale kaart.',
+    },
   ]
 
   for (const { heading, expectedKey, body } of cases) {
@@ -121,5 +133,42 @@ describe('mapChapterToSectionKey (via splitReportIntoSections)', () => {
     const result = splitReportIntoSections(text)
     expect(result).not.toHaveProperty('locatie')
     expect(result).toHaveProperty('overig')
+  })
+
+  // Task 5: beoordeling must only match when BEOORDELING is the dominant topic
+  it('"F.4 MILIEUASPECTEN EN BEOORDELING" does NOT map to beoordeling (maps to object)', () => {
+    // The heading starts with MILIEUASPECTEN, not BEOORDELING → must not be beoordeling.
+    // As an F.x subsection, it falls back to the object chapter.
+    const text = makeText('F.4 MILIEUASPECTEN EN BEOORDELING', 'Milieuaspecten van het object.')
+    const result = splitReportIntoSections(text)
+    expect(result).not.toHaveProperty('beoordeling')
+    // Should map to object (F-chapter fallback)
+    expect(result).toHaveProperty('object')
+  })
+
+  // Bijlagen headings
+  it('"FOTO\'S" maps to bijlagen', () => {
+    const text = makeText("FOTO'S", 'Fotoreportage van het object.')
+    const result = splitReportIntoSections(text)
+    expect(result).toHaveProperty('bijlagen')
+  })
+
+  it('"KADASTRALE KAART" maps to bijlagen (not juridisch)', () => {
+    const text = makeText('KADASTRALE KAART', 'Kadastrale gegevens perceel G 123.')
+    const result = splitReportIntoSections(text)
+    expect(result).toHaveProperty('bijlagen')
+    expect(result).not.toHaveProperty('juridisch')
+  })
+
+  it('"BODEMINFORMATIE" maps to bijlagen', () => {
+    const text = makeText('BODEMINFORMATIE', 'Bodemloket informatie voor het perceel.')
+    const result = splitReportIntoSections(text)
+    expect(result).toHaveProperty('bijlagen')
+  })
+
+  it('"PLATTEGROND" maps to bijlagen', () => {
+    const text = makeText('PLATTEGROND', 'Plattegrond van de begane grond.')
+    const result = splitReportIntoSections(text)
+    expect(result).toHaveProperty('bijlagen')
   })
 })

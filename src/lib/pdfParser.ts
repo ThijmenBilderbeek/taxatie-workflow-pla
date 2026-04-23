@@ -1743,15 +1743,116 @@ export async function parsePdfToRapport(
   result.extractionDebug = extractAllFieldsWithConfidence(text)
 
   // --- extractedData: structured field extraction via extractPdfData ---
+  // Also explicitly merge the rule-based extraction results into the main result
+  // using high-priority candidates (exact_label / heading_block tier).
+  // This merge MUST happen before AI runs so the AI sees already-filled fields
+  // and skips them.  Without this merge, extractedData is isolated and AI
+  // could fill the same fields with lower-priority values.
   try {
-    const { extractPdfData, logExtractionResult } = await import('./pdfDataExtractor')
+    const { extractPdfData, extractPdfDataAsCandidates, logExtractionResult } = await import('./pdfDataExtractor')
+    const { mergeFieldCandidates, normalizeCanonicalAddress } = await import('./pdfFieldMerge')
     const extractedData = extractPdfData(text)
     result.extractedData = extractedData
     if (process.env.NODE_ENV !== 'production') {
       logExtractionResult(text, extractedData)
     }
+
+    // Build candidates from rule-based extraction and pick winners
+    const candidates = extractPdfDataAsCandidates(text)
+    if (candidates.length > 0) {
+      const winners = mergeFieldCandidates(candidates)
+
+      // Ensure nested objects exist
+      if (!result.wizardData) result.wizardData = {}
+
+      // Apply winners to the appropriate places in result, using "only-if-absent" logic
+      // (rule-based extraction is authoritative for scalar fields).
+
+      // Financial scalars
+      if (winners['marktwaarde_kk_afgerond'] && result.marktwaarde === undefined) {
+        result.marktwaarde = winners['marktwaarde_kk_afgerond'].value as number
+      }
+      if (winners['markthuur']) {
+        if (!result.wizardData.stap4) result.wizardData.stap4 = {} as NonNullable<typeof result.wizardData.stap4>
+        result.wizardData.stap4!.markthuurPerJaar ??= winners['markthuur'].value as number
+      }
+      if (winners['netto_huurwaarde']) {
+        if (!result.wizardData.stap4) result.wizardData.stap4 = {} as NonNullable<typeof result.wizardData.stap4>
+        result.wizardData.stap4!.huurprijsPerJaar ??= winners['netto_huurwaarde'].value as number
+      }
+
+      // BVO / VVO
+      if (winners['vloeroppervlak_bvo'] && result.bvo === undefined) {
+        result.bvo = winners['vloeroppervlak_bvo'].value as number
+        if (!result.wizardData.stap3) result.wizardData.stap3 = {} as NonNullable<typeof result.wizardData.stap3>
+        result.wizardData.stap3!.bvo ??= winners['vloeroppervlak_bvo'].value as number
+      }
+      if (winners['vloeroppervlak_vvo']) {
+        if (!result.wizardData.stap3) result.wizardData.stap3 = {} as NonNullable<typeof result.wizardData.stap3>
+        result.wizardData.stap3!.vvo ??= winners['vloeroppervlak_vvo'].value as number
+      }
+
+      // Scores / labels
+      if (winners['energielabel']) {
+        if (!result.wizardData.stap7) result.wizardData.stap7 = {} as NonNullable<typeof result.wizardData.stap7>
+        result.wizardData.stap7!.energielabel ??= winners['energielabel'].value as NonNullable<typeof result.wizardData.stap7>['energielabel']
+      }
+      if (winners['locatie_score']) {
+        if (!result.wizardData.stap2) result.wizardData.stap2 = {} as NonNullable<typeof result.wizardData.stap2>
+        result.wizardData.stap2!.locatiescore ??= winners['locatie_score'].value as string
+      }
+      // object_score, courantheid_*, verhuurtijd_*, verkooptijd_*, marktwaarde_per_m2:
+      // these have no corresponding typed fields in the Dossier schema.
+      // They are already stored in result.extractedData and are checked there by
+      // isFieldFilledInResult (so AI skips them when rule-based already extracted them).
+
+      // Free-text / heading-block fields
+      if (winners['constructie'] || winners['terrein']) {
+        if (!result.wizardData.stap6) result.wizardData.stap6 = {} as NonNullable<typeof result.wizardData.stap6>
+        if (winners['constructie']) result.wizardData.stap6!.constructie ??= winners['constructie'].value as string
+        if (winners['terrein']) result.wizardData.stap6!.terrein ??= winners['terrein'].value as string
+      }
+      if (winners['voorzieningen'] || winners['omgeving_en_belendingen']) {
+        if (!result.wizardData.stap2) result.wizardData.stap2 = {} as NonNullable<typeof result.wizardData.stap2>
+        if (winners['voorzieningen']) result.wizardData.stap2!.voorzieningen ??= winners['voorzieningen'].value as string
+        if (winners['omgeving_en_belendingen']) result.wizardData.stap2!.omgevingEnBelendingen ??= winners['omgeving_en_belendingen'].value as string
+      }
+
+      // SWOT — apply to stap9 (these are arrays; prefer rule-based when present)
+      const swotMap = [
+        ['swot_sterktes', 'swotSterktes'],
+        ['swot_zwaktes', 'swotZwaktes'],
+        ['swot_kansen', 'swotKansen'],
+        ['swot_bedreigingen', 'swotBedreigingen'],
+      ] as const
+      for (const [candidateKey, stap9Key] of swotMap) {
+        if (winners[candidateKey]) {
+          if (!result.wizardData.stap9) result.wizardData.stap9 = {} as NonNullable<typeof result.wizardData.stap9>
+          const s9 = result.wizardData.stap9 as Partial<NonNullable<typeof result.wizardData.stap9>>
+          if (!s9[stap9Key]) {
+            const raw = winners[candidateKey].value
+            s9[stap9Key] = Array.isArray(raw) ? (raw as string[]).join('\n') : String(raw)
+          }
+        }
+      }
+
+      // Address normalization: strip leading context from the parsed address
+      if (result.adres?.straat) {
+        const normalized = normalizeCanonicalAddress(result.adres.straat)
+        if (normalized !== result.adres.straat) {
+          console.log(
+            `[parsePdfToRapport] Address normalized: "${result.adres.straat}" → "${normalized}"`,
+          )
+          result.adres = { ...result.adres, straat: normalized }
+        }
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[parsePdfToRapport] Merged rule-based candidates into result:', Object.keys(winners).join(', '))
+      }
+    }
   } catch (extractErr) {
-    console.error('[parsePdfToRapport] extractPdfData failed:', extractErr instanceof Error ? extractErr.message : extractErr)
+    console.error('[parsePdfToRapport] extractPdfData/merge failed:', extractErr instanceof Error ? extractErr.message : extractErr)
     // Return empty ExtractedData conforming to the interface
     result.extractedData = {
       marktwaarde_kk_afgerond: null,

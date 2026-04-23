@@ -6,6 +6,9 @@
  * normalisation for the common taxatie-rapport format.
  */
 
+import type { FieldCandidate } from './pdfFieldMerge'
+import { SOURCE_PRIORITY, deriveConfidence } from './pdfFieldMerge'
+
 // ---------------------------------------------------------------------------
 // Public interface
 // ---------------------------------------------------------------------------
@@ -591,4 +594,80 @@ export function extractPdfData(text: string): ExtractedData {
   }
 
   return result
+}
+
+// ---------------------------------------------------------------------------
+// extractPdfDataAsCandidates
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs `extractPdfData` and converts the result into a `FieldCandidate[]`
+ * suitable for use with `mergeFieldCandidates`.
+ *
+ * Source tagging:
+ * - Numeric/scalar fields extracted via label matching → `exact_label` (highest priority)
+ * - Free-text fields extracted from section headings  → `heading_block` (high priority)
+ * - SWOT bullets extracted from heading blocks         → `heading_block`
+ *
+ * All rule-based candidates have `high` confidence by default.
+ *
+ * Fields with a null/empty value are excluded (no candidate emitted).
+ */
+export function extractPdfDataAsCandidates(text: string): FieldCandidate[] {
+  const data = extractPdfData(text)
+  const candidates: FieldCandidate[] = []
+
+  /** Helper to push a candidate when the value is non-null / non-empty. */
+  const push = (
+    field: string,
+    value: unknown,
+    source: FieldCandidate['source'],
+    section?: string,
+    snippet?: string,
+  ) => {
+    if (value === null || value === undefined) return
+    if (typeof value === 'number' && !isFinite(value)) return
+    if (typeof value === 'string' && !value.trim()) return
+    if (Array.isArray(value) && (value as unknown[]).length === 0) return
+    candidates.push({
+      field,
+      value,
+      source,
+      confidence: deriveConfidence(source),
+      priority: SOURCE_PRIORITY[source],
+      section,
+      snippet: snippet ?? (typeof value === 'string' ? value.slice(0, 80) : String(value).slice(0, 80)),
+    })
+  }
+
+  // Scalar / numeric fields — extracted via exact label matching
+  push('marktwaarde_kk_afgerond', data.marktwaarde_kk_afgerond, 'exact_label')
+  push('markthuur',               data.markthuur,               'exact_label')
+  push('netto_huurwaarde',        data.netto_huurwaarde,        'exact_label')
+  push('marktwaarde_per_m2',      data.marktwaarde_per_m2,      'exact_label')
+  push('vloeroppervlak_bvo',      data.vloeroppervlak_bvo,      'exact_label')
+  push('vloeroppervlak_vvo',      data.vloeroppervlak_vvo,      'exact_label')
+  push('verhuurtijd_maanden',     data.verhuurtijd_maanden,     'exact_label')
+  push('verkooptijd_maanden',     data.verkooptijd_maanden,     'exact_label')
+
+  // Score / string fields extracted via exact label matching
+  push('locatie_score',       data.locatie_score,       'exact_label')
+  push('object_score',        data.object_score,        'exact_label')
+  push('courantheid_verhuur', data.courantheid_verhuur, 'exact_label')
+  push('courantheid_verkoop', data.courantheid_verkoop, 'exact_label')
+  push('energielabel',        data.energielabel,        'exact_label')
+
+  // Free-text fields extracted from section headings — `heading_block`
+  push('constructie',           data.constructie,           'heading_block')
+  push('terrein',               data.terrein,               'heading_block')
+  push('voorzieningen',         data.voorzieningen,         'heading_block')
+  push('omgeving_en_belendingen', data.omgeving_en_belendingen, 'heading_block')
+
+  // SWOT bullet arrays — extracted from heading blocks
+  push('swot_sterktes',    data.swot_sterktes,    'heading_block')
+  push('swot_zwaktes',     data.swot_zwaktes,     'heading_block')
+  push('swot_kansen',      data.swot_kansen,      'heading_block')
+  push('swot_bedreigingen', data.swot_bedreigingen, 'heading_block')
+
+  return candidates
 }

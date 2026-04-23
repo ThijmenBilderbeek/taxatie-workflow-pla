@@ -272,21 +272,41 @@ export function isFieldFilledInResult(
       return !!result.wizardData?.stap2?.omgevingEnBelendingen
     case 'voorzieningen':
       return !!result.wizardData?.stap2?.voorzieningen
-    // Fields that have no direct HistorischRapport equivalent — always "missing"
-    // from the result perspective; the AI accumulator tracks them separately.
+    // Fields that are now merged into the result via pdfFieldMerge before AI runs.
+    // These fields have no typed Dossier schema equivalents; they live in extractedData.
+    // Check extractedData (rule-based) to prevent AI from refilling them.
+    case 'locatie_score':
+      return hasExtractedValue(result, 'locatie_score') || !!(result.wizardData?.stap2?.locatiescore)
+    case 'object_score':
+      return hasExtractedValue(result, 'object_score')
+    case 'courantheid_verhuur':
+      return hasExtractedValue(result, 'courantheid_verhuur')
+    case 'courantheid_verkoop':
+      return hasExtractedValue(result, 'courantheid_verkoop')
+    case 'verhuurtijd_maanden':
+      return hasExtractedValue(result, 'verhuurtijd_maanden')
+    case 'verkooptijd_maanden':
+      return hasExtractedValue(result, 'verkooptijd_maanden')
     case 'marktwaarde_per_m2':
+      return hasExtractedValue(result, 'marktwaarde_per_m2')
     case 'dakoppervlak':
     case 'glasoppervlak':
-    case 'locatie_score':
-    case 'object_score':
-    case 'courantheid_verhuur':
-    case 'courantheid_verkoop':
-    case 'verhuurtijd_maanden':
-    case 'verkooptijd_maanden':
       return false
     default:
       return false
   }
+}
+
+/**
+ * Returns true when the specified field in `result.extractedData` is present
+ * and non-null (indicating that rule-based extraction already filled it).
+ */
+function hasExtractedValue(
+  result: Partial<HistorischRapport>,
+  field: keyof NonNullable<HistorischRapport['extractedData']>,
+): boolean {
+  const v = result.extractedData?.[field]
+  return v !== null && v !== undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -533,6 +553,18 @@ const PRIORITY_FIELDS = new Set([
   'bouwjaar',
   'energielabel',
   'marktwaarde',
+  // Scalar fields that should always prefer rule-based over AI
+  'locatie_score',
+  'object_score',
+  'courantheid_verhuur',
+  'courantheid_verkoop',
+  'verhuurtijd_maanden',
+  'verkooptijd_maanden',
+  'adres',
+  'object_type',
+  'vloeroppervlak_bvo',
+  'vloeroppervlak_vvo',
+  'marktwaarde_per_m2',
 ])
 
 /** Placeholder values that are treated as meaningless. */
@@ -557,13 +589,17 @@ export function isMeaningfulValue(value: unknown): boolean {
 }
 
 /**
- * Returns a numeric priority for a field value.
- * Higher value = wins in a conflict.
+ * Returns a numeric priority for a field value, aligned with SOURCE_PRIORITY
+ * from pdfFieldMerge.ts.
  *
- * Priority tiers:
- * - `rule_based` / `combined` from any section: 100 (+ 20 bonus for PRIORITY_FIELDS)
- * - `ai` from a specific named section (not FULL_DOCUMENT): 50
- * - `ai` from FULL_DOCUMENT or generic section title: 10
+ * Priority tiers (matching SOURCE_PRIORITY scale):
+ * - `rule_based` / `combined` for PRIORITY_FIELDS: 300  (exact_label tier)
+ * - `rule_based` / `combined` for other fields:     250  (heading_block tier)
+ * - `ai` from a specific named section:             100  (ai tier)
+ * - `ai` from FULL_DOCUMENT or generic section:      25  (appendix_ai tier)
+ *
+ * Using the same scale as pdfFieldMerge ensures that rule-based candidates
+ * produced by this module always beat AI candidates when merged together.
  */
 export function getFieldPriority(
   fieldName: string,
@@ -571,11 +607,12 @@ export function getFieldPriority(
   sectionTitle: string,
 ): number {
   if (extractionType === 'rule_based' || extractionType === 'combined') {
-    return PRIORITY_FIELDS.has(fieldName) ? 120 : 100
+    // exact_label tier for known scalar fields, heading_block tier for others
+    return PRIORITY_FIELDS.has(fieldName) ? 300 : 250
   }
-  // AI
+  // AI — use ai tier (100) for named sections, appendix_ai tier (25) for FULL_DOCUMENT
   const isFullDoc = !sectionTitle || sectionTitle.toUpperCase() === FULL_DOCUMENT_SECTION_TITLE
-  return isFullDoc ? 10 : 50
+  return isFullDoc ? 25 : 100
 }
 
 /**

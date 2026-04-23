@@ -57,6 +57,9 @@ const SWOT_FIELDS = new Set([
   'swot_bedreigingen',
 ])
 
+/** Placeholder strings that represent absence of a value and are treated as meaningless. */
+const PLACEHOLDER_VALUES = new Set(['onbekend', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen'])
+
 /** Returns true when value is meaningful (non-null, non-empty, non-placeholder). */
 function isMeaningful(value: unknown): boolean {
   if (value === null || value === undefined) return false
@@ -66,8 +69,7 @@ function isMeaningful(value: unknown): boolean {
   }
   if (typeof value === 'string') {
     const t = value.trim().toLowerCase()
-    const SKIP = ['onbekend', '-', 'n.v.t.', 'nvt', 'niet beschikbaar', 'geen']
-    return t.length > 0 && !SKIP.includes(t)
+    return t.length > 0 && !PLACEHOLDER_VALUES.has(t)
   }
   return false
 }
@@ -259,9 +261,13 @@ export function mergeFieldCandidates(
 
 /**
  * Pattern matching a Dutch street name candidate at the end of a string.
- * Matches: CapitalizedWord(s) optionally followed by a house number,
- * trailed by optional comma/space separators.
- * Example: "Collse Hoefdijk, 16," or "Industrieweg 42"
+ *
+ * Groups explained:
+ * - `[A-ZÁÉÍ...]` : first letter is uppercase (street names start with capital)
+ * - `[a-záéí\-]+` : rest of first word (lowercase, hyphens allowed)
+ * - `(?:\s+[a-záéí\-]+)*` : optional additional lowercase words (e.g. "Collse Hoefdijk")
+ * - `(?:\s+\d+[a-z]?)?` : optional house number with letter suffix (e.g. "16" or "16a")
+ * - `[,\s]*$` : trailing comma/whitespace separators at end of string
  */
 const STREET_CANDIDATE_RE = /([A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÇ][a-záéíóúàèìòùäëïöüç\-]+(?:\s+[a-záéíóúàèìòùäëïöüç\-]+)*(?:\s+\d+[a-z]?)?)[,\s]*$/
 

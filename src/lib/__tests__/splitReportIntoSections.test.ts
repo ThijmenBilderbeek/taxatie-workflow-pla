@@ -133,7 +133,7 @@ Goed bereikbaar per openbaar vervoer.`
     expect(result.locatie).toContain('openbaar vervoer')
   })
 
-  it('unrecognized chapters are silently skipped but volledig still contains everything', () => {
+  it('bijlagen chapters map to bijlagen section key', () => {
     const text = `A. Samenvatting
 De samenvatting van het rapport.
 
@@ -143,8 +143,10 @@ Bijlage 1: tekeningen.`
     const result = splitReportIntoSections(text)
 
     expect(result).toHaveProperty('samenvatting')
-    expect(result).not.toHaveProperty('bijlagen')
-    // volledig should still contain the unrecognized chapter text
+    // "K. Bijlagen" contains the word "bijlagen" → must map to 'bijlagen', not be silently dropped
+    expect(result).toHaveProperty('bijlagen')
+    expect(result.bijlagen).toContain('Bijlage 1: tekeningen')
+    // volledig should still contain the bijlagen text
     expect(result.volledig).toContain('Bijlage 1: tekeningen')
   })
 

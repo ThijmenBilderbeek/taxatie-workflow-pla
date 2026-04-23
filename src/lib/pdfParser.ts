@@ -295,8 +295,11 @@ export function extractSwotFromText(text: string): {
  *   "C.2 BEOORDELING"               → "beoordeling"
  *   "E LOCATIE"                      → "locatie"
  *   "F OBJECT"                       → "object"
+ *   "F.2 OPPERVLAKTE"                → "oppervlakte"
+ *   "F.4 MILIEUASPECTEN EN BEOORDELING" → "object" (not beoordeling)
  *   "H ONDERBOUWING"                 → "onderbouwing"
  *   "I DUURZAAMHEID"                 → "duurzaamheid"
+ *   "L BIJLAGEN OVERZICHT"           → "bijlagen"
  */
 function mapChapterToSectionKey(chapter: string, subchapter: string, headingText: string): string {
   // Normalise: collapse Unicode whitespace (NBSP U+00A0, narrow NBSP U+202F, thin-space
@@ -309,13 +312,46 @@ function mapChapterToSectionKey(chapter: string, subchapter: string, headingText
   if (/samenvatting|inhoudsopgave|resume|inleiding|conclusie|summary/.test(normalised)) return 'samenvatting'
   // swot must come BEFORE beoordeling because "SWOT-ANALYSE EN BEOORDELING" contains both
   if (/swot/.test(normalised)) return 'swot'
-  // beoordeling (e.g. "C.2 BEOORDELING")
-  if (/beoordeling/.test(normalised)) return 'beoordeling'
+
+  // bijlagen / appendix — detect before other keys to prevent cadastral/photo/map
+  // headings from accidentally matching juridisch, duurzaamheid, etc.
+  // Matches: "L BIJLAGEN OVERZICHT", any L.x subsection, photo sections,
+  // cadastral appendices, deed/notary appendices, bodeminformatie, map appendices.
+  if (/\bbijlagen?\b/.test(normalised)) return 'bijlagen'
+  if (/\bfoto(?:bijlage|reportage)?s?\b|\bfotobijlage\b/.test(normalised)) return 'bijlagen'
+  if (/\bkadastr(?:aal|ale)\b/.test(normalised)) return 'bijlagen'
+  if (/\b(?:leveringsakte|notari[eë]le\s+akte|\bakte\b)/.test(normalised)) return 'bijlagen'
+  if (/\bbodeminformatie\b|\bbodemloket\b|\bbodemrapport\b/.test(normalised)) return 'bijlagen'
+  if (/\b(?:plattegrond|liggingskaart|omgevingskaart)\b/.test(normalised)) return 'bijlagen'
+
+  // beoordeling — strict match: BEOORDELING must be the dominant topic of the heading.
+  // After stripping any leading chapter-number prefix (e.g. "C.2", "C"), the remainder
+  // must start with "beoordeling". This prevents "F.4 MILIEUASPECTEN EN BEOORDELING"
+  // from matching because its first topic word is "milieuaspecten", not "beoordeling".
+  // Covered: "C.2 BEOORDELING" → beoordeling, "BEOORDELING" → beoordeling.
+  // NOT covered: "F.4 MILIEUASPECTEN EN BEOORDELING" → does not map to beoordeling.
+  {
+    const headingNorm = headingText
+      .replace(/[\u00A0\u202F\u2003\u2009\u00AD]+/g, ' ')
+      .trim()
+      .toLowerCase()
+    const withoutChapterPrefix = headingNorm.replace(/^[a-z]\d*(?:\.\d+)*\s*/, '').trim()
+    if (/^beoordeling\b/.test(withoutChapterPrefix)) return 'beoordeling'
+  }
+
+  // oppervlakte — F.2 OPPERVLAKTE and similar subsection headings
+  if (/\boppervlakte\b|\boppervlakten\b/.test(normalised)) return 'oppervlakte'
+
   // object — \bobject\b so uppercase headings like "F OBJECT" map correctly
   if (/\bobject\b|object(?:omschrijving|beschrijving|gegevens)|type\s+object|vastgoed(?:type)?|object\s+type/.test(normalised)) return 'object'
   // locatie — word-boundary matches only; never match substrings like "locatiebeschrijving" accidentally
   if (/\blocatie\b|\bligging\b|\bomgeving\b|\bbuurt\b|\bbereikbaarheid\b|\bontsluiting\b/.test(normalised)) return 'locatie'
-  if (/juridisch|eigendom|erfpacht|bestemmingsplan|planolog|kadaster|recht(?:en)?/.test(normalised)) return 'juridisch'
+  if (/juridisch|eigendom|erfpacht|bestemmingsplan|planolog|recht(?:en)?/.test(normalised)) return 'juridisch'
+  // Note: 'kadaster' was intentionally removed from the juridisch pattern above.
+  // Any heading containing "kadastraal/kadastrale" is matched earlier by the bijlagen check
+  // (cadastral extracts/maps are appendix items in Dutch taxatie reports). Body content
+  // about cadastral rights that happens to sit under a 'juridisch' heading section is
+  // not affected — only the heading line itself is passed to this function.
   if (/technisch|bouwkundig|onderhoud|fundering|dak|installatie|constructie|gebouwstaat/.test(normalised)) return 'technisch'
   if (/waarde(?:ring|peildatum)?|taxatie(?:methode)?|marktwaarde|\bbar\b|\bnar\b|dcf|rendement/.test(normalised)) return 'waardering'
   // onderbouwing (e.g. "H ONDERBOUWING")
@@ -323,6 +359,14 @@ function mapChapterToSectionKey(chapter: string, subchapter: string, headingText
   if (/referentie|vergelijking(?:sobject)?|koopreferentie|huurreferentie|comparable/.test(normalised)) return 'referenties'
   if (/markt(?:analyse|onderzoek|ontwikkeling|context)|vraag\s+en\s+aanbod|\btransacties\b|conjunctuur/.test(normalised)) return 'marktanalyse'
   if (/aannam|voorbehoud|uitgangspunt|bijzondere\s+omstandigh|disclaimer/.test(normalised)) return 'aannames'
+
+  // F-chapter fallback: any F.x subsection that has not matched a more specific key
+  // defaults to "object" instead of "overig". The F chapter in Dutch taxatie reports
+  // is the OBJECT chapter ("F OBJECT"), so its subsections belong there.
+  // This ensures e.g. "F.4 MILIEUASPECTEN EN BEOORDELING" → object (not overig/beoordeling).
+  // Note: placed BEFORE duurzaamheid so that "F.4 MILIEU..." does not match /milieu/ there.
+  if (/^f[\s.]/.test(normalised)) return 'object'
+
   if (/duurzaamheid|energie(?:label|prestatie)?|milieu|\bepc\b|verduurzaming|co2|gas(?:verbruik)?/.test(normalised)) return 'duurzaamheid'
 
   // Unmapped headings → 'overig' (never silently collapse into locatie or another section)
@@ -340,7 +384,7 @@ function mapChapterToSectionKey(chapter: string, subchapter: string, headingText
  *
  * Section keys: samenvatting, object, locatie, juridisch, technisch, waardering,
  *               swot, beoordeling, onderbouwing, marktanalyse, referenties,
- *               aannames, duurzaamheid, overig, volledig
+ *               aannames, duurzaamheid, oppervlakte, bijlagen, overig, volledig
  */
 export function splitReportIntoSections(text: string): Record<string, string> {
   const sections: Record<string, string[]> = {}
@@ -387,6 +431,13 @@ export function splitReportIntoSections(text: string): Record<string, string> {
   const finalSectionKeys = Object.keys(sections)
   const namedKeys = finalSectionKeys.filter((k) => k !== 'overig')
   console.log(`[splitReportIntoSections] Final section keys (${namedKeys.length} named + ${sections['overig'] ? 1 : 0} overig): ${finalSectionKeys.join(', ')}`)
+
+  // Log char count per semantic section (bijlagen sections are highlighted)
+  for (const key of finalSectionKeys) {
+    const chars = sections[key].reduce((sum, s) => sum + s.length, 0)
+    const isBijlagen = key === 'bijlagen'
+    console.log(`[splitReportIntoSections] Section distribution: key="${key}" chars=${chars}${isBijlagen ? ' [bijlagen — excluded from business fields]' : ''}`)
+  }
 
   // Build the result, joining multiple detected sections under the same key
   const hasNamedSections = namedKeys.length > 0

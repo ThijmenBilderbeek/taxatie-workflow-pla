@@ -24,8 +24,10 @@ import {
   mergeExtractionResults,
   isReferenceOrAppendixChunk,
   isBijlagenChunk,
+  classifyChunkAsAppendix,
   REFERENCE_SENSITIVE_FIELDS,
   BIJLAGEN_SENSITIVE_FIELDS,
+  APPENDIX_SECTION_KEYS,
   AI_EXTRACTABLE_FIELDS,
   type AIFieldValue,
   type ChunkExtractionResult,
@@ -37,8 +39,9 @@ const MAX_TEXT_CHARS = 30000
 /**
  * Section keys that are bijlagen/appendix and must never be primary sources
  * for business fields. Used to filter out bijlagen from getRelevantTextForFields.
+ * Aliases the shared APPENDIX_SECTION_KEYS constant from pdfChunkAIExtractor.
  */
-const BIJLAGEN_SECTION_KEYS = new Set(['bijlagen', 'appendix'])
+const BIJLAGEN_SECTION_KEYS = APPENDIX_SECTION_KEYS
 
 /**
  * Maps missing field names to the most relevant `rapportTeksten` section keys.
@@ -593,6 +596,30 @@ export async function aiExtractMissingFieldsWithChunks(
   // early-stop so every chunk in the document gets a chance to be processed.
   const isFullDocumentMode = textChunks.length > 0 && textChunks.every((c) => c.sectionTitle === FULL_DOCUMENT_SECTION_TITLE)
 
+  // High-value sections that must all be processed before early stop is allowed.
+  // Also used as the routing high-priority set — these sections are sorted first.
+  const HIGH_VALUE_SECTIONS = new Set(['swot', 'beoordeling', 'locatie', 'object', 'oppervlakte', 'onderbouwing', 'duurzaamheid'])
+  // Tracks which high-value sections have been seen during the loop.
+  const seenHighValueSections = new Set<string>()
+  const allHighValueSeen = () => [...HIGH_VALUE_SECTIONS].every((s) => seenHighValueSections.has(s))
+
+  // Routing priority: process high-value sections before low-value ones.
+  // High-value sections share priority 0 (derived from HIGH_VALUE_SECTIONS above).
+  // Chunks within the same priority group retain their original order.
+  const LOW_PRIORITY_SECTIONS = new Set(['overig', 'aannames', 'referenties', 'bijlagen'])
+  const getSectionPriority = (title: string): number => {
+    const lower = title.toLowerCase().trim()
+    if (HIGH_VALUE_SECTIONS.has(lower)) return 0
+    if (LOW_PRIORITY_SECTIONS.has(lower)) return 2
+    return 1
+  }
+  const sortedChunks = [...textChunks].sort((a, b) => {
+    const pa = getSectionPriority(a.sectionTitle)
+    const pb = getSectionPriority(b.sectionTitle)
+    if (pa !== pb) return pa - pb
+    return a.chunkIndex - b.chunkIndex
+  })
+
   // Ensure nested objects exist so merging below is safe.
   if (!merged.adres) merged.adres = { straat: '', huisnummer: '', postcode: '', plaats: '' }
   if (!merged.wizardData) merged.wizardData = {}
@@ -613,10 +640,11 @@ export async function aiExtractMissingFieldsWithChunks(
   // Counter for bijlagen chunks skipped (logged in the summary)
   let bijlagenChunksSkipped = 0
 
-  for (const chunk of textChunks) {
+  for (const chunk of sortedChunks) {
     const chunkLabel = `[chunk ${chunk.chunkIndex + 1}/${chunk.totalChunks} "${chunk.sectionTitle}"]`
 
     // Step 1: rule-based extraction on this chunk.
+    const sectionLower = chunk.sectionTitle.toLowerCase().trim()
     const ruleBasedFound = extractRuleBasedFieldsFromChunk(chunk)
     const ruleBasedKeys = Object.keys(ruleBasedFound)
     if (ruleBasedKeys.length > 0) {
@@ -643,26 +671,56 @@ export async function aiExtractMissingFieldsWithChunks(
     }
 
     // Early-stop: skip remaining chunks if AI has found nothing new for N consecutive chunks.
-    // Disabled for FULL_DOCUMENT mode — all chunks must be processed when no named sections exist.
+    // Disabled for FULL_DOCUMENT mode.
+    // Also disabled until all high-value sections have been processed at least once.
+    // NOTE: we check BEFORE adding the current section to seenHighValueSections, so the
+    // current chunk is always processed (AI called) even if it is the last high-value section.
+    // Appendix/bijlagen chunks are excluded from the consecutive-empty streak.
+    const isAppendixChunk = APPENDIX_SECTION_KEYS.has(sectionLower)
     if (!isFullDocumentMode && consecutiveEmptyAIResponses >= EARLY_STOP_THRESHOLD) {
-      console.log(`[pdfAIExtractor] Early stop: ${EARLY_STOP_THRESHOLD} consecutive chunks with no new AI fields — stopping`)
-      earlyStopApplied = true
-      // Current chunk + all remaining chunks are skipped (AI call not made for any of them)
-      aiCallsSkipped += textChunks.length - chunk.chunkIndex
-      break
+      if (!allHighValueSeen()) {
+        console.log(
+          `[pdfAIExtractor] Early stop suppressed — not all high-value sections processed yet. ` +
+          `Seen: [${[...seenHighValueSections].join(', ')}], ` +
+          `Missing: [${[...HIGH_VALUE_SECTIONS].filter((s) => !seenHighValueSections.has(s)).join(', ')}], ` +
+          `consecutiveEmpty: ${consecutiveEmptyAIResponses}`,
+        )
+      } else {
+        console.log(
+          `[pdfAIExtractor] Early stop: ${EARLY_STOP_THRESHOLD} consecutive chunks with no new AI fields — stopping. ` +
+          `All high-value sections seen: [${[...seenHighValueSections].join(', ')}]`,
+        )
+        earlyStopApplied = true
+        // Current chunk + all remaining chunks are skipped
+        aiCallsSkipped += sortedChunks.length - sortedChunks.indexOf(chunk)
+        break
+      }
+    }
+
+    // Track which high-value sections have been visited.
+    // Done AFTER the early-stop check so the current section is always fully processed
+    // before being counted as "seen" — ensuring early stop cannot fire on the last high-value chunk.
+    if (HIGH_VALUE_SECTIONS.has(sectionLower)) {
+      seenHighValueSections.add(sectionLower)
     }
 
     // For bijlagen/appendix chunks, apply the broader BIJLAGEN_SENSITIVE_FIELDS filter
     // (includes adres, scores, courantheid, SWOT in addition to REFERENCE_SENSITIVE_FIELDS).
     // For other reference/appendix chunks, apply the narrower REFERENCE_SENSITIVE_FIELDS filter.
-    // isReferenceOrAppendixChunk() already returns true for bijlagen chunks, so we use
-    // isBijlagenChunk() only to decide which sensitive-field set to apply.
+    // isBijlagenChunk() is used only to decide which sensitive-field set to apply.
     const isBijlChunk = isBijlagenChunk(chunk)
     const isAnyRefChunk = isReferenceOrAppendixChunk(chunk)
     const sensitiveFields = isBijlChunk ? BIJLAGEN_SENSITIVE_FIELDS : REFERENCE_SENSITIVE_FIELDS
     const effectiveMissingFields = isAnyRefChunk
       ? missingFields.filter((f) => !sensitiveFields.includes(f))
       : missingFields
+
+    // Debug log: appendix/reference classification decision for this chunk.
+    const { classifiedAsAppendix, reason } = classifyChunkAsAppendix(chunk)
+    console.log(
+      `[pdfAIExtractor] ${chunkLabel} appendixClassification: classifiedAsAppendix=${classifiedAsAppendix}, reason="${reason}"`,
+    )
+
     if (isBijlChunk) {
       const excluded = missingFields.length - effectiveMissingFields.length
       console.log(`[pdfAIExtractor] ${chunkLabel} Bijlagen/appendix chunk — excluding ${excluded} sensitive field(s) from AI request`)
@@ -673,6 +731,8 @@ export async function aiExtractMissingFieldsWithChunks(
     if (effectiveMissingFields.length === 0) {
       console.log(`[pdfAIExtractor] ${chunkLabel} No requestable fields after reference filter — skipping AI call`)
       aiCallsSkipped++
+      // Appendix chunks do not count toward the no-fill streak
+      if (!isAppendixChunk) consecutiveEmptyAIResponses++
       continue
     }
 
@@ -729,7 +789,10 @@ export async function aiExtractMissingFieldsWithChunks(
         if (!(key in aiAccumulator)) aiAccumulator[key] = value
       }
     } else {
-      consecutiveEmptyAIResponses++
+      // Appendix chunks do not count toward the consecutive-empty streak
+      if (!isAppendixChunk) {
+        consecutiveEmptyAIResponses++
+      }
     }
   }
 

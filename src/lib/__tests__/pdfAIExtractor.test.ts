@@ -9,7 +9,7 @@ vi.mock('../supabaseClient', () => ({
   },
 }))
 
-import { getRelevantTextForFields, aiExtractMissingFields } from '../pdfAIExtractor'
+import { getRelevantTextForFields, aiExtractMissingFields, aiExtractMissingFieldsWithChunks } from '../pdfAIExtractor'
 import { supabase } from '../supabaseClient'
 
 // MIN_SECTION_LENGTH_THRESHOLD is 500 — use padding to exceed it
@@ -212,5 +212,101 @@ describe('aiExtractMissingFields — stap9 merge logic', () => {
 
     expect(result).toEqual(currentResult)
     expect(aiDebug).toEqual({})
+  })
+})
+
+// ─── aiExtractMissingFieldsWithChunks — early stop and classification ──────────
+
+describe('aiExtractMissingFieldsWithChunks — early stop precondition', () => {
+  it('does not fire early stop before all high-value sections have been processed', async () => {
+    const mockInvoke = vi.mocked(supabase.functions.invoke)
+    mockInvoke.mockClear()
+    // Always return empty fields (no AI fill) to trigger potential early stop
+    mockInvoke.mockResolvedValue({ data: {}, error: null })
+
+    // Build 10 chunks with the EARLY_STOP_THRESHOLD (5) consecutive empty responses,
+    // but include all 7 high-value sections so the precondition is satisfied.
+    const HIGH_VALUE = ['swot', 'beoordeling', 'locatie', 'object', 'oppervlakte', 'onderbouwing', 'duurzaamheid']
+    const chunks = [
+      ...HIGH_VALUE.map((s, i) => ({
+        sectionTitle: s,
+        content: `Inhoud van ${s} sectie met voldoende tekst om verwerkt te worden.`,
+        chunkIndex: i,
+        totalChunks: HIGH_VALUE.length + 3,
+      })),
+      // Three extra no-fill chunks that push consecutive empty count beyond threshold
+      { sectionTitle: 'samenvatting', content: 'Extra chunk 1', chunkIndex: 7, totalChunks: 10 },
+      { sectionTitle: 'samenvatting', content: 'Extra chunk 2', chunkIndex: 8, totalChunks: 10 },
+      { sectionTitle: 'samenvatting', content: 'Extra chunk 3', chunkIndex: 9, totalChunks: 10 },
+    ]
+
+    const currentResult = {
+      adres: { straat: '', huisnummer: '', postcode: '', plaats: '' },
+      wizardData: {},
+    }
+
+    // Should complete without errors — early stop may fire after high-value sections are all seen
+    const { result } = await aiExtractMissingFieldsWithChunks(chunks, currentResult)
+    expect(result).toBeDefined()
+
+    // All 7 high-value section chunks must have been attempted (AI called for each)
+    // We verify by checking that mockInvoke was called at least 7 times
+    expect(mockInvoke.mock.calls.length).toBeGreaterThanOrEqual(HIGH_VALUE.length)
+  })
+})
+
+describe('aiExtractMissingFieldsWithChunks — bijlagen excluded, onderbouwing not', () => {
+  it('does not exclude adres field from onderbouwing chunk', async () => {
+    const mockInvoke = vi.mocked(supabase.functions.invoke)
+    mockInvoke.mockClear()
+    mockInvoke.mockResolvedValue({
+      data: { adres: 'Teststraat 1, 1234AB, Amsterdam' },
+      error: null,
+    })
+
+    const chunks = [
+      {
+        sectionTitle: 'onderbouwing',
+        // Use content without a parseable address so rule-based extraction does not fill adres,
+        // ensuring adres stays in the missing fields that get forwarded to AI.
+        content: 'De marktwaarde van het object wordt hier onderbouwd op basis van vergelijkingsobjecten.',
+        chunkIndex: 0,
+        totalChunks: 1,
+      },
+    ]
+
+    const currentResult = { adres: { straat: '', huisnummer: '', postcode: '', plaats: '' }, wizardData: {} }
+    const { result } = await aiExtractMissingFieldsWithChunks(chunks, currentResult)
+
+    // adres field must have been passed to AI (not filtered out) for onderbouwing chunk
+    const firstCall = mockInvoke.mock.calls[0]
+    const body = firstCall?.[1]?.body as { missingFields?: string[] } | undefined
+    expect(body?.missingFields).toContain('adres')
+  })
+
+  it('excludes adres field from bijlagen chunk', async () => {
+    const mockInvoke = vi.mocked(supabase.functions.invoke)
+    mockInvoke.mockClear()
+    mockInvoke.mockResolvedValue({ data: {}, error: null })
+
+    const chunks = [
+      {
+        sectionTitle: 'bijlagen',
+        content: 'Bijlage 1: kadastrale kaart. Adres: Teststraat 1, 1234AB, Amsterdam.',
+        chunkIndex: 0,
+        totalChunks: 1,
+      },
+    ]
+
+    const currentResult = { adres: { straat: '', huisnummer: '', postcode: '', plaats: '' }, wizardData: {} }
+    await aiExtractMissingFieldsWithChunks(chunks, currentResult)
+
+    // adres field must NOT have been passed to AI for bijlagen chunk
+    const firstCall = mockInvoke.mock.calls[0]
+    if (firstCall) {
+      const body = firstCall?.[1]?.body as { missingFields?: string[] } | undefined
+      expect(body?.missingFields ?? []).not.toContain('adres')
+    }
+    // If no AI call was made at all (all fields filtered), that's also acceptable
   })
 })

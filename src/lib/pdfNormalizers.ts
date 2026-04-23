@@ -230,19 +230,65 @@ export function normalizeDecimalNumber(raw: string): number | undefined {
 }
 
 /**
+ * Strips leading sentence fragments from an address string.
+ *
+ * Some extraction pipelines return addresses with leading context, e.g.:
+ *   "bij EP-online. Collse Hoefdijk, 16, 5674VK, Nuenen"
+ *   "gebruik mogelijk. Hoofdstraat 1, 1234AB, Utrecht"
+ *   "schriftelijke toestemming. Dorpsstraat 5, 5678CD, Amsterdam"
+ *
+ * The function locates the last Dutch postcode in the string, then walks
+ * backwards to find the most recent sentence boundary (`. ` or `: `) before
+ * the postcode.  Everything from after that boundary to the end of the string
+ * is returned as the clean address.
+ *
+ * If no postcode is found, or no sentence boundary precedes the postcode, the
+ * original string is returned trimmed.
+ */
+export function stripAddressLeadingContext(text: string): string {
+  if (!text) return text
+  const trimmed = text.trim()
+
+  // Find all Dutch postcodes and keep the last one.
+  const postcodeRegex = /\b\d{4}\s?[A-Z]{2}\b/g
+  let lastMatch: RegExpExecArray | null = null
+  let m: RegExpExecArray | null
+  while ((m = postcodeRegex.exec(trimmed)) !== null) lastMatch = m
+  if (!lastMatch) return trimmed
+
+  // Slice everything before the last postcode.
+  const beforePostcode = trimmed.slice(0, lastMatch.index)
+
+  // Find the last sentence boundary (`. ` or `: `) before the postcode.
+  // We want the position immediately after the boundary — that's where the
+  // real street name starts.
+  // The greedy `.*` (with `s` flag for dotall) ensures we match up to the LAST
+  // boundary, not the first — intentional: multiple sentence fragments are all stripped.
+  const boundaryMatch = beforePostcode.match(/^.*[.:]\s+/s)
+  if (boundaryMatch) {
+    return trimmed.slice(boundaryMatch[0].length).trim()
+  }
+
+  return trimmed
+}
+
+/**
  * Parses a Dutch address string into its components.
  * Supports:
  *   "Columbusweg 13, 5928LA Venlo"
  *   "Columbusweg 13 5928 LA Venlo"
  *   "TAXATIERAPPORT Columbusweg 13 5928 LA Venlo" (noise words stripped)
+ *   "bij EP-online. Collse Hoefdijk, 16, 5674VK, Nuenen" (leading context stripped)
  *   Huisnummer additions: "13A", "13-15", "13 b"
  */
-export function parseAddress(text: string): {
+export function parseAddress(rawText: string): {
   straat: string
   huisnummer: string
   postcode: string
   plaats: string
 } | undefined {
+  // Strip any leading sentence fragments before the actual address
+  const text = stripAddressLeadingContext(rawText)
   // Find Dutch postcode: 4 digits + optional space + 2 uppercase letters
   const postcodeMatch = text.match(/\b(\d{4})\s?([A-Z]{2})\b/)
   if (!postcodeMatch) return undefined
@@ -267,8 +313,8 @@ export function parseAddress(text: string): {
 
   const NOISE = ['taxatierapport', 'rapport', 'inhoud', 'pagina', 'inhoudsopgave', 'samenvatting']
 
-  // Tokenize on whitespace
-  const tokens = beforePostcode.split(/\s+/).filter(Boolean)
+  // Tokenize on whitespace; strip trailing commas from each token (comma-separated format)
+  const tokens = beforePostcode.split(/\s+/).filter(Boolean).map((t) => t.replace(/,+$/, ''))
   if (tokens.length === 0) return { straat: '', huisnummer: '', postcode, plaats }
 
   // Find the last token that looks like a housenumber (starts with a digit)

@@ -151,15 +151,26 @@ export const BIJLAGEN_SENSITIVE_FIELDS: AIExtractableField[] = [
   'swot_bedreigingen',
 ]
 
-/** Signals in chunk sectionTitle or content that indicate a reference/appendix section. */
-const REFERENCE_CHUNK_SIGNALS = [
-  'referentie type',
-  'huurreferenties',
-  'koopreferenties',
-  'bijlagen',
-  'individuele referenties',
-  'toelichting op deze referentie',
-]
+/**
+ * Explicit allow-list of sectionTitle values that classify a chunk as appendix/reference.
+ * Only these semantic keys may be treated as appendix — no substring or content matching.
+ */
+export const APPENDIX_SECTION_KEYS = new Set(['bijlagen', 'appendix', 'referenties'])
+
+/**
+ * Sections that must NEVER be classified as appendix/reference, regardless of content.
+ * These are core business sections that must always participate in AI extraction.
+ */
+export const NON_APPENDIX_SECTION_KEYS = new Set([
+  'waardering',
+  'onderbouwing',
+  'object',
+  'locatie',
+  'beoordeling',
+  'duurzaamheid',
+  'aannames',
+  'overig',
+])
 
 /**
  * Returns true when the chunk belongs to a bijlagen / appendix section
@@ -167,19 +178,43 @@ const REFERENCE_CHUNK_SIGNALS = [
  * These sections must not contribute to business-field extraction.
  */
 export function isBijlagenChunk(chunk: TextChunk): boolean {
-  const title = chunk.sectionTitle.toLowerCase()
+  const title = chunk.sectionTitle.toLowerCase().trim()
   return title === 'bijlagen' || title === 'appendix'
 }
 
 /**
  * Returns true when the chunk belongs to a reference or appendix section.
- * Checks the section title (bijlagen/appendix) and the content for reference signals.
+ * Classification is based solely on an explicit allow-list check of sectionTitle.
+ * Sections in NON_APPENDIX_SECTION_KEYS are never classified as appendix,
+ * even if their content mentions bijlagen or referenties.
+ *
+ * Reason returned alongside the boolean (for debug logging) via classifyChunkAsAppendix().
  */
 export function isReferenceOrAppendixChunk(chunk: TextChunk): boolean {
-  // Bijlagen sections are always appendix-like
-  if (isBijlagenChunk(chunk)) return true
-  const lower = (chunk.sectionTitle + ' ' + chunk.content).toLowerCase()
-  return REFERENCE_CHUNK_SIGNALS.some((s) => lower.includes(s))
+  return classifyChunkAsAppendix(chunk).classifiedAsAppendix
+}
+
+/**
+ * Classifies a chunk as appendix/reference and returns the result with a reason string.
+ * Intended for debug logging in pdfAIExtractor.
+ */
+export function classifyChunkAsAppendix(chunk: TextChunk): {
+  classifiedAsAppendix: boolean
+  reason: string
+} {
+  const title = chunk.sectionTitle.toLowerCase().trim()
+
+  // Explicit denylist: these sections must never be classified as appendix
+  if (NON_APPENDIX_SECTION_KEYS.has(title)) {
+    return { classifiedAsAppendix: false, reason: `sectionTitle "${title}" in NON_APPENDIX_SECTION_KEYS` }
+  }
+
+  // Explicit allow-list: only these section titles classify as appendix
+  if (APPENDIX_SECTION_KEYS.has(title)) {
+    return { classifiedAsAppendix: true, reason: `sectionTitle "${title}" in APPENDIX_SECTION_KEYS` }
+  }
+
+  return { classifiedAsAppendix: false, reason: `sectionTitle "${title}" not in APPENDIX_SECTION_KEYS` }
 }
 
 // ---------------------------------------------------------------------------

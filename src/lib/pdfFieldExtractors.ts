@@ -652,6 +652,8 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
     { keyword: 'logistiek', value: 'bedrijfshal' },
     { keyword: 'magazijn', value: 'bedrijfshal' },
     { keyword: 'kantoorgebouw', value: 'kantoor' },
+    { keyword: 'kantoorpand', value: 'kantoor' },
+    { keyword: 'kantoorruimte', value: 'kantoor' },
     { keyword: 'kantoor', value: 'kantoor' },
     { keyword: 'winkel', value: 'winkel' },
     { keyword: 'horeca', value: 'overig' },
@@ -660,6 +662,13 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
     { keyword: 'appartement', value: 'appartement' },
     { keyword: 'woning', value: 'woning' },
   ]
+
+  // Office-signal regex: if the document contains kantoor-family words, do not assign "woning"
+  // from a generic keyword scan — it would be a false positive from residential market text.
+  // Note: an identical regex is used in pdfParser.ts → extractWizardDataFromText.
+  // Both copies are intentionally kept in sync; a future refactor could extract them
+  // to a shared utils module.
+  const OFFICE_SIGNAL_RE = /\bkantoor(?:gebouw|pand|ruimte|en)?\b|\bkantorenmarkt\b/i
 
   // Priority 1: IPD-type labels (highest confidence, used in IPD/RICS-formatted reports)
   // Skip reference sections (Bug 22-23)
@@ -670,6 +679,7 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
     if (!/eigen\s+gebruik/.test(lower)) {
       for (const { keyword, value } of PHYSICAL_TYPES) {
         if (lower.includes(keyword)) {
+          console.log(`[extractTypeObject] typeObject="${value}" via IPD label (keyword="${keyword}", snippet="${ipdExact.snippet}")`)
           return { value, confidence: 'high', sourceLabel: ipdExact.label, sourceSnippet: ipdExact.snippet, sourceSection: 'Stap 1', parserRule: 'ipd-label' }
         }
       }
@@ -678,7 +688,7 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
 
   // Priority 2: "het object betreft een ..." / "betreft een kantoor(gebouw)"
   // Scan all matches and skip reference sections
-  const betrefRe = /\bbetreft\s+een\s+(kantoorgebouw|kantoor|bedrijfshal|bedrijfscomplex|winkel|woning|appartement)\b/gi
+  const betrefRe = /\bbetreft\s+een\s+(kantoorgebouw|kantoorpand|kantoorruimte|kantoor|bedrijfshal|bedrijfscomplex|winkel|woning|appartement)\b/gi
   let betrefMatch: RegExpExecArray | null
   while ((betrefMatch = betrefRe.exec(text)) !== null) {
     if (isInReferenceSection(text, betrefMatch.index)) continue
@@ -686,6 +696,7 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
     for (const { keyword, value } of PHYSICAL_TYPES) {
       if (lower.includes(keyword)) {
         const snippet = text.slice(Math.max(0, betrefMatch.index - 10), betrefMatch.index + betrefMatch[0].length + 20).replace(/\s+/g, ' ')
+        console.log(`[extractTypeObject] typeObject="${value}" via "betreft een" (keyword="${keyword}", snippet="${snippet}")`)
         return { value, confidence: 'high', sourceLabel: 'betreft een', sourceSnippet: snippet, sourceSection: 'Stap 1', parserRule: 'betreft-een' }
       }
     }
@@ -693,14 +704,23 @@ export function extractTypeObject(text: string): ExtractionResult<string> | unde
 
   // Priority 3: keyword in full text (medium confidence), skip reference sections
   // Word-boundary safe: use \b to prevent e.g. "woning" matching "woningbouw"
+  // Guard: if the text contains clear office/kantoor signals, do NOT assign "woning" —
+  // it would be a false positive from residential market-analysis mentions.
+  const hasOfficeSignal = OFFICE_SIGNAL_RE.test(text)
   const lower = text.toLowerCase()
   for (const { keyword, value } of PHYSICAL_TYPES) {
+    // Skip "woning" when clear office signals are present in the document
+    if (value === 'woning' && hasOfficeSignal) {
+      console.log(`[extractTypeObject] Skipping typeObject="woning" keyword scan — office signal present`)
+      continue
+    }
     const re = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')
     let match: RegExpExecArray | null
     while ((match = re.exec(lower)) !== null) {
       const idx = match.index
       if (!isInReferenceSection(text, idx)) {
         const snippet = text.slice(Math.max(0, idx - 10), idx + keyword.length + 20).replace(/\s+/g, ' ')
+        console.log(`[extractTypeObject] typeObject="${value}" via fulltext keyword scan (keyword="${keyword}", snippet="${snippet}")`)
         return { value, confidence: 'medium', sourceLabel: keyword, sourceSnippet: snippet, sourceSection: 'Stap 1', parserRule: 'fulltext-keyword' }
       }
     }

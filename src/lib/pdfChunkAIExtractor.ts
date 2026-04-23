@@ -276,26 +276,37 @@ export function isFieldFilledInResult(
     // These fields have no typed Dossier schema equivalents; they live in extractedData.
     // Check extractedData (rule-based) to prevent AI from refilling them.
     case 'locatie_score':
-      return (result.extractedData?.locatie_score !== null && result.extractedData?.locatie_score !== undefined)
-        || !!(result.wizardData?.stap2?.locatiescore)
+      return hasExtractedValue(result, 'locatie_score') || !!(result.wizardData?.stap2?.locatiescore)
     case 'object_score':
-      return (result.extractedData?.object_score !== null && result.extractedData?.object_score !== undefined)
+      return hasExtractedValue(result, 'object_score')
     case 'courantheid_verhuur':
-      return (result.extractedData?.courantheid_verhuur !== null && result.extractedData?.courantheid_verhuur !== undefined)
+      return hasExtractedValue(result, 'courantheid_verhuur')
     case 'courantheid_verkoop':
-      return (result.extractedData?.courantheid_verkoop !== null && result.extractedData?.courantheid_verkoop !== undefined)
+      return hasExtractedValue(result, 'courantheid_verkoop')
     case 'verhuurtijd_maanden':
-      return (result.extractedData?.verhuurtijd_maanden !== null && result.extractedData?.verhuurtijd_maanden !== undefined)
+      return hasExtractedValue(result, 'verhuurtijd_maanden')
     case 'verkooptijd_maanden':
-      return (result.extractedData?.verkooptijd_maanden !== null && result.extractedData?.verkooptijd_maanden !== undefined)
+      return hasExtractedValue(result, 'verkooptijd_maanden')
     case 'marktwaarde_per_m2':
-      return (result.extractedData?.marktwaarde_per_m2 !== null && result.extractedData?.marktwaarde_per_m2 !== undefined)
+      return hasExtractedValue(result, 'marktwaarde_per_m2')
     case 'dakoppervlak':
     case 'glasoppervlak':
       return false
     default:
       return false
   }
+}
+
+/**
+ * Returns true when the specified field in `result.extractedData` is present
+ * and non-null (indicating that rule-based extraction already filled it).
+ */
+function hasExtractedValue(
+  result: Partial<HistorischRapport>,
+  field: keyof NonNullable<HistorischRapport['extractedData']>,
+): boolean {
+  const v = result.extractedData?.[field]
+  return v !== null && v !== undefined
 }
 
 // ---------------------------------------------------------------------------

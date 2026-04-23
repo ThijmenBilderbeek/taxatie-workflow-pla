@@ -62,9 +62,7 @@ function isMeaningful(value: unknown): boolean {
   if (value === null || value === undefined) return false
   if (typeof value === 'number') return isFinite(value)
   if (Array.isArray(value)) {
-    return (value as unknown[]).some(
-      (v) => typeof v === 'string' && (v as string).trim().length > 0,
-    )
+    return value.some((v) => typeof v === 'string' && v.trim().length > 0)
   }
   if (typeof value === 'string') {
     const t = value.trim().toLowerCase()
@@ -260,6 +258,20 @@ export function mergeFieldCandidates(
 // ---------------------------------------------------------------------------
 
 /**
+ * Pattern matching a Dutch street name candidate at the end of a string.
+ * Matches: CapitalizedWord(s) optionally followed by a house number,
+ * trailed by optional comma/space separators.
+ * Example: "Collse Hoefdijk, 16," or "Industrieweg 42"
+ */
+const STREET_CANDIDATE_RE = /([A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÇ][a-záéíóúàèìòùäëïöüç\-]+(?:\s+[a-záéíóúàèìòùäëïöüç\-]+)*(?:\s+\d+[a-z]?)?)[,\s]*$/
+
+/**
+ * Dutch evaluation / quality words that appear as single-word prefixes
+ * in extracted address strings and should be stripped.
+ */
+const EVALUATION_WORD_RE = /^(?:Goed|Redelijk|Matig|Slecht|Voldoende|Onvoldoende|Uitstekend)\s+(?=[A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÇ])/i
+
+/**
  * Normalizes a raw address string to canonical form:
  *   "Street, Number, PostcodeLetters, Place"
  *
@@ -301,9 +313,7 @@ export function normalizeCanonicalAddress(raw: string): string {
   // The street name starts at the last uppercase-initial word that could be
   // a Dutch street name.  We look for a pattern like "Straatnaam[ HouseNumber],"
   // by scanning backwards from the postcode.
-  // Try increasingly strict patterns for the street start:
-  const streetCandidateRe = /([A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÇ][a-záéíóúàèìòùäëïöüç\-]+(?:\s+[a-záéíóúàèìòùäëïöüç\-]+)*(?:\s+\d+[a-z]?)?)[,\s]*$/
-  const streetMatch = beforePostcode.match(streetCandidateRe)
+  const streetMatch = beforePostcode.match(STREET_CANDIDATE_RE)
   if (streetMatch && streetMatch.index !== undefined) {
     const streetStart = streetMatch.index
     if (streetStart > 0) {
@@ -339,11 +349,7 @@ function stripLeadingNoise(address: string): string {
   result = result.replace(/^[^.!?]+[.!?]\s+(?=[A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÇ])/, '')
 
   // Strip standalone evaluation words that are NOT street names
-  // (Dutch evaluation words: Goed, Redelijk, Matig, Slecht, Voldoende, Onvoldoende, Uitstekend)
-  result = result.replace(
-    /^(?:Goed|Redelijk|Matig|Slecht|Voldoende|Onvoldoende|Uitstekend)\s+(?=[A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÇ])/i,
-    '',
-  )
+  result = result.replace(EVALUATION_WORD_RE, '')
 
   // Strip known Dutch real-estate noun phrases before the address
   result = result.replace(
